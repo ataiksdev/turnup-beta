@@ -1,0 +1,62 @@
+"use client";
+import { cn } from "@/lib/utils";
+import { Compass, Heart, Home, Search, User } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useAuthStore } from "@/store/auth";
+
+const navItems = [
+  { href: "/",          icon: Home,    label: "Home" },
+  { href: "/search",    icon: Search,  label: "Search" },
+  { href: "/activity",  icon: Compass, label: "Activity" },
+  { href: "/saved",     icon: Heart,   label: "Saved" },
+  { href: "/profile",   icon: User,    label: "Profile" },
+];
+
+export function BottomNav() {
+  const pathname = usePathname();
+  const { user } = useAuthStore();
+
+  return (
+    <nav className="fixed bottom-0 inset-x-0 z-50 bg-bg-surface/80 backdrop-blur-xl border-t border-border safe-bottom">
+      <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
+        {navItems.map(({ href, icon: Icon, label }) => {
+          const isProfile = href === "/profile";
+          const activePath = isProfile && user
+            ? `/profile/${user.username}`
+            : href;
+          const isActive = pathname === activePath ||
+            (href !== "/" && pathname.startsWith(href));
+
+          return (
+            <Link
+              key={href}
+              href={isProfile && user ? `/profile/${user.username}` : href}
+              className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full group"
+            >
+              <div className={cn(
+                "p-1.5 rounded-xl transition-all duration-200",
+                isActive ? "bg-primary/15" : "group-hover:bg-bg-elevated",
+              )}>
+                <Icon
+                  size={20}
+                  strokeWidth={isActive ? 2.5 : 1.8}
+                  className={cn(
+                    "transition-colors duration-200",
+                    isActive ? "text-primary" : "text-text-muted group-hover:text-text-secondary",
+                  )}
+                />
+              </div>
+              <span className={cn(
+                "text-[10px] font-medium transition-colors duration-200",
+                isActive ? "text-primary" : "text-text-muted",
+              )}>
+                {label}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}

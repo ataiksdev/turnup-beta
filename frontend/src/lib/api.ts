@@ -1,0 +1,150 @@
+import type {
+  Category, Comment, Event, EventFilters, FeedItem,
+  Notification, Token, User,
+} from "@/types";
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  token?: string,
+): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}/api${path}`, { ...options, headers });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, err.detail ?? "Request failed");
+  }
+
+  if (res.status === 204) return undefined as T;
+  return res.json();
+}
+
+// ── Auth ───────────────────────────────────────────────────────────────────────
+export const authApi = {
+  register: (data: { email: string; username: string; full_name: string; password: string }) =>
+    request<Token>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+
+  login: (email: string, password: string) =>
+    request<Token>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+
+  me: (token: string) =>
+    request<User>("/auth/me", {}, token),
+
+  updateMe: (token: string, data: Partial<User>) =>
+    request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }, token),
+
+  completeOnboarding: (token: string, categoryPreferences: string[]) =>
+    request<{ onboarding_completed: boolean; category_preferences: string }>(
+      "/auth/onboarding",
+      { method: "POST", body: JSON.stringify({ category_preferences: categoryPreferences }) },
+      token,
+    ),
+};
+
+// ── Events ─────────────────────────────────────────────────────────────────────
+export const eventsApi = {
+  list: (filters: EventFilters = {}, token?: string) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) params.set(k, String(v));
+    });
+    return request<Event[]>(`/events?${params}`, {}, token);
+  },
+
+  trending: (limit = 10, token?: string) =>
+    request<Event[]>(`/events/trending?limit=${limit}`, {}, token),
+
+  featured: (limit = 6, token?: string) =>
+    request<Event[]>(`/events/featured?limit=${limit}`, {}, token),
+
+  get: (idOrSlug: string, token?: string) =>
+    request<Event>(`/events/${idOrSlug}`, {}, token),
+
+  create: (token: string, data: Partial<Event>) =>
+    request<Event>("/events", { method: "POST", body: JSON.stringify(data) }, token),
+
+  attend: (token: string, eventId: string, status: "going" | "interested") =>
+    request<{ status: string; attendees_count: number }>(
+      `/events/${eventId}/attend`,
+      { method: "POST", body: JSON.stringify({ status }) },
+      token,
+    ),
+
+  removeAttendance: (token: string, eventId: string) =>
+    request<{ status: null }>(`/events/${eventId}/attend`, { method: "DELETE" }, token),
+
+  save: (token: string, eventId: string) =>
+    request<{ saved: boolean }>(`/events/${eventId}/save`, { method: "POST" }, token),
+
+  attendees: (eventId: string, status?: string) => {
+    const q = status ? `?status=${status}` : "";
+    return request<{ user_id: string; status: string; created_at: string }[]>(
+      `/events/${eventId}/attendees${q}`,
+    );
+  },
+
+  categories: () => request<Category[]>("/categories"),
+};
+
+// ── Users ──────────────────────────────────────────────────────────────────────
+export const usersApi = {
+  get: (username: string, token?: string) =>
+    request<User>(`/users/${username}`, {}, token),
+
+  events: (username: string, page = 1) =>
+    request<Event[]>(`/users/${username}/events?page=${page}`),
+
+  saved: (username: string, token: string, page = 1) =>
+    request<Event[]>(`/users/${username}/saved?page=${page}`, {}, token),
+
+  followers: (username: string) =>
+    request<User[]>(`/users/${username}/followers`),
+
+  following: (username: string) =>
+    request<User[]>(`/users/${username}/following`),
+};
+
+// ── Social ─────────────────────────────────────────────────────────────────────
+export const socialApi = {
+  follow: (token: string, username: string) =>
+    request<{ following: boolean }>(`/social/follow/${username}`, { method: "POST" }, token),
+
+  unfollow: (token: string, username: string) =>
+    request<{ following: boolean }>(`/social/follow/${username}`, { method: "DELETE" }, token),
+
+  comments: (eventId: string, page = 1) =>
+    request<Comment[]>(`/social/events/${eventId}/comments?page=${page}`),
+
+  addComment: (token: string, eventId: string, content: string, parentId?: string) =>
+    request<Comment>(
+      `/social/events/${eventId}/comments`,
+      { method: "POST", body: JSON.stringify({ content, parent_id: parentId }) },
+      token,
+    ),
+
+  deleteComment: (token: string, commentId: string) =>
+    request<void>(`/social/comments/${commentId}`, { method: "DELETE" }, token),
+
+  notifications: (token: string, unreadOnly = false) =>
+    request<Notification[]>(`/social/notifications?unread_only=${unreadOnly}`, {}, token),
+
+  markAllRead: (token: string) =>
+    request<{ ok: boolean }>("/social/notifications/read-all", { method: "POST" }, token),
+
+  feed: (token: string, page = 1) =>
+    request<FeedItem[]>(`/social/feed?page=${page}`, {}, token),
+};
