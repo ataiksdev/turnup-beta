@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+*.egg
+
+# FastAPI / SQLite
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# Environment
+.env
+!.env.example
+
+# Node
+node_modules/
+.next/
+out/
+.cache/
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# Misc
+.DS_Store
+*.log
+*.swp
+*.swo
+.idea/
+.vscode/
