@@ -1,0 +1,358 @@
+import json
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.database import get_db
+from app.middleware.auth import get_current_organizer, get_current_user
+from app.models.event import Event, EventAttendee
+from app.models.organizer import (
+    EventCoHost, EventTemplate, OrganizerProfile, TicketOrder, TicketTier,
+)
+from app.models.user import User
+from app.schemas.organizer import (
+    DashboardOut, OrganizerBecomeRequest, OrganizerProfileOut, OrganizerProfileUpdate,
+    TemplateCreate, TemplateOut, TemplateUpdate, TicketOrderOut,
+)
+from app.schemas.user import UserMe
+
+router = APIRouter(prefix="/api/organizer", tags=["organizer"])
+
+
+# ── Become an organizer ───────────────────────────────────────────────────────
+
+@router.post("/become", response_model=UserMe)
+async def become_organizer(
+    payload: OrganizerBecomeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upgrade an existing account to organizer role."""
+    if user.role == "organizer":
+        raise HTTPException(400, "Already an organizer")
+
+    user.role = "organizer"
+
+    if not user.organizer_profile:
+        db.add(OrganizerProfile(
+            user_id=user.id,
+            organization_name=payload.organization_name,
+            organizer_bio=payload.organizer_bio,
+            website=payload.website,
+        ))
+    else:
+        if payload.organization_name is not None:
+            user.organizer_profile.organization_name = payload.organization_name
+        if payload.organizer_bio is not None:
+            user.organizer_profile.organizer_bio = payload.organizer_bio
+        if payload.website is not None:
+            user.organizer_profile.website = payload.website
+
+    await db.flush()
+    await db.refresh(user)
+    return user
+
+
+# ── Organizer profile ─────────────────────────────────────────────────────────
+
+@router.get("/profile", response_model=OrganizerProfileOut)
+async def get_organizer_profile(user: User = Depends(get_current_organizer)):
+    if not user.organizer_profile:
+        raise HTTPException(404, "Organizer profile not found")
+    return user.organizer_profile
+
+
+@router.patch("/profile", response_model=OrganizerProfileOut)
+async def update_organizer_profile(
+    payload: OrganizerProfileUpdate,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.organizer_profile:
+        raise HTTPException(404, "Organizer profile not found")
+    for field, val in payload.model_dump(exclude_none=True).items():
+        setattr(user.organizer_profile, field, val)
+    await db.flush()
+    return user.organizer_profile
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@router.get("/dashboard", response_model=DashboardOut)
+async def organizer_dashboard(
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    # Count events by status
+    events_result = await db.execute(
+        select(Event.status, func.count(Event.id))
+        .where(Event.host_id == user.id)
+        .group_by(Event.status)
+    )
+    status_counts: dict[str, int] = dict(events_result.all())
+    total_events = sum(status_counts.values())
+    published = status_counts.get("published", 0)
+    drafts = status_counts.get("draft", 0)
+
+    # Total attendees across all published events
+    att_result = await db.execute(
+        select(func.sum(Event.attendees_count))
+        .where(Event.host_id == user.id, Event.status == "published")
+    )
+    total_attendees = att_result.scalar() or 0
+
+    # Revenue from confirmed ticket orders
+    rev_result = await db.execute(
+        select(func.sum(TicketOrder.total_price))
+        .where(
+            TicketOrder.event_id.in_(
+                select(Event.id).where(Event.host_id == user.id)
+            ),
+            TicketOrder.status == "confirmed",
+        )
+    )
+    total_revenue = float(rev_result.scalar() or 0)
+
+    # Pending co-host invites for the organizer's events
+    pending_result = await db.execute(
+        select(func.count(EventCoHost.id))
+        .where(
+            EventCoHost.event_id.in_(select(Event.id).where(Event.host_id == user.id)),
+            EventCoHost.status == "invited",
+        )
+    )
+    pending_cohosts = pending_result.scalar() or 0
+
+    return DashboardOut(
+        total_events=total_events,
+        published_events=published,
+        draft_events=drafts,
+        total_attendees=total_attendees,
+        total_revenue=total_revenue,
+        pending_cohost_invites=pending_cohosts,
+    )
+
+
+# ── My events (incl. drafts) ──────────────────────────────────────────────────
+
+@router.get("/events")
+async def my_events(
+    status: str | None = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.event import Category
+    stmt = (
+        select(Event)
+        .options(selectinload(Event.category))
+        .where(Event.host_id == user.id)
+        .order_by(Event.created_at.desc())
+    )
+    if status:
+        stmt = stmt.where(Event.status == status)
+    events = (await db.execute(stmt.offset((page - 1) * limit).limit(limit))).scalars().all()
+    return [
+        {
+            "id": e.id, "title": e.title, "slug": e.slug, "status": e.status,
+            "start_date": e.start_date, "city": e.city,
+            "attendees_count": e.attendees_count, "waitlist_count": e.waitlist_count,
+            "views_count": e.views_count, "cover_image": e.cover_image,
+            "category": e.category, "is_free": e.is_free,
+            "price_min": e.price_min, "price_max": e.price_max,
+            "created_at": e.created_at,
+        }
+        for e in events
+    ]
+
+
+# ── Co-host invitations received ──────────────────────────────────────────────
+
+@router.get("/cohost-invites")
+async def my_cohost_invites(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(EventCoHost)
+        .options(selectinload(EventCoHost.event))
+        .where(EventCoHost.user_id == user.id, EventCoHost.status == "invited")
+        .order_by(EventCoHost.invited_at.desc())
+    )
+    invites = result.scalars().all()
+    return [
+        {
+            "id": inv.id,
+            "event_id": inv.event_id,
+            "event_title": inv.event.title,
+            "event_start": inv.event.start_date,
+            "status": inv.status,
+            "invited_at": inv.invited_at,
+        }
+        for inv in invites
+    ]
+
+
+# ── My ticket orders ──────────────────────────────────────────────────────────
+
+@router.get("/my-tickets", response_model=list[TicketOrderOut])
+async def my_ticket_orders(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(TicketOrder)
+        .options(selectinload(TicketOrder.tier))
+        .where(TicketOrder.user_id == user.id, TicketOrder.status != "cancelled")
+        .order_by(TicketOrder.created_at.desc())
+    )
+    orders = result.scalars().all()
+    return [
+        TicketOrderOut(
+            id=o.id, event_id=o.event_id, tier_id=o.tier_id,
+            tier_name=o.tier.name, quantity=o.quantity,
+            unit_price=o.unit_price, total_price=o.total_price,
+            status=o.status, created_at=o.created_at,
+        )
+        for o in orders
+    ]
+
+
+# ── All orders for organizer's events ─────────────────────────────────────────
+
+@router.get("/orders")
+async def organizer_orders(
+    event_id: str | None = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    my_event_ids = (
+        await db.execute(select(Event.id).where(Event.host_id == user.id))
+    ).scalars().all()
+
+    stmt = (
+        select(TicketOrder)
+        .options(selectinload(TicketOrder.tier), selectinload(TicketOrder.user))
+        .where(TicketOrder.event_id.in_(my_event_ids))
+        .order_by(TicketOrder.created_at.desc())
+    )
+    if event_id:
+        if event_id not in my_event_ids:
+            raise HTTPException(403, "Not your event")
+        stmt = stmt.where(TicketOrder.event_id == event_id)
+
+    orders = (await db.execute(stmt.offset((page - 1) * limit).limit(limit))).scalars().all()
+    return [
+        {
+            "id": o.id, "event_id": o.event_id, "tier_id": o.tier_id,
+            "tier_name": o.tier.name, "buyer_username": o.user.username,
+            "buyer_email": o.user.email,
+            "quantity": o.quantity, "unit_price": o.unit_price,
+            "total_price": o.total_price, "status": o.status,
+            "created_at": o.created_at,
+        }
+        for o in orders
+    ]
+
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+
+def _parse_template(t: EventTemplate) -> TemplateOut:
+    return TemplateOut(
+        id=t.id,
+        organizer_id=t.organizer_id,
+        name=t.name,
+        description=t.description,
+        template_data=json.loads(t.template_data),
+        created_at=t.created_at,
+        updated_at=t.updated_at,
+    )
+
+
+@router.post("/templates", response_model=TemplateOut, status_code=201)
+async def create_template(
+    payload: TemplateCreate,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    t = EventTemplate(
+        id=str(uuid.uuid4()),
+        organizer_id=user.id,
+        name=payload.name,
+        description=payload.description,
+        template_data=json.dumps(payload.template_data),
+    )
+    db.add(t)
+    await db.flush()
+    return _parse_template(t)
+
+
+@router.get("/templates", response_model=list[TemplateOut])
+async def list_templates(
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(EventTemplate)
+        .where(EventTemplate.organizer_id == user.id)
+        .order_by(EventTemplate.updated_at.desc())
+    )
+    return [_parse_template(t) for t in result.scalars().all()]
+
+
+@router.get("/templates/{template_id}", response_model=TemplateOut)
+async def get_template(
+    template_id: str,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    t = await _get_own_template(template_id, user.id, db)
+    return _parse_template(t)
+
+
+@router.patch("/templates/{template_id}", response_model=TemplateOut)
+async def update_template(
+    template_id: str,
+    payload: TemplateUpdate,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    t = await _get_own_template(template_id, user.id, db)
+    if payload.name is not None:
+        t.name = payload.name
+    if payload.description is not None:
+        t.description = payload.description
+    if payload.template_data is not None:
+        t.template_data = json.dumps(payload.template_data)
+    await db.flush()
+    return _parse_template(t)
+
+
+@router.delete("/templates/{template_id}", status_code=204)
+async def delete_template(
+    template_id: str,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    t = await _get_own_template(template_id, user.id, db)
+    await db.delete(t)
+
+
+async def _get_own_template(template_id: str, organizer_id: str, db: AsyncSession) -> EventTemplate:
+    result = await db.execute(
+        select(EventTemplate).where(
+            EventTemplate.id == template_id,
+            EventTemplate.organizer_id == organizer_id,
+        )
+    )
+    t = result.scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "Template not found")
+    return t

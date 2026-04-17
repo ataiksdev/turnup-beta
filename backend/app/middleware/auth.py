@@ -23,7 +23,6 @@ async def _resolve_user(token: str | None, db: AsyncSession) -> User | None:
     if not user_id or not jti:
         return None
 
-    # Validate session is active and not expired
     now = datetime.now(timezone.utc)
     session_q = await db.execute(
         select(UserSession).where(
@@ -56,3 +55,10 @@ async def get_optional_user(
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
     return await _resolve_user(token, db)
+
+
+async def get_current_organizer(user: User = Depends(get_current_user)) -> User:
+    """Requires the authenticated user to have the organizer role."""
+    if user.role != "organizer":
+        raise HTTPException(403, "Organizer account required. Use POST /api/organizer/become to upgrade.")
+    return user

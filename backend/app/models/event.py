@@ -54,6 +54,14 @@ class Event(Base):
     attendees_count: Mapped[int] = mapped_column(Integer, default=0)
     interested_count: Mapped[int] = mapped_column(Integer, default=0)
     saves_count: Mapped[int] = mapped_column(Integer, default=0)
+    waitlist_count: Mapped[int] = mapped_column(Integer, default=0)
+    views_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Waitlist
+    waitlist_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Template reference (no FK, just a reference ID for UI)
+    template_id: Mapped[str | None] = mapped_column(String(36))
 
     status: Mapped[str] = mapped_column(
         Enum("draft", "published", "cancelled", "completed", name="event_status"),
@@ -68,11 +76,19 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+    # Core relationships
     host = relationship("User", back_populates="events", foreign_keys=[host_id])
     category = relationship("Category", back_populates="events")
     attendees = relationship("EventAttendee", back_populates="event", cascade="all, delete-orphan")
     saves = relationship("EventSave", back_populates="event", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="event", cascade="all, delete-orphan")
+
+    # Organizer relationships
+    ticket_tiers = relationship("TicketTier", back_populates="event", cascade="all, delete-orphan")
+    ticket_orders = relationship("TicketOrder", back_populates="event", cascade="all, delete-orphan")
+    cohosts = relationship("EventCoHost", back_populates="event", cascade="all, delete-orphan")
+    waitlist_entries = relationship("EventWaitlist", back_populates="event", cascade="all, delete-orphan")
+    views = relationship("EventView", back_populates="event", cascade="all, delete-orphan")
 
 
 class EventAttendee(Base):

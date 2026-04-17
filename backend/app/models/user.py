@@ -23,6 +23,7 @@ class User(Base):
     website: Mapped[str | None] = mapped_column(String(255))
 
     # Account state
+    role: Mapped[str] = mapped_column(String(20), default="attendee", index=True)  # attendee | organizer
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -45,7 +46,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    # Relationships
+    # Relationships — core
     events = relationship("Event", back_populates="host", foreign_keys="Event.host_id")
     attendances = relationship("EventAttendee", back_populates="user")
     saves = relationship("EventSave", back_populates="user")
@@ -56,3 +57,11 @@ class User(Base):
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
     oauth_accounts = relationship("OAuthAccount", back_populates="user", cascade="all, delete-orphan")
     two_factor = relationship("TwoFactor", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+    # Relationships — organizer
+    organizer_profile = relationship("OrganizerProfile", back_populates="user",
+                                     uselist=False, cascade="all, delete-orphan")
+    event_templates = relationship("EventTemplate", back_populates="organizer", cascade="all, delete-orphan")
+    ticket_orders = relationship("TicketOrder", back_populates="user")
+    cohost_invites = relationship("EventCoHost", back_populates="user", cascade="all, delete-orphan")
+    waitlist_entries = relationship("EventWaitlist", back_populates="user", cascade="all, delete-orphan")

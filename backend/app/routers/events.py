@@ -1,16 +1,29 @@
+import json
 import re
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select, update
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.middleware.auth import get_current_user, get_optional_user
+from app.middleware.auth import get_current_organizer, get_current_user, get_optional_user
 from app.models.event import Category, Event, EventAttendee, EventSave
+from app.models.organizer import (
+    EventCoHost, EventView, EventWaitlist, TicketOrder, TicketTier,
+)
+from app.models.social import Notification
 from app.models.user import User
 from app.schemas.event import (
     AttendRequest, CategoryOut, EventCreate, EventDetail, EventOut, EventUpdate,
+)
+from app.schemas.organizer import (
+    AnalyticsOut, CoHostInviteRequest, CoHostOut, CoHostRespondRequest,
+    DailyViewOut, PurchaseTicketRequest, TicketOrderOut, TicketTierCreate,
+    TicketTierOut, TicketTierUpdate, WaitlistEntryOut, WaitlistNotifyRequest,
+    WaitlistStatusOut,
 )
 from app.schemas.user import UserSummary
 
@@ -26,7 +39,9 @@ def _load():
     return [selectinload(Event.host), selectinload(Event.category)]
 
 
-def _serialize(event: Event, is_saved: bool = False, attendance_status: str | None = None) -> dict:
+def _serialize(event: Event, is_saved: bool = False,
+               attendance_status: str | None = None,
+               is_waitlisted: bool = False) -> dict:
     return {
         "id": event.id, "title": event.title, "slug": event.slug,
         "cover_image": event.cover_image, "venue_name": event.venue_name,
@@ -35,26 +50,49 @@ def _serialize(event: Event, is_saved: bool = False, attendance_status: str | No
         "is_free": event.is_free, "price_min": event.price_min,
         "price_max": event.price_max, "currency": event.currency,
         "attendees_count": event.attendees_count, "interested_count": event.interested_count,
-        "saves_count": event.saves_count, "status": event.status,
-        "is_featured": event.is_featured, "is_trending": event.is_trending,
-        "tags": event.tags, "host": event.host, "category": event.category,
+        "saves_count": event.saves_count, "waitlist_count": event.waitlist_count,
+        "views_count": event.views_count, "waitlist_enabled": event.waitlist_enabled,
+        "status": event.status, "is_featured": event.is_featured,
+        "is_trending": event.is_trending, "tags": event.tags,
+        "host": event.host, "category": event.category,
         "created_at": event.created_at,
         "description": event.description, "gallery": event.gallery,
         "latitude": event.latitude, "longitude": event.longitude,
         "timezone": event.timezone, "ticket_url": event.ticket_url,
-        "capacity": event.capacity,
+        "capacity": event.capacity, "template_id": event.template_id,
         "is_saved": is_saved, "attendance_status": attendance_status,
+        "is_waitlisted": is_waitlisted,
     }
 
 
 async def _user_state(event_id: str, user: User | None, db: AsyncSession):
     if not user:
-        return False, None
+        return False, None, False
     sv = (await db.execute(select(EventSave).where(
         EventSave.event_id == event_id, EventSave.user_id == user.id))).scalar_one_or_none()
     at = (await db.execute(select(EventAttendee).where(
         EventAttendee.event_id == event_id, EventAttendee.user_id == user.id))).scalar_one_or_none()
-    return sv is not None, (at.status if at else None)
+    wl = (await db.execute(select(EventWaitlist).where(
+        EventWaitlist.event_id == event_id, EventWaitlist.user_id == user.id,
+        EventWaitlist.status.in_(["waiting", "notified"])))).scalar_one_or_none()
+    return sv is not None, (at.status if at else None), wl is not None
+
+
+async def _require_event_access(event_id: str, user: User, db: AsyncSession) -> Event:
+    """Returns event if user is host or accepted co-host."""
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.host_id == user.id:
+        return event
+    ch = (await db.execute(select(EventCoHost).where(
+        EventCoHost.event_id == event_id,
+        EventCoHost.user_id == user.id,
+        EventCoHost.status == "accepted",
+    ))).scalar_one_or_none()
+    if not ch:
+        raise HTTPException(403, "Not authorized for this event")
+    return event
 
 
 # ── Categories ──────────────────────────────────────────────────────────────────
@@ -102,8 +140,8 @@ async def list_events(
     events = (await db.execute(stmt.offset((page - 1) * limit).limit(limit))).scalars().all()
     result = []
     for e in events:
-        saved, att = await _user_state(e.id, user, db)
-        result.append(_serialize(e, saved, att))
+        saved, att, waitlisted = await _user_state(e.id, user, db)
+        result.append(_serialize(e, saved, att, waitlisted))
     return result
 
 
@@ -142,8 +180,12 @@ async def get_event(
     event = (await db.execute(stmt)).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found")
-    saved, att = await _user_state(event.id, user, db)
-    return _serialize(event, saved, att)
+    # Only show drafts to their host
+    if event.status == "draft":
+        if not user or event.host_id != user.id:
+            raise HTTPException(404, "Event not found")
+    saved, att, waitlisted = await _user_state(event.id, user, db)
+    return _serialize(event, saved, att, waitlisted)
 
 
 # ── Create / Update ─────────────────────────────────────────────────────────────
@@ -152,14 +194,32 @@ async def get_event(
 async def create_event(
     payload: EventCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_organizer),
 ):
+    data = payload.model_dump()
+    template_id = data.pop("template_id", None)
+
+    # If creating from template, merge template defaults (payload fields take precedence)
+    if template_id:
+        from app.models.organizer import EventTemplate
+        tmpl = (await db.execute(select(EventTemplate).where(
+            EventTemplate.id == template_id,
+            EventTemplate.organizer_id == user.id,
+        ))).scalar_one_or_none()
+        if tmpl:
+            defaults = json.loads(tmpl.template_data)
+            for k, v in defaults.items():
+                if k in data and data[k] is None:
+                    data[k] = v
+
     eid = str(uuid.uuid4())
     event = Event(id=eid, slug=_slugify(payload.title, eid),
-                  host_id=user.id, **payload.model_dump())
+                  host_id=user.id, template_id=template_id, **data)
     db.add(event)
     await db.flush()
-    await db.execute(update(User).where(User.id == user.id).values(events_hosted=User.events_hosted + 1))
+    if event.status == "published":
+        await db.execute(update(User).where(User.id == user.id).values(
+            events_hosted=User.events_hosted + 1))
     stmt = select(Event).options(*_load()).where(Event.id == eid)
     return _serialize((await db.execute(stmt)).scalar_one())
 
@@ -171,13 +231,14 @@ async def update_event(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
-    if not event:
-        raise HTTPException(404, "Event not found")
-    if event.host_id != user.id:
-        raise HTTPException(403, "Not the event host")
+    event = await _require_event_access(event_id, user, db)
+    was_draft = event.status == "draft"
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(event, k, v)
+    # Increment events_hosted counter when publishing for the first time
+    if was_draft and event.status == "published":
+        await db.execute(update(User).where(User.id == user.id).values(
+            events_hosted=User.events_hosted + 1))
     await db.flush()
     stmt = select(Event).options(*_load()).where(Event.id == event_id)
     return _serialize((await db.execute(stmt)).scalar_one())
@@ -193,11 +254,11 @@ async def delete_event(
     if not event:
         raise HTTPException(404, "Event not found")
     if event.host_id != user.id:
-        raise HTTPException(403, "Not the event host")
+        raise HTTPException(403, "Only the host can delete this event")
     await db.delete(event)
 
 
-# ── RSVP ────────────────────────────────────────────────────────────────────────
+# ── RSVP (attendees) ────────────────────────────────────────────────────────────
 
 @router.post("/{event_id}/attend")
 async def attend(
@@ -207,14 +268,22 @@ async def attend(
     user: User = Depends(get_current_user),
 ):
     event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
-    if not event:
+    if not event or event.status != "published":
         raise HTTPException(404, "Event not found")
 
     existing = (await db.execute(select(EventAttendee).where(
         EventAttendee.event_id == event_id, EventAttendee.user_id == user.id))).scalar_one_or_none()
 
+    # Capacity check for "going" RSVPs
+    if payload.status == "going" and not existing:
+        if event.capacity and event.attendees_count >= event.capacity:
+            if event.waitlist_enabled:
+                return await _join_waitlist_internal(event, user, db)
+            raise HTTPException(409, "Event is at capacity")
+
     if existing:
-        if existing.status == "going":
+        old_status = existing.status
+        if old_status == "going":
             event.attendees_count = max(0, event.attendees_count - 1)
         else:
             event.interested_count = max(0, event.interested_count - 1)
@@ -230,7 +299,29 @@ async def attend(
     else:
         event.interested_count += 1
 
-    return {"status": payload.status, "attendees_count": event.attendees_count}
+    return {"status": payload.status, "attendees_count": event.attendees_count,
+            "interested_count": event.interested_count}
+
+
+async def _join_waitlist_internal(event: Event, user: User, db: AsyncSession) -> dict:
+    existing_wl = (await db.execute(select(EventWaitlist).where(
+        EventWaitlist.event_id == event.id,
+        EventWaitlist.user_id == user.id,
+        EventWaitlist.status.in_(["waiting", "notified"]),
+    ))).scalar_one_or_none()
+    if existing_wl:
+        return {"status": "waitlisted", "position": existing_wl.position,
+                "waitlist_count": event.waitlist_count}
+    position = event.waitlist_count + 1
+    db.add(EventWaitlist(
+        id=str(uuid.uuid4()),
+        event_id=event.id,
+        user_id=user.id,
+        position=position,
+    ))
+    event.waitlist_count += 1
+    return {"status": "waitlisted", "position": position,
+            "waitlist_count": event.waitlist_count}
 
 
 @router.delete("/{event_id}/attend")
@@ -292,3 +383,462 @@ async def get_attendees(
     rows = (await db.execute(stmt.limit(limit))).scalars().all()
     return [{"user": UserSummary.model_validate(r.user), "status": r.status,
              "created_at": r.created_at} for r in rows]
+
+
+# ── Views / Analytics ─────────────────────────────────────────────────────────────
+
+@router.post("/{event_id}/views", status_code=204)
+async def record_view(
+    event_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    event = (await db.execute(select(Event).where(
+        Event.id == event_id, Event.status == "published"))).scalar_one_or_none()
+    if not event:
+        return
+    ip = request.client.host if request.client else None
+    db.add(EventView(
+        id=str(uuid.uuid4()),
+        event_id=event_id,
+        user_id=user.id if user else None,
+        ip_address=ip,
+    ))
+    event.views_count += 1
+
+
+@router.get("/{event_id}/analytics", response_model=AnalyticsOut)
+async def get_analytics(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    event = await _require_event_access(event_id, user, db)
+
+    # Daily views — last 14 days
+    since = datetime.now(timezone.utc) - timedelta(days=14)
+    views_result = await db.execute(
+        select(
+            func.date(EventView.viewed_at).label("date"),
+            func.count(EventView.id).label("views"),
+        )
+        .where(EventView.event_id == event_id, EventView.viewed_at >= since)
+        .group_by(func.date(EventView.viewed_at))
+        .order_by(func.date(EventView.viewed_at))
+    )
+    daily_views = [DailyViewOut(date=str(r.date), views=r.views) for r in views_result]
+
+    unique_views = (await db.execute(
+        select(func.count(func.distinct(EventView.ip_address)))
+        .where(EventView.event_id == event_id)
+    )).scalar() or 0
+
+    rsvp_going = (await db.execute(
+        select(func.count(EventAttendee.id))
+        .where(EventAttendee.event_id == event_id, EventAttendee.status == "going")
+    )).scalar() or 0
+
+    rsvp_interested = (await db.execute(
+        select(func.count(EventAttendee.id))
+        .where(EventAttendee.event_id == event_id, EventAttendee.status == "interested")
+    )).scalar() or 0
+
+    orders_result = await db.execute(
+        select(func.count(TicketOrder.id), func.sum(TicketOrder.total_price))
+        .where(TicketOrder.event_id == event_id, TicketOrder.status == "confirmed")
+    )
+    orders_row = orders_result.one()
+    orders_count = orders_row[0] or 0
+    revenue = float(orders_row[1] or 0)
+
+    waitlist_count = (await db.execute(
+        select(func.count(EventWaitlist.id))
+        .where(EventWaitlist.event_id == event_id,
+               EventWaitlist.status.in_(["waiting", "notified"]))
+    )).scalar() or 0
+
+    return AnalyticsOut(
+        event_id=event_id,
+        total_views=event.views_count,
+        unique_views=unique_views,
+        rsvp_going=rsvp_going,
+        rsvp_interested=rsvp_interested,
+        saves_count=event.saves_count,
+        waitlist_count=waitlist_count,
+        ticket_orders_count=orders_count,
+        estimated_revenue=revenue,
+        daily_views=daily_views,
+    )
+
+
+# ── Ticket tiers ──────────────────────────────────────────────────────────────────
+
+@router.get("/{event_id}/tickets", response_model=list[TicketTierOut])
+async def list_ticket_tiers(event_id: str, db: AsyncSession = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(TicketTier)
+        .where(TicketTier.event_id == event_id, TicketTier.is_active == True)
+        .order_by(TicketTier.price.asc())
+    )
+    tiers = result.scalars().all()
+    return [_tier_out(t) for t in tiers]
+
+
+@router.post("/{event_id}/tickets", response_model=TicketTierOut, status_code=201)
+async def create_ticket_tier(
+    event_id: str,
+    payload: TicketTierCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    await _require_event_access(event_id, user, db)
+    t = TicketTier(id=str(uuid.uuid4()), event_id=event_id, **payload.model_dump())
+    db.add(t)
+    await db.flush()
+    return _tier_out(t)
+
+
+@router.patch("/{event_id}/tickets/{tier_id}", response_model=TicketTierOut)
+async def update_ticket_tier(
+    event_id: str,
+    tier_id: str,
+    payload: TicketTierUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    await _require_event_access(event_id, user, db)
+    t = await _get_tier(tier_id, event_id, db)
+    for k, v in payload.model_dump(exclude_none=True).items():
+        setattr(t, k, v)
+    await db.flush()
+    return _tier_out(t)
+
+
+@router.delete("/{event_id}/tickets/{tier_id}", status_code=204)
+async def delete_ticket_tier(
+    event_id: str,
+    tier_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    await _require_event_access(event_id, user, db)
+    t = await _get_tier(tier_id, event_id, db)
+    if t.quantity_sold > 0:
+        raise HTTPException(409, "Cannot delete a tier with existing orders")
+    await db.delete(t)
+
+
+@router.post("/{event_id}/tickets/{tier_id}/purchase", response_model=TicketOrderOut)
+async def purchase_tickets(
+    event_id: str,
+    tier_id: str,
+    payload: PurchaseTicketRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    event = (await db.execute(select(Event).where(
+        Event.id == event_id, Event.status == "published"))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    t = await _get_tier(tier_id, event_id, db)
+    if not t.is_active:
+        raise HTTPException(400, "This ticket tier is not available")
+
+    now = datetime.now(timezone.utc)
+    if t.sale_start and now < t.sale_start:
+        raise HTTPException(400, "Ticket sales have not started yet")
+    if t.sale_end and now > t.sale_end:
+        raise HTTPException(400, "Ticket sales have ended")
+    if t.quantity is not None and (t.quantity - t.quantity_sold) < payload.quantity:
+        raise HTTPException(409, f"Only {t.quantity - t.quantity_sold} tickets remaining")
+    if payload.quantity > t.max_per_order:
+        raise HTTPException(400, f"Maximum {t.max_per_order} tickets per order")
+
+    total = t.price * payload.quantity
+    order = TicketOrder(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        event_id=event_id,
+        tier_id=tier_id,
+        quantity=payload.quantity,
+        unit_price=t.price,
+        total_price=total,
+        status="confirmed",
+    )
+    db.add(order)
+    if t.quantity is not None:
+        t.quantity_sold += payload.quantity
+    # Auto RSVP as "going" after purchase
+    existing_rsvp = (await db.execute(select(EventAttendee).where(
+        EventAttendee.event_id == event_id, EventAttendee.user_id == user.id))).scalar_one_or_none()
+    if not existing_rsvp:
+        db.add(EventAttendee(id=str(uuid.uuid4()), user_id=user.id,
+                             event_id=event_id, status="going"))
+        event.attendees_count += 1
+
+    await db.flush()
+    return TicketOrderOut(
+        id=order.id, event_id=event_id, tier_id=tier_id, tier_name=t.name,
+        quantity=payload.quantity, unit_price=t.price, total_price=total,
+        status="confirmed", created_at=order.created_at,
+    )
+
+
+def _tier_out(t: TicketTier) -> TicketTierOut:
+    available = (t.quantity - t.quantity_sold) if t.quantity is not None else None
+    return TicketTierOut(
+        id=t.id, event_id=t.event_id, name=t.name, description=t.description,
+        price=t.price, currency=t.currency, quantity=t.quantity,
+        quantity_sold=t.quantity_sold, available=available,
+        max_per_order=t.max_per_order, is_active=t.is_active,
+        sale_start=t.sale_start, sale_end=t.sale_end, created_at=t.created_at,
+    )
+
+
+async def _get_tier(tier_id: str, event_id: str, db: AsyncSession) -> TicketTier:
+    t = (await db.execute(select(TicketTier).where(
+        TicketTier.id == tier_id, TicketTier.event_id == event_id))).scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "Ticket tier not found")
+    return t
+
+
+# ── Co-hosts ──────────────────────────────────────────────────────────────────────
+
+@router.get("/{event_id}/cohosts", response_model=list[CoHostOut])
+async def list_cohosts(event_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(EventCoHost)
+        .options(selectinload(EventCoHost.user))
+        .where(EventCoHost.event_id == event_id)
+    )
+    return [_cohost_out(ch) for ch in result.scalars().all()]
+
+
+@router.post("/{event_id}/cohosts", response_model=CoHostOut, status_code=201)
+async def invite_cohost(
+    event_id: str,
+    payload: CoHostInviteRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.host_id != user.id:
+        raise HTTPException(403, "Only the host can invite co-hosts")
+
+    invitee = (await db.execute(select(User).where(
+        User.username == payload.username.lower()))).scalar_one_or_none()
+    if not invitee:
+        raise HTTPException(404, f"User @{payload.username} not found")
+    if invitee.id == user.id:
+        raise HTTPException(400, "Cannot invite yourself as co-host")
+
+    existing = (await db.execute(select(EventCoHost).where(
+        EventCoHost.event_id == event_id,
+        EventCoHost.user_id == invitee.id,
+    ))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(409, f"@{payload.username} already has a co-host entry for this event")
+
+    ch = EventCoHost(
+        id=str(uuid.uuid4()),
+        event_id=event_id,
+        user_id=invitee.id,
+    )
+    db.add(ch)
+
+    # In-app notification
+    db.add(Notification(
+        id=str(uuid.uuid4()),
+        user_id=invitee.id,
+        type="event_invite",
+        title=f"Co-host invitation: {event.title}",
+        body=f"@{user.username} invited you to co-host \"{event.title}\"",
+        reference_id=event_id,
+        reference_type="event",
+        actor_id=user.id,
+    ))
+    await db.flush()
+    await db.refresh(ch)
+    ch.user = invitee
+    return _cohost_out(ch)
+
+
+@router.delete("/{event_id}/cohosts/{cohost_user_id}", status_code=204)
+async def remove_cohost(
+    event_id: str,
+    cohost_user_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.host_id != user.id and user.id != cohost_user_id:
+        raise HTTPException(403, "Not authorized")
+
+    ch = (await db.execute(select(EventCoHost).where(
+        EventCoHost.event_id == event_id,
+        EventCoHost.user_id == cohost_user_id,
+    ))).scalar_one_or_none()
+    if not ch:
+        raise HTTPException(404, "Co-host entry not found")
+    await db.delete(ch)
+
+
+@router.post("/{event_id}/cohosts/respond", status_code=200)
+async def respond_to_cohost(
+    event_id: str,
+    payload: CoHostRespondRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ch = (await db.execute(select(EventCoHost).where(
+        EventCoHost.event_id == event_id,
+        EventCoHost.user_id == user.id,
+        EventCoHost.status == "invited",
+    ))).scalar_one_or_none()
+    if not ch:
+        raise HTTPException(404, "No pending co-host invitation for this event")
+
+    ch.status = "accepted" if payload.accept else "declined"
+    ch.responded_at = datetime.now(timezone.utc)
+    await db.flush()
+    return {"status": ch.status}
+
+
+def _cohost_out(ch: EventCoHost) -> CoHostOut:
+    return CoHostOut(
+        id=ch.id,
+        user_id=ch.user_id,
+        username=ch.user.username,
+        full_name=ch.user.full_name,
+        avatar_url=ch.user.avatar_url,
+        status=ch.status,
+        invited_at=ch.invited_at,
+        responded_at=ch.responded_at,
+    )
+
+
+# ── Waitlist ──────────────────────────────────────────────────────────────────────
+
+@router.post("/{event_id}/waitlist")
+async def join_waitlist(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    event = (await db.execute(select(Event).where(
+        Event.id == event_id, Event.status == "published"))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if not event.waitlist_enabled:
+        raise HTTPException(400, "This event does not have a waitlist")
+    return await _join_waitlist_internal(event, user, db)
+
+
+@router.delete("/{event_id}/waitlist", status_code=204)
+async def leave_waitlist(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    wl = (await db.execute(select(EventWaitlist).where(
+        EventWaitlist.event_id == event_id,
+        EventWaitlist.user_id == user.id,
+    ))).scalar_one_or_none()
+    if not wl:
+        raise HTTPException(404, "Not on the waitlist")
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one()
+    await db.delete(wl)
+    event.waitlist_count = max(0, event.waitlist_count - 1)
+
+
+@router.get("/{event_id}/waitlist/status", response_model=WaitlistStatusOut)
+async def waitlist_status(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    wl = (await db.execute(select(EventWaitlist).where(
+        EventWaitlist.event_id == event_id, EventWaitlist.user_id == user.id))).scalar_one_or_none()
+    if not wl:
+        raise HTTPException(404, "Not on the waitlist")
+    ahead = (await db.execute(
+        select(func.count(EventWaitlist.id))
+        .where(EventWaitlist.event_id == event_id,
+               EventWaitlist.status == "waiting",
+               EventWaitlist.position < wl.position)
+    )).scalar() or 0
+    return WaitlistStatusOut(position=wl.position, status=wl.status, total_ahead=ahead)
+
+
+@router.get("/{event_id}/waitlist", response_model=list[WaitlistEntryOut])
+async def list_waitlist(
+    event_id: str,
+    status: str | None = "waiting",
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    await _require_event_access(event_id, user, db)
+    stmt = (
+        select(EventWaitlist)
+        .options(selectinload(EventWaitlist.user))
+        .where(EventWaitlist.event_id == event_id)
+        .order_by(EventWaitlist.position.asc())
+    )
+    if status:
+        stmt = stmt.where(EventWaitlist.status == status)
+    rows = (await db.execute(stmt.limit(limit))).scalars().all()
+    return [
+        WaitlistEntryOut(
+            id=w.id, user_id=w.user_id,
+            username=w.user.username, full_name=w.user.full_name,
+            avatar_url=w.user.avatar_url, position=w.position,
+            status=w.status, created_at=w.created_at, notified_at=w.notified_at,
+        )
+        for w in rows
+    ]
+
+
+@router.post("/{event_id}/waitlist/notify")
+async def notify_waitlist(
+    event_id: str,
+    payload: WaitlistNotifyRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    event = await _require_event_access(event_id, user, db)
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(EventWaitlist)
+        .options(selectinload(EventWaitlist.user))
+        .where(EventWaitlist.event_id == event_id, EventWaitlist.status == "waiting")
+        .order_by(EventWaitlist.position.asc())
+        .limit(payload.count)
+    )
+    entries = result.scalars().all()
+    notified = []
+    for entry in entries:
+        entry.status = "notified"
+        entry.notified_at = now
+        # In-app notification
+        db.add(Notification(
+            id=str(uuid.uuid4()),
+            user_id=entry.user_id,
+            type="event_invite",
+            title=f"You're off the waitlist! {event.title}",
+            body=f"A spot opened up for \"{event.title}\". Register now before it's taken!",
+            reference_id=event_id,
+            reference_type="event",
+            actor_id=user.id,
+        ))
+        notified.append(entry.user.username)
+    await db.flush()
+    return {"notified": notified, "count": len(notified)}

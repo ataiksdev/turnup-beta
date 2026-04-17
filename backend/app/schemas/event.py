@@ -31,8 +31,11 @@ class EventCreate(BaseModel):
     currency: str = "USD"
     ticket_url: str | None = None
     capacity: int | None = None
+    waitlist_enabled: bool = False
     category_id: str | None = None
     tags: str | None = None
+    status: str = Field("published", pattern=r"^(draft|published)$")
+    template_id: str | None = None  # optional: create from template
 
 
 class EventUpdate(BaseModel):
@@ -49,7 +52,8 @@ class EventUpdate(BaseModel):
     price_max: float | None = None
     ticket_url: str | None = None
     capacity: int | None = None
-    status: str | None = None
+    waitlist_enabled: bool | None = None
+    status: str | None = Field(None, pattern=r"^(draft|published|cancelled|completed)$")
     tags: str | None = None
 
 
@@ -71,6 +75,9 @@ class EventOut(BaseModel):
     attendees_count: int
     interested_count: int
     saves_count: int
+    waitlist_count: int
+    views_count: int
+    waitlist_enabled: bool
     status: str
     is_featured: bool
     is_trending: bool
@@ -80,6 +87,7 @@ class EventOut(BaseModel):
     created_at: datetime
     is_saved: bool = False
     attendance_status: str | None = None
+    is_waitlisted: bool = False
     model_config = {"from_attributes": True}
 
 
@@ -91,6 +99,7 @@ class EventDetail(EventOut):
     timezone: str
     ticket_url: str | None
     capacity: int | None
+    template_id: str | None
 
 
 class AttendRequest(BaseModel):
