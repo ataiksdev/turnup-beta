@@ -15,24 +15,37 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    hashed_password: Mapped[str | None] = mapped_column(String(255))  # nullable for OAuth-only users
     full_name: Mapped[str] = mapped_column(String(120), nullable=False)
     bio: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str | None] = mapped_column(String(500))
     location: Mapped[str | None] = mapped_column(String(120))
     website: Mapped[str | None] = mapped_column(String(255))
+
+    # Account state
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # 2FA
+    two_factor_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Stats
     followers_count: Mapped[int] = mapped_column(Integer, default=0)
     following_count: Mapped[int] = mapped_column(Integer, default=0)
     events_hosted: Mapped[int] = mapped_column(Integer, default=0)
     events_attended: Mapped[int] = mapped_column(Integer, default=0)
-    # Comma-separated category slugs e.g. "music,nightlife,sports"
+
+    # Preferences
     category_preferences: Mapped[str | None] = mapped_column(Text)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+    # Relationships
     events = relationship("Event", back_populates="host", foreign_keys="Event.host_id")
     attendances = relationship("EventAttendee", back_populates="user")
     saves = relationship("EventSave", back_populates="user")
@@ -40,3 +53,6 @@ class User(Base):
     notifications = relationship("Notification", foreign_keys="Notification.user_id", back_populates="user")
     followers = relationship("Follow", foreign_keys="Follow.following_id", back_populates="following")
     following = relationship("Follow", foreign_keys="Follow.follower_id", back_populates="follower")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+    oauth_accounts = relationship("OAuthAccount", back_populates="user", cascade="all, delete-orphan")
+    two_factor = relationship("TwoFactor", back_populates="user", uselist=False, cascade="all, delete-orphan")

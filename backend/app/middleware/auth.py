@@ -1,28 +1,53 @@
+from datetime import datetime, timezone
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
+from app.models.auth_tokens import UserSession
 from app.models.user import User
-from app.services.auth import decode_token
+from app.services.auth import decode_token_full
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+
+async def _resolve_user(token: str | None, db: AsyncSession) -> User | None:
+    if not token:
+        return None
+    payload = decode_token_full(token)
+    if not payload or payload.get("type") != "access":
+        return None
+
+    user_id = payload.get("sub")
+    jti = payload.get("jti")
+    if not user_id or not jti:
+        return None
+
+    # Validate session is active and not expired
+    now = datetime.now(timezone.utc)
+    session_q = await db.execute(
+        select(UserSession).where(
+            UserSession.jti == jti,
+            UserSession.is_active == True,
+            UserSession.expires_at > now,
+        )
+    )
+    if not session_q.scalar_one_or_none():
+        return None
+
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.is_active == True, User.is_deleted == False)
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_current_user(
     token: str | None = Depends(oauth2),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    exc = HTTPException(401, "Not authenticated", headers={"WWW-Authenticate": "Bearer"})
-    if not token:
-        raise exc
-    user_id = decode_token(token)
-    if not user_id:
-        raise exc
-    result = await db.execute(select(User).where(User.id == user_id, User.is_active == True))
-    user = result.scalar_one_or_none()
+    user = await _resolve_user(token, db)
     if not user:
-        raise exc
+        raise HTTPException(401, "Not authenticated", headers={"WWW-Authenticate": "Bearer"})
     return user
 
 
@@ -30,10 +55,4 @@ async def get_optional_user(
     token: str | None = Depends(oauth2),
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
-    if not token:
-        return None
-    user_id = decode_token(token)
-    if not user_id:
-        return None
-    result = await db.execute(select(User).where(User.id == user_id, User.is_active == True))
-    return result.scalar_one_or_none()
+    return await _resolve_user(token, db)
