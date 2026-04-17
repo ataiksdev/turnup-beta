@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#09090B"/>
+  <text x="256" y="368" font-family="-apple-system, system-ui, sans-serif" font-size="290" font-weight="900" fill="#F97316" text-anchor="middle" dominant-baseline="auto">T</text>
+  <circle cx="394" cy="138" r="48" fill="#F97316"/>
+  <text x="394" y="156" font-family="system-ui" font-size="48" text-anchor="middle">🎉</text>
+</svg>

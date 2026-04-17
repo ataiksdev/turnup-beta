@@ -2,8 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme tokens — space-separated RGB channels for Tailwind opacity support ── */
 @layer base {
+  /* Light mode (default) */
   :root {
+    --bg:             250 250 250;
+    --bg-surface:     244 244 245;
+    --bg-card:        255 255 255;
+    --bg-elevated:    228 228 231;
+    --bg-overlay:     212 212 216;
+    --border:         228 228 231;
+    --border-subtle:  244 244 245;
+    --border-strong:  161 161 170;
+    --text:           9 9 11;
+    --text-secondary: 82 82 91;
+    --text-muted:     113 113 122;
+    --text-disabled:  161 161 170;
+    --primary-muted:  255 237 213;
+    color-scheme: light;
+  }
+
+  /* Dark mode */
+  .dark {
+    --bg:             9 9 11;
+    --bg-surface:     17 17 22;
+    --bg-card:        24 24 27;
+    --bg-elevated:    39 39 42;
+    --bg-overlay:     46 46 53;
+    --border:         42 42 53;
+    --border-subtle:  30 30 38;
+    --border-strong:  63 63 80;
+    --text:           250 250 250;
+    --text-secondary: 161 161 170;
+    --text-muted:     113 113 122;
+    --text-disabled:  82 82 91;
+    --primary-muted:  67 20 7;
     color-scheme: dark;
   }
 
@@ -17,7 +50,6 @@
     font-family: var(--font-inter), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Prevent layout shift from scrollbar */
     scrollbar-gutter: stable;
   }
 
@@ -26,34 +58,48 @@
     overscroll-behavior: none;
   }
 
-  /* Custom scrollbar */
+  /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-border-strong; }
 
-  /* Focus ring */
+  /* ── Focus ring — visible only for keyboard nav ── */
   :focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-bg;
+    @apply outline-none ring-2 ring-primary ring-offset-2;
+    ring-offset-color: rgb(var(--bg));
   }
 
-  /* Horizontal scroll snap */
-  .snap-scroll {
-    @apply flex gap-3 overflow-x-auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+  /* Remove default focus for mouse users */
+  :focus:not(:focus-visible) {
+    outline: none;
   }
-  .snap-scroll::-webkit-scrollbar { display: none; }
-  .snap-scroll > * { scroll-snap-align: start; }
+
+  /* ── Reduced motion ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* ── Skip nav ── */
+  .skip-nav {
+    @apply sr-only;
+  }
+  .skip-nav:focus {
+    @apply not-sr-only fixed top-4 left-4 z-[200] px-4 py-2 bg-primary text-white
+           rounded-xl font-semibold text-sm shadow-glow;
+  }
 }
 
 @layer utilities {
-  .text-balance { text-wrap: balance; }
-  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-  .safe-top    { padding-top: env(safe-area-inset-top); }
+  .text-balance  { text-wrap: balance; }
+  .safe-bottom   { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-top      { padding-top: env(safe-area-inset-top); }
+  .safe-pb       { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
 
-  /* Truncate multi-line */
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -65,5 +111,27 @@
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+
+  /* Horizontal scroll snap */
+  .snap-scroll {
+    @apply flex gap-3 overflow-x-auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .snap-scroll::-webkit-scrollbar { display: none; }
+  .snap-scroll > * { scroll-snap-align: start; }
+
+  /* Shimmer skeleton animation */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgb(var(--bg-elevated)) 0%,
+      rgb(var(--bg-overlay) / 0.6) 50%,
+      rgb(var(--bg-elevated)) 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
   }
 }

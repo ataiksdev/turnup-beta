@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 interface TopBarProps {
   title?: string;
@@ -19,24 +20,30 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
   const { user } = useAuthStore();
 
   return (
-    <header className={cn(
-      "sticky top-0 z-40 flex items-center justify-between h-14 px-4 safe-top",
-      transparent
-        ? "bg-transparent"
-        : "bg-bg-surface/80 backdrop-blur-xl border-b border-border",
-      className,
-    )}>
+    <header
+      role="banner"
+      className={cn(
+        "sticky top-0 z-40 flex items-center justify-between h-14 px-4 safe-top",
+        transparent
+          ? "bg-transparent"
+          : "bg-bg-surface/80 backdrop-blur-xl border-b border-border",
+        className,
+      )}
+    >
       {/* Left */}
       <div className="flex items-center gap-2 min-w-0">
         {back ? (
-          <button onClick={() => router.back()}
-            className="p-2 -ml-2 rounded-xl hover:bg-bg-elevated transition-colors">
-            <ChevronLeft size={20} className="text-text" />
+          <button
+            onClick={() => router.back()}
+            aria-label="Go back"
+            className="p-2 -ml-2 rounded-xl hover:bg-bg-elevated transition-colors"
+          >
+            <ChevronLeft size={20} className="text-text" aria-hidden />
           </button>
         ) : (
-          <Link href="/" className="flex items-center gap-1.5">
+          <Link href="/" aria-label="Turnup home" className="flex items-center gap-1.5">
             <span className="text-xl font-black text-primary tracking-tight">turnup</span>
-            <span className="text-xl">🎉</span>
+            <span className="text-xl" aria-hidden>🎉</span>
           </Link>
         )}
         {title && (
@@ -45,16 +52,21 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {actions}
+        <ThemeToggle />
         {!back && user && (
-          <Link href={`/profile/${user.username}`}>
+          <Link href={`/profile/${user.username}`} aria-label={`${user.full_name}'s profile`}>
             <Avatar src={user.avatar_url} name={user.full_name} size="sm" verified={user.is_verified} />
           </Link>
         )}
         {!back && (
-          <Link href="/activity" className="relative p-2 rounded-xl hover:bg-bg-elevated transition-colors">
-            <Bell size={20} className="text-text-secondary" />
+          <Link
+            href="/activity"
+            aria-label="Notifications"
+            className="relative p-2 rounded-xl hover:bg-bg-elevated transition-colors"
+          >
+            <Bell size={20} className="text-text-secondary" aria-hidden />
           </Link>
         )}
       </div>

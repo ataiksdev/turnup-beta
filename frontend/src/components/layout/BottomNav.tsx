@@ -6,11 +6,11 @@ import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 
 const navItems = [
-  { href: "/",          icon: Home,    label: "Home" },
-  { href: "/search",    icon: Search,  label: "Search" },
-  { href: "/activity",  icon: Compass, label: "Activity" },
-  { href: "/saved",     icon: Heart,   label: "Saved" },
-  { href: "/profile",   icon: User,    label: "Profile" },
+  { href: "/",         icon: Home,    label: "Home" },
+  { href: "/search",   icon: Search,  label: "Search" },
+  { href: "/activity", icon: Compass, label: "Activity" },
+  { href: "/saved",    icon: Heart,   label: "Saved" },
+  { href: "/profile",  icon: User,    label: "Profile" },
 ];
 
 export function BottomNav() {
@@ -18,20 +18,25 @@ export function BottomNav() {
   const { user } = useAuthStore();
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 bg-bg-surface/80 backdrop-blur-xl border-t border-border safe-bottom">
+    <nav
+      aria-label="Main navigation"
+      className="fixed bottom-0 inset-x-0 z-50 bg-bg-surface/80 backdrop-blur-xl border-t border-border safe-bottom"
+    >
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
         {navItems.map(({ href, icon: Icon, label }) => {
-          const isProfile = href === "/profile";
-          const activePath = isProfile && user
+          const resolvedHref = href === "/profile" && user
             ? `/profile/${user.username}`
             : href;
-          const isActive = pathname === activePath ||
+          const isActive =
+            pathname === resolvedHref ||
             (href !== "/" && pathname.startsWith(href));
 
           return (
             <Link
               key={href}
-              href={isProfile && user ? `/profile/${user.username}` : href}
+              href={resolvedHref}
+              aria-label={label}
+              aria-current={isActive ? "page" : undefined}
               className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full group"
             >
               <div className={cn(
@@ -41,6 +46,7 @@ export function BottomNav() {
                 <Icon
                   size={20}
                   strokeWidth={isActive ? 2.5 : 1.8}
+                  aria-hidden="true"
                   className={cn(
                     "transition-colors duration-200",
                     isActive ? "text-primary" : "text-text-muted group-hover:text-text-secondary",
