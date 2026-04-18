@@ -84,7 +84,7 @@ export default function SignupPage() {
       </div>
 
       <div className="w-full max-w-sm space-y-4">
-        <h2 className="text-2xl font-bold text-text text-center">Create your account</h2>
+        <h2 className="text-2xl font-black text-text text-center">Create your account</h2>
 
         {error && (
           <div className="px-4 py-3 rounded-2xl bg-error/10 border border-error/30 text-sm text-error">
@@ -109,16 +109,16 @@ export default function SignupPage() {
 
         {/* OAuth divider */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-text-muted">or sign up with</span>
-          <div className="flex-1 h-px bg-border" />
+          <div className="flex-1 h-0.5 bg-border" />
+          <span className="text-xs font-bold text-text-muted uppercase tracking-wide">or</span>
+          <div className="flex-1 h-0.5 bg-border" />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => handleOAuth("google")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-border bg-bg-surface text-sm font-medium text-text hover:bg-bg-elevated transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
           >
             <GoogleIcon />
             Google
@@ -126,7 +126,7 @@ export default function SignupPage() {
           <button
             type="button"
             onClick={() => handleOAuth("instagram")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-border bg-bg-surface text-sm font-medium text-text hover:bg-bg-elevated transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
           >
             <InstagramIcon />
             Instagram

@@ -131,19 +131,19 @@ export default function LoginPage() {
       </div>
 
       <div className="w-full max-w-sm space-y-5">
-        <h2 className="text-2xl font-bold text-text text-center">Welcome back</h2>
+        <h2 className="text-2xl font-black text-text text-center">Welcome back</h2>
 
         {/* Tab switcher */}
-        <div className="flex rounded-2xl bg-bg-elevated p-1 gap-1" role="tablist">
+        <div className="flex border-2 border-border bg-bg-elevated p-1 gap-1 rounded" role="tablist">
           {(["email", "phone"] as Tab[]).map((t) => (
             <button
               key={t}
               role="tab"
               aria-selected={tab === t}
               onClick={() => switchTab(t)}
-              className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
+              className={`flex-1 py-2 rounded text-sm font-bold uppercase tracking-wide transition-colors ${
                 tab === t
-                  ? "bg-bg-surface text-text shadow-sm"
+                  ? "bg-primary text-white"
                   : "text-text-muted hover:text-text"
               }`}
             >
@@ -233,16 +233,16 @@ export default function LoginPage() {
 
         {/* OAuth divider */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-text-muted">or continue with</span>
-          <div className="flex-1 h-px bg-border" />
+          <div className="flex-1 h-0.5 bg-border" />
+          <span className="text-xs font-bold text-text-muted uppercase tracking-wide">or</span>
+          <div className="flex-1 h-0.5 bg-border" />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => handleOAuth("google")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-border bg-bg-surface text-sm font-medium text-text hover:bg-bg-elevated transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
           >
             <GoogleIcon />
             Google
@@ -250,7 +250,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => handleOAuth("instagram")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-border bg-bg-surface text-sm font-medium text-text hover:bg-bg-elevated transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
           >
             <InstagramIcon />
             Instagram

@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 
 export function HeroEvent({ event }: { event: Event }) {
   return (
-    <Link href={`/events/${event.slug}`} className="block relative h-[420px] overflow-hidden rounded-3xl mx-4">
+    <Link href={`/events/${event.slug}`} className="block relative h-[420px] overflow-hidden rounded mx-4 border-2 border-border shadow-brutal"  >
       {event.cover_image && (
         <Image
           src={event.cover_image}
@@ -25,7 +25,7 @@ export function HeroEvent({ event }: { event: Event }) {
       {/* Trending badge */}
       {event.is_trending && (
         <div className="absolute top-4 left-4">
-          <span className="px-3 py-1 rounded-full bg-primary text-white text-xs font-bold uppercase tracking-wider">
+          <span className="px-3 py-1 rounded bg-primary text-white text-xs font-bold uppercase tracking-wider border border-white/30">
             🔥 Hot right now
           </span>
         </div>

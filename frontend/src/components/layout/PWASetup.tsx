@@ -66,14 +66,14 @@ export function PWASetup() {
       <div
         role="dialog"
         aria-label="Install Turnup app"
-        className="fixed bottom-24 inset-x-4 z-50 bg-bg-card border border-border rounded-2xl p-4 shadow-card animate-slide-up"
+        className="fixed bottom-24 inset-x-4 z-50 bg-bg-card border-2 border-border rounded p-4 shadow-brutal animate-slide-up"
       >
         <button onClick={dismiss} aria-label="Dismiss install prompt"
-          className="absolute top-3 right-3 p-1 rounded-lg hover:bg-bg-elevated text-text-muted">
+          className="absolute top-3 right-3 p-1 rounded border border-border-subtle hover:bg-bg-elevated text-text-muted">
           <X size={16} />
         </button>
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-primary/15 flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded border-2 border-border bg-primary/15 flex items-center justify-center shrink-0">
             <span className="text-2xl">🎉</span>
           </div>
           <div className="flex-1 min-w-0">
@@ -82,7 +82,7 @@ export function PWASetup() {
           </div>
         </div>
         <button onClick={handleInstall}
-          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm">
+          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded border-2 border-border bg-primary text-white font-bold text-sm shadow-brutal active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
           <Download size={16} /> Install App
         </button>
       </div>
@@ -95,10 +95,10 @@ export function PWASetup() {
       <div
         role="dialog"
         aria-label="Add Turnup to Home Screen instructions"
-        className="fixed bottom-24 inset-x-4 z-50 bg-bg-card border border-border rounded-2xl p-4 shadow-card animate-slide-up"
+        className="fixed bottom-24 inset-x-4 z-50 bg-bg-card border-2 border-border rounded p-4 shadow-brutal animate-slide-up"
       >
         <button onClick={dismiss} aria-label="Dismiss"
-          className="absolute top-3 right-3 p-1 rounded-lg hover:bg-bg-elevated text-text-muted">
+          className="absolute top-3 right-3 p-1 rounded border border-border-subtle hover:bg-bg-elevated text-text-muted">
           <X size={16} />
         </button>
         <p className="font-bold text-text text-sm mb-2">Install on iPhone</p>

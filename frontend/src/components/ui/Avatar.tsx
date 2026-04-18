@@ -21,7 +21,7 @@ export function Avatar({ src, name, size = "md", className, verified }: AvatarPr
   const s = sizes[size];
   return (
     <div className={cn("relative shrink-0", className)}>
-      <div className={cn("rounded-full overflow-hidden bg-bg-elevated border border-border", s.container)}>
+      <div className={cn("rounded-full overflow-hidden bg-bg-elevated border-2 border-border", s.container)}>
         {src ? (
           <Image src={src} alt={name} fill className="object-cover" sizes="80px" />
         ) : (

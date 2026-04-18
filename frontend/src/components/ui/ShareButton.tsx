@@ -40,8 +40,7 @@ export function ShareButton({ title, text, url, className, iconClassName, size =
       onClick={handleShare}
       aria-label="Share this event"
       className={cn(
-        "p-2 rounded-xl transition-colors",
-        "hover:bg-bg-elevated focus-visible:ring-2 focus-visible:ring-primary",
+        "p-2 rounded border border-border-subtle hover:bg-bg-elevated hover:border-border transition-all duration-100",
         className,
       )}
     >

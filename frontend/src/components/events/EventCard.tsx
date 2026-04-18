@@ -37,9 +37,9 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
     <Link
       href={`/events/${event.slug}`}
       className={cn(
-        "group block bg-bg-card rounded-3xl overflow-hidden border border-border",
-        "hover:border-border-strong transition-all duration-200 hover:shadow-card",
-        "shrink-0 active:scale-[0.98]",
+        "group block bg-bg-card rounded overflow-hidden border-2 border-border",
+        "shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg",
+        "transition-all duration-100 shrink-0",
         size === "sm" && "w-48",
         size === "md" && "w-64",
         size === "lg" && "w-72",
@@ -53,7 +53,7 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
             src={event.cover_image}
             alt={event.title}
             fill
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
+            className="object-cover"
             sizes="(max-width: 768px) 256px, 288px"
           />
         ) : (
@@ -64,12 +64,12 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
         {/* Badges */}
         <div className="absolute top-2 left-2 flex gap-1.5">
           {event.is_trending && (
-            <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-wide">
+            <span className="px-2 py-0.5 rounded bg-primary text-white text-[10px] font-bold uppercase tracking-wide border border-white/30">
               🔥 Trending
             </span>
           )}
           {event.is_free && (
-            <span className="px-2 py-0.5 rounded-full bg-success/90 text-white text-[10px] font-bold uppercase tracking-wide">
+            <span className="px-2 py-0.5 rounded bg-success text-white text-[10px] font-bold uppercase tracking-wide border border-white/30">
               Free
             </span>
           )}
@@ -79,8 +79,8 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
         <button
           onClick={toggleSave}
           className={cn(
-            "absolute top-2 right-2 p-1.5 rounded-full transition-all",
-            "bg-bg/60 backdrop-blur-sm hover:bg-bg/80",
+            "absolute top-2 right-2 p-1.5 rounded transition-all border border-white/40",
+            "bg-black/60 hover:bg-black/80",
             saving && "opacity-50",
           )}
         >
@@ -90,7 +90,7 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
         </button>
 
         {/* Date pill */}
-        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full bg-bg/70 backdrop-blur-sm">
+        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/80 border border-white/20">
           <span className="text-[10px] font-medium text-text">
             {formatEventDateShort(event.start_date)}
           </span>

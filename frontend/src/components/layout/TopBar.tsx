@@ -26,7 +26,7 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
         "sticky top-0 z-40 flex items-center justify-between h-14 px-4 safe-top",
         transparent
           ? "bg-transparent"
-          : "bg-bg-surface/80 backdrop-blur-xl border-b border-border",
+          : "bg-bg-surface border-b-2 border-border",
         className,
       )}
     >
@@ -36,7 +36,7 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
           <button
             onClick={() => router.back()}
             aria-label="Go back"
-            className="p-2 -ml-2 rounded-xl hover:bg-bg-elevated transition-colors"
+            className="p-2 -ml-2 rounded hover:bg-bg-elevated transition-colors"
           >
             <ChevronLeft size={20} className="text-text" aria-hidden />
           </button>
@@ -64,7 +64,7 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
           <Link
             href="/activity"
             aria-label="Notifications"
-            className="relative p-2 rounded-xl hover:bg-bg-elevated transition-colors"
+            className="relative p-2 rounded hover:bg-bg-elevated transition-colors"
           >
             <Bell size={20} className="text-text-secondary" aria-hidden />
           </Link>

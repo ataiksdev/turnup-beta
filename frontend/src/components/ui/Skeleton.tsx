@@ -4,7 +4,7 @@ export function Skeleton({ className }: { className?: string }) {
   return (
     <div
       aria-hidden="true"
-      className={cn("skeleton-shimmer rounded-2xl bg-bg-elevated", className)}
+      className={cn("skeleton-shimmer rounded bg-bg-elevated", className)}
     />
   );
 }
@@ -14,7 +14,7 @@ export function Skeleton({ className }: { className?: string }) {
 export function EventCardSkeleton({ size = "md" }: { size?: "sm" | "md" }) {
   const w = size === "sm" ? "w-full" : "w-64 shrink-0";
   return (
-    <div aria-hidden="true" className={cn("rounded-3xl bg-bg-card overflow-hidden", w)}>
+    <div aria-hidden="true" className={cn("rounded border-2 border-border bg-bg-card overflow-hidden shadow-brutal", w)}>
       <Skeleton className="h-40 w-full rounded-none" />
       <div className="p-3 space-y-2">
         <Skeleton className="h-4 w-3/4" />
@@ -46,7 +46,7 @@ export function CarouselSkeleton() {
 export function HeroSkeleton() {
   return (
     <div aria-hidden="true" className="mx-4">
-      <Skeleton className="h-[420px] w-full rounded-3xl" />
+      <Skeleton className="h-[420px] w-full rounded border-2 border-border shadow-brutal" />
     </div>
   );
 }
@@ -68,12 +68,12 @@ export function EventDetailSkeleton() {
           <Skeleton className="h-5 w-3/4" />
           <Skeleton className="h-5 w-1/2" />
         </div>
-        <Skeleton className="h-20 w-full rounded-2xl" />
+        <Skeleton className="h-20 w-full rounded" />
         <div className="flex gap-2">
-          <Skeleton className="h-11 flex-1 rounded-2xl" />
-          <Skeleton className="h-11 w-28 rounded-2xl" />
+          <Skeleton className="h-11 flex-1 rounded" />
+          <Skeleton className="h-11 w-28 rounded" />
         </div>
-        <Skeleton className="h-20 w-full rounded-2xl" />
+        <Skeleton className="h-20 w-full rounded" />
         <div className="space-y-2">
           <Skeleton className="h-5 w-16" />
           <Skeleton className="h-4 w-full" />
@@ -94,7 +94,7 @@ export function ProfileSkeleton() {
       <div className="px-4">
         <div className="flex items-end justify-between -mt-8 mb-4">
           <Skeleton className="h-20 w-20 rounded-full" />
-          <Skeleton className="h-9 w-24 rounded-xl" />
+          <Skeleton className="h-9 w-24 rounded" />
         </div>
         <div className="space-y-2">
           <Skeleton className="h-6 w-40" />
@@ -102,12 +102,12 @@ export function ProfileSkeleton() {
           <Skeleton className="h-4 w-full" />
         </div>
         <div className="flex gap-4 mt-4">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 flex-1 rounded-2xl" />)}
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 flex-1 rounded" />)}
         </div>
       </div>
       <div className="mt-6 px-4 space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-3xl bg-bg-card overflow-hidden">
+          <div key={i} className="rounded border-2 border-border bg-bg-card overflow-hidden shadow-brutal-sm">
             <Skeleton className="h-36 w-full rounded-none" />
             <div className="p-3 space-y-2">
               <Skeleton className="h-4 w-3/4" />

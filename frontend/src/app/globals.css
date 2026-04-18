@@ -2,42 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Theme tokens — space-separated RGB channels for Tailwind opacity support ── */
+/* ── Neo-brutalist theme tokens ─────────────────────────────────────────────── */
 @layer base {
-  /* Light mode (default) */
+  /* Dark — default (no class needed) */
   :root {
-    --bg:             250 250 250;
-    --bg-surface:     244 244 245;
-    --bg-card:        255 255 255;
-    --bg-elevated:    228 228 231;
-    --bg-overlay:     212 212 216;
-    --border:         228 228 231;
-    --border-subtle:  244 244 245;
-    --border-strong:  161 161 170;
-    --text:           9 9 11;
-    --text-secondary: 82 82 91;
-    --text-muted:     113 113 122;
-    --text-disabled:  161 161 170;
-    --primary-muted:  255 237 213;
-    color-scheme: light;
+    --bg:             10 10 10;
+    --bg-surface:     16 16 16;
+    --bg-card:        20 20 20;
+    --bg-elevated:    28 28 28;
+    --bg-overlay:     38 38 38;
+    --border:         255 255 255;    /* white borders — neo-brutalist */
+    --border-subtle:  45 45 45;       /* subtle internal separators */
+    --border-strong:  255 255 255;
+    --text:           255 255 255;
+    --text-secondary: 185 185 185;
+    --text-muted:     115 115 115;
+    --text-disabled:  65 65 65;
+    --primary-muted:  67 20 7;
+    --shadow-color:   255 255 255;    /* offset shadow color — white in dark */
+    color-scheme: dark;
   }
 
-  /* Dark mode */
+  /* .dark mirrors :root for compatibility with ThemeToggle class toggle */
   .dark {
-    --bg:             9 9 11;
-    --bg-surface:     17 17 22;
-    --bg-card:        24 24 27;
-    --bg-elevated:    39 39 42;
-    --bg-overlay:     46 46 53;
-    --border:         42 42 53;
-    --border-subtle:  30 30 38;
-    --border-strong:  63 63 80;
-    --text:           250 250 250;
-    --text-secondary: 161 161 170;
-    --text-muted:     113 113 122;
-    --text-disabled:  82 82 91;
+    --bg:             10 10 10;
+    --bg-surface:     16 16 16;
+    --bg-card:        20 20 20;
+    --bg-elevated:    28 28 28;
+    --bg-overlay:     38 38 38;
+    --border:         255 255 255;
+    --border-subtle:  45 45 45;
+    --border-strong:  255 255 255;
+    --text:           255 255 255;
+    --text-secondary: 185 185 185;
+    --text-muted:     115 115 115;
+    --text-disabled:  65 65 65;
     --primary-muted:  67 20 7;
+    --shadow-color:   255 255 255;
     color-scheme: dark;
+  }
+
+  /* Light mode override */
+  .light {
+    --bg:             255 255 255;
+    --bg-surface:     248 248 248;
+    --bg-card:        255 255 255;
+    --bg-elevated:    238 238 238;
+    --bg-overlay:     222 222 222;
+    --border:         0 0 0;          /* black borders in light */
+    --border-subtle:  200 200 200;
+    --border-strong:  0 0 0;
+    --text:           0 0 0;
+    --text-secondary: 50 50 50;
+    --text-muted:     115 115 115;
+    --text-disabled:  175 175 175;
+    --primary-muted:  255 237 213;
+    --shadow-color:   0 0 0;          /* black offset shadow in light */
+    color-scheme: light;
   }
 
   * {
@@ -59,21 +80,17 @@
   }
 
   /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-border-strong; }
+  ::-webkit-scrollbar-thumb { @apply bg-border-subtle; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-border; }
 
-  /* ── Focus ring — visible only for keyboard nav ── */
+  /* ── Focus ring ── */
   :focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2;
+    @apply outline-none ring-2 ring-primary ring-offset-1;
     ring-offset-color: rgb(var(--bg));
   }
-
-  /* Remove default focus for mouse users */
-  :focus:not(:focus-visible) {
-    outline: none;
-  }
+  :focus:not(:focus-visible) { outline: none; }
 
   /* ── Reduced motion ── */
   @media (prefers-reduced-motion: reduce) {
@@ -85,12 +102,10 @@
   }
 
   /* ── Skip nav ── */
-  .skip-nav {
-    @apply sr-only;
-  }
+  .skip-nav { @apply sr-only; }
   .skip-nav:focus {
     @apply not-sr-only fixed top-4 left-4 z-[200] px-4 py-2 bg-primary text-white
-           rounded-xl font-semibold text-sm shadow-glow;
+           font-bold text-sm border-2 border-border shadow-brutal;
   }
 }
 
@@ -113,7 +128,6 @@
     overflow: hidden;
   }
 
-  /* Horizontal scroll snap */
   .snap-scroll {
     @apply flex gap-3 overflow-x-auto;
     scroll-snap-type: x mandatory;
@@ -123,12 +137,12 @@
   .snap-scroll::-webkit-scrollbar { display: none; }
   .snap-scroll > * { scroll-snap-align: start; }
 
-  /* Shimmer skeleton animation */
+  /* Skeleton shimmer */
   .skeleton-shimmer {
     background: linear-gradient(
       90deg,
       rgb(var(--bg-elevated)) 0%,
-      rgb(var(--bg-overlay) / 0.6) 50%,
+      rgb(var(--bg-overlay) / 0.5) 50%,
       rgb(var(--bg-elevated)) 100%
     );
     background-size: 200% 100%;

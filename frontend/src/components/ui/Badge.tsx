@@ -8,19 +8,19 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const variants: Record<Variant, string> = {
-  default:  "bg-bg-elevated text-text-secondary border border-border",
-  primary:  "bg-primary/15 text-primary border border-primary/30",
-  success:  "bg-success/15 text-success border border-success/30",
-  warning:  "bg-warning/15 text-warning border border-warning/30",
-  error:    "bg-error/15 text-error border border-error/30",
-  outline:  "border border-border-strong text-text-secondary",
+  default:  "bg-bg-elevated text-text-secondary border-border",
+  primary:  "bg-primary text-white border-primary",
+  success:  "bg-success text-white border-success",
+  warning:  "bg-warning text-black border-warning",
+  error:    "bg-error text-white border-error",
+  outline:  "bg-transparent border-border text-text-secondary",
 };
 
 export function Badge({ variant = "default", className, children, ...props }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium",
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wide border",
         variants[variant],
         className,
       )}

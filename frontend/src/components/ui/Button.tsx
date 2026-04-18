@@ -13,18 +13,31 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<Variant, string> = {
-  primary:   "bg-primary hover:bg-primary-hover text-white shadow-glow-sm active:scale-95",
-  secondary: "bg-bg-elevated hover:bg-bg-overlay text-text border border-border",
-  ghost:     "hover:bg-bg-elevated text-text-secondary hover:text-text",
-  outline:   "border border-primary text-primary hover:bg-primary hover:text-white",
-  danger:    "bg-error hover:bg-red-600 text-white",
+  primary:
+    "bg-primary text-white border-2 border-border font-bold " +
+    "shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg " +
+    "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
+  secondary:
+    "bg-bg-card text-text border-2 border-border font-bold " +
+    "shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal " +
+    "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
+  ghost:
+    "text-text-secondary hover:text-text hover:bg-bg-elevated border border-border-subtle font-medium",
+  outline:
+    "bg-transparent text-primary border-2 border-primary font-bold " +
+    "shadow-brutal-primary hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#F97316] " +
+    "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
+  danger:
+    "bg-error text-white border-2 border-border font-bold " +
+    "shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg " +
+    "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
 };
 
 const sizes: Record<Size, string> = {
-  xs: "h-7  px-3  text-xs  rounded-xl gap-1",
-  sm: "h-8  px-4  text-sm  rounded-xl gap-1.5",
-  md: "h-10 px-5  text-sm  rounded-2xl gap-2",
-  lg: "h-12 px-6  text-base rounded-2xl gap-2",
+  xs: "h-7  px-3  text-xs  rounded gap-1",
+  sm: "h-8  px-4  text-sm  rounded gap-1.5",
+  md: "h-10 px-5  text-sm  rounded gap-2",
+  lg: "h-12 px-6  text-base rounded gap-2",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -33,8 +46,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center font-medium transition-all duration-150 select-none",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "inline-flex items-center justify-center transition-all duration-100 select-none",
+        "disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-x-0 disabled:translate-y-0",
         variants[variant],
         sizes[size],
         fullWidth && "w-full",
