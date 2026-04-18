@@ -37,6 +37,14 @@ def create_temp_token(user_id: str) -> str:
                      settings.temp_token_expire_minutes)
 
 
+def create_partial_oauth_token(provider: str, provider_user_id: str, username: str) -> str:
+    """Short-lived token for OAuth flows that need email collection (e.g. Instagram)."""
+    return _make_jwt(
+        {"sub": provider_user_id, "username": username, "provider": provider, "type": "partial"},
+        settings.temp_token_expire_minutes,
+    )
+
+
 def decode_token_full(token: str) -> dict | None:
     """Returns the full JWT payload dict, or None if invalid/expired."""
     try:

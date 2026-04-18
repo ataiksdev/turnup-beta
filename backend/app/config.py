@@ -36,9 +36,15 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
 
-    # OAuth — GitHub
-    github_client_id: str = ""
-    github_client_secret: str = ""
+    # OAuth — Instagram
+    instagram_client_id: str = ""
+    instagram_client_secret: str = ""
+
+    # SMS — Twilio
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_phone_number: str = ""
+    otp_expiry_minutes: int = 10
 
     # Rate limiting
     rate_limit_login: str = "5/minute"
@@ -46,6 +52,8 @@ class Settings(BaseSettings):
     rate_limit_forgot_password: str = "3/minute"
     rate_limit_resend_verify: str = "2/minute"
     rate_limit_magic_link: str = "3/minute"
+    rate_limit_phone_otp: str = "3/minute"
+    rate_limit_phone_verify: str = "5/minute"
 
     @property
     def origins(self) -> list[str]:

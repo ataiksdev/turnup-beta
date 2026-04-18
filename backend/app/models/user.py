@@ -13,10 +13,11 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-    hashed_password: Mapped[str | None] = mapped_column(String(255))  # nullable for OAuth-only users
-    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    hashed_password: Mapped[str | None] = mapped_column(String(255))  # nullable for OAuth/phone-only users
+    full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    phone_number: Mapped[str | None] = mapped_column(String(20), unique=True, index=True, nullable=True)
     bio: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str | None] = mapped_column(String(500))
     location: Mapped[str | None] = mapped_column(String(120))

@@ -1,4 +1,5 @@
 import json
+import random
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -13,25 +14,28 @@ from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.middleware.rate_limit import limiter
 from app.models.auth_tokens import (
-    EmailVerification, MagicLink, OAuthAccount, PasswordReset, TwoFactor, UserSession,
+    EmailVerification, MagicLink, OAuthAccount, PasswordReset, PhoneOTP, TwoFactor, UserSession,
 )
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest, DeleteAccountRequest, ForgotPasswordRequest,
-    LoginRequest, MagicLinkRequest, MessageResponse, OnboardingRequest,
-    OAuthProviderRedirect, RegisterRequest, ResetPasswordRequest,
+    LoginRequest, MagicLinkRequest, MessageResponse, OAuthCallbackResponse,
+    OAuthCompleteRequest, OnboardingRequest, OAuthProviderRedirect,
+    PhoneLoginRequest, PhoneVerifyRequest,
+    RegisterRequest, ResetPasswordRequest,
     SessionOut, Token, TwoFactorChallenge, TwoFactorDisableRequest,
     TwoFactorEnableRequest, TwoFactorEnableResponse,
     TwoFactorSetupResponse, TwoFactorVerifyRequest,
 )
 from app.schemas.user import UserMe, UserUpdate
 from app.services.auth import (
-    create_access_token, create_temp_token, decode_token_full,
+    create_access_token, create_partial_oauth_token, create_temp_token, decode_token_full,
     hash_password, make_session_expiry, verify_password,
 )
 from app.services.email import (
     send_magic_link_email, send_password_reset_email, send_verification_email,
 )
+from app.services.sms import send_otp_sms
 from app.services.totp import (
     generate_backup_codes, generate_totp_secret, get_qr_svg, get_totp_uri,
     hash_backup_codes, verify_backup_code, verify_totp,
@@ -508,14 +512,17 @@ _OAUTH_CONFIGS = {
         "scope": "openid email profile",
         "client_id": lambda: settings.google_client_id,
         "client_secret": lambda: settings.google_client_secret,
+        "userinfo_auth": "bearer",
     },
-    "github": {
-        "auth_url": "https://github.com/login/oauth/authorize",
-        "token_url": "https://github.com/login/oauth/access_token",
-        "userinfo_url": "https://api.github.com/user",
-        "scope": "read:user user:email",
-        "client_id": lambda: settings.github_client_id,
-        "client_secret": lambda: settings.github_client_secret,
+    "instagram": {
+        "auth_url": "https://api.instagram.com/oauth/authorize",
+        "token_url": "https://api.instagram.com/oauth/access_token",
+        "userinfo_url": "https://graph.instagram.com/me",
+        "scope": "user_profile,user_media",
+        "client_id": lambda: settings.instagram_client_id,
+        "client_secret": lambda: settings.instagram_client_secret,
+        "userinfo_auth": "query",          # token passed as ?access_token=
+        "userinfo_params": {"fields": "id,username"},
     },
 }
 
@@ -547,7 +554,7 @@ async def oauth_redirect(provider: str):
     return OAuthProviderRedirect(url=url)
 
 
-@router.get("/oauth/{provider}/callback", response_model=Token)
+@router.get("/oauth/{provider}/callback", response_model=OAuthCallbackResponse)
 async def oauth_callback(
     provider: str,
     code: str,
@@ -560,7 +567,7 @@ async def oauth_callback(
         raise HTTPException(400, f"Unknown provider: {provider}")
 
     async with httpx.AsyncClient() as client:
-        # Exchange code for token
+        # Exchange code for access token
         token_params = {
             "client_id": cfg["client_id"](),
             "client_secret": cfg["client_secret"](),
@@ -568,41 +575,33 @@ async def oauth_callback(
             "redirect_uri": _oauth_redirect_uri(provider),
             "grant_type": "authorization_code",
         }
-        headers = {"Accept": "application/json"}
-        tr = await client.post(cfg["token_url"], data=token_params, headers=headers)
+        tr = await client.post(cfg["token_url"], data=token_params, headers={"Accept": "application/json"})
         tr.raise_for_status()
         token_data = tr.json()
         access_token = token_data.get("access_token")
         if not access_token:
             raise HTTPException(400, "Failed to obtain access token from provider")
 
-        # Fetch user info
-        ur = await client.get(
-            cfg["userinfo_url"],
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-        )
+        # Fetch user info — Instagram uses query param auth, others use Bearer
+        extra_params = {**cfg.get("userinfo_params", {})}
+        if cfg.get("userinfo_auth") == "query":
+            extra_params["access_token"] = access_token
+            ur = await client.get(cfg["userinfo_url"], params=extra_params,
+                                  headers={"Accept": "application/json"})
+        else:
+            ur = await client.get(
+                cfg["userinfo_url"],
+                params=extra_params or None,
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            )
         ur.raise_for_status()
         userinfo = ur.json()
 
-        # GitHub: fetch primary email separately if not in userinfo
-        if provider == "github" and not userinfo.get("email"):
-            er = await client.get(
-                "https://api.github.com/user/emails",
-                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            )
-            if er.is_success:
-                emails = er.json()
-                primary = next((e["email"] for e in emails if e.get("primary") and e.get("verified")), None)
-                userinfo["email"] = primary
-
     provider_user_id = str(userinfo.get("sub") or userinfo.get("id", ""))
     email = userinfo.get("email")
-    name = userinfo.get("name") or userinfo.get("login") or email or "User"
+    name = userinfo.get("name") or userinfo.get("username") or (email.split("@")[0] if email else "user")
 
-    if not email:
-        raise HTTPException(400, "Provider did not return an email address")
-
-    # Check for existing OAuth account link
+    # Check for existing OAuth account link (works even without email)
     oa_result = await db.execute(
         select(OAuthAccount).where(
             OAuthAccount.provider == provider,
@@ -612,44 +611,196 @@ async def oauth_callback(
     oa = oa_result.scalar_one_or_none()
 
     if oa:
-        # Existing linked account — update token and log in
+        # Returning user — update token and log in
         oa.access_token = access_token
         user_result = await db.execute(select(User).where(User.id == oa.user_id))
         user = user_result.scalar_one()
-    else:
-        # Find or create user by email
-        user = await _get_user_by_email(db, email)
-        if not user:
-            username_base = (userinfo.get("login") or email.split("@")[0]).lower()
-            username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30]
-            # Ensure uniqueness
-            username = username_base
-            suffix = 1
-            while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
-                username = f"{username_base}{suffix}"
-                suffix += 1
+        await db.flush()
+        token = await _create_session(db, user, request, device_name=f"{provider.title()} OAuth")
+        return OAuthCallbackResponse(
+            access_token=token.access_token,
+            token_type=token.token_type,
+            expires_in=token.expires_in,
+        )
 
-            user = User(
-                id=str(uuid.uuid4()),
-                email=email,
-                username=username,
-                full_name=name,
-                email_verified=True,
-                is_verified=True,
-            )
-            db.add(user)
-            await db.flush()
+    # New OAuth account
+    if not email:
+        # Instagram (and any provider without email): return partial token for email collection
+        username_candidate = (userinfo.get("username") or f"user{provider_user_id[-6:]}").lower()
+        username_candidate = "".join(c for c in username_candidate if c.isalnum() or c == "_")[:30]
+        partial = create_partial_oauth_token(provider, provider_user_id, username_candidate)
+        return OAuthCallbackResponse(requires_email=True, partial_token=partial)
 
-        db.add(OAuthAccount(
-            user_id=user.id,
-            provider=provider,
-            provider_user_id=provider_user_id,
-            provider_email=email,
-            access_token=access_token,
-        ))
+    # Provider returned email — find or create user
+    user = await _get_user_by_email(db, email)
+    if not user:
+        username_base = name.lower().replace(" ", "_")
+        username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
+        username = username_base
+        suffix = 1
+        while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
+            username = f"{username_base}{suffix}"
+            suffix += 1
 
+        user = User(
+            id=str(uuid.uuid4()),
+            email=email,
+            username=username,
+            full_name=name,
+            email_verified=True,
+            is_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+
+    db.add(OAuthAccount(
+        user_id=user.id,
+        provider=provider,
+        provider_user_id=provider_user_id,
+        provider_email=email,
+        access_token=access_token,
+    ))
+    await db.flush()
+    token = await _create_session(db, user, request, device_name=f"{provider.title()} OAuth")
+    return OAuthCallbackResponse(
+        access_token=token.access_token,
+        token_type=token.token_type,
+        expires_in=token.expires_in,
+    )
+
+
+@router.post("/oauth/complete", response_model=Token)
+async def oauth_complete(
+    payload: OAuthCompleteRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Complete OAuth signup for providers that don't return email (e.g. Instagram)."""
+    token_payload = decode_token_full(payload.partial_token)
+    if not token_payload or token_payload.get("type") != "partial":
+        raise HTTPException(401, "Invalid or expired partial token")
+
+    provider = token_payload["provider"]
+    provider_user_id = token_payload["sub"]
+    username_hint = token_payload.get("username", "")
+
+    # Check the OAuth account wasn't linked in the meantime
+    oa_result = await db.execute(
+        select(OAuthAccount).where(
+            OAuthAccount.provider == provider,
+            OAuthAccount.provider_user_id == provider_user_id,
+        )
+    )
+    if oa_result.scalar_one_or_none():
+        raise HTTPException(400, "Account already linked")
+
+    # Find or create user by email
+    user = await _get_user_by_email(db, payload.email)
+    if not user:
+        username_base = username_hint or payload.email.split("@")[0].lower()
+        username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
+        username = username_base
+        suffix = 1
+        while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
+            username = f"{username_base}{suffix}"
+            suffix += 1
+
+        user = User(
+            id=str(uuid.uuid4()),
+            email=payload.email,
+            username=username,
+            full_name=username_hint or payload.email.split("@")[0],
+            email_verified=True,
+            is_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+
+    db.add(OAuthAccount(
+        user_id=user.id,
+        provider=provider,
+        provider_user_id=provider_user_id,
+        provider_email=payload.email,
+    ))
     await db.flush()
     return await _create_session(db, user, request, device_name=f"{provider.title()} OAuth")
+
+
+# ── Phone OTP ─────────────────────────────────────────────────────────────────
+
+@router.post("/phone/send-otp", response_model=MessageResponse)
+@limiter.limit(settings.rate_limit_phone_otp)
+async def phone_send_otp(
+    request: Request,
+    payload: PhoneLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    # Invalidate old OTPs for this number
+    await db.execute(delete(PhoneOTP).where(PhoneOTP.phone_number == payload.phone_number))
+    otp_code = str(random.randint(100000, 999999))
+    db.add(PhoneOTP(
+        phone_number=payload.phone_number,
+        otp_code=otp_code,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.otp_expiry_minutes),
+    ))
+    await db.flush()
+    await send_otp_sms(payload.phone_number, otp_code)
+    return MessageResponse(message="OTP sent")
+
+
+@router.post("/phone/verify", response_model=Token)
+@limiter.limit(settings.rate_limit_phone_verify)
+async def phone_verify(
+    request: Request,
+    payload: PhoneVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        select(PhoneOTP).where(
+            PhoneOTP.phone_number == payload.phone_number,
+            PhoneOTP.is_used == False,
+            PhoneOTP.expires_at > now,
+        ).order_by(PhoneOTP.created_at.desc())
+    )
+    otp = result.scalar_one_or_none()
+    if not otp:
+        raise HTTPException(400, "No active OTP for this number. Request a new one.")
+
+    otp.attempts += 1
+    if otp.attempts > 3:
+        await db.flush()
+        raise HTTPException(400, "Too many attempts. Request a new OTP.")
+
+    if otp.otp_code != payload.otp_code:
+        await db.flush()
+        raise HTTPException(400, "Invalid OTP code")
+
+    otp.is_used = True
+
+    # Find or create user by phone number
+    user_result = await db.execute(select(User).where(User.phone_number == payload.phone_number))
+    user = user_result.scalar_one_or_none()
+
+    if not user:
+        base = f"user{payload.phone_number.replace('+', '')[-6:]}"
+        username = base
+        suffix = 1
+        while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
+            username = f"{base}{suffix}"
+            suffix += 1
+        user = User(
+            id=str(uuid.uuid4()),
+            username=username,
+            phone_number=payload.phone_number,
+            is_verified=True,
+        )
+        db.add(user)
+    elif user.is_deleted or not user.is_active:
+        raise HTTPException(403, "Account disabled")
+
+    await db.flush()
+    return await _create_session(db, user, request, device_name="Phone OTP")
 
 
 # ── Profile endpoints ─────────────────────────────────────────────────────────

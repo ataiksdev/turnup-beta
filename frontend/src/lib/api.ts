@@ -34,6 +34,15 @@ async function request<T>(
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
+
+type OAuthCallbackResult = {
+  access_token?: string;
+  token_type?: string;
+  expires_in?: number;
+  requires_email?: boolean;
+  partial_token?: string;
+};
+
 export const authApi = {
   register: (data: { email: string; username: string; full_name: string; password: string }) =>
     request<Token>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
@@ -53,6 +62,30 @@ export const authApi = {
       { method: "POST", body: JSON.stringify({ category_preferences: categoryPreferences }) },
       token,
     ),
+
+  getOAuthUrl: (provider: "google" | "instagram") =>
+    request<{ url: string }>(`/auth/oauth/${provider}`),
+
+  oauthCallback: (provider: string, code: string, state: string) =>
+    request<OAuthCallbackResult>(`/auth/oauth/${provider}/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`),
+
+  oauthComplete: (partialToken: string, email: string) =>
+    request<Token>("/auth/oauth/complete", {
+      method: "POST",
+      body: JSON.stringify({ partial_token: partialToken, email }),
+    }),
+
+  phoneRequestOtp: (phoneNumber: string) =>
+    request<{ message: string }>("/auth/phone/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    }),
+
+  phoneVerify: (phoneNumber: string, otpCode: string) =>
+    request<Token>("/auth/phone/verify", {
+      method: "POST",
+      body: JSON.stringify({ phone_number: phoneNumber, otp_code: otpCode }),
+    }),
 };
 
 // ── Events ─────────────────────────────────────────────────────────────────────

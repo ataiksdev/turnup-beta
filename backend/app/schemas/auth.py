@@ -55,6 +55,20 @@ class DeleteAccountRequest(BaseModel):
     password: str    # require password confirmation
 
 
+class PhoneLoginRequest(BaseModel):
+    phone_number: str = Field(pattern=r"^\+?[1-9]\d{7,14}$")
+
+
+class PhoneVerifyRequest(BaseModel):
+    phone_number: str = Field(pattern=r"^\+?[1-9]\d{7,14}$")
+    otp_code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class OAuthCompleteRequest(BaseModel):
+    partial_token: str
+    email: EmailStr
+
+
 # ── Response bodies ───────────────────────────────────────────────────────────
 
 class Token(BaseModel):
@@ -93,6 +107,15 @@ class SessionOut(BaseModel):
 
 class OAuthProviderRedirect(BaseModel):
     url: str
+
+
+class OAuthCallbackResponse(BaseModel):
+    """Returned from OAuth callback — either a full token or a partial requiring email."""
+    access_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None
+    requires_email: bool = False
+    partial_token: str | None = None
 
 
 class MessageResponse(BaseModel):
