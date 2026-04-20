@@ -5,8 +5,12 @@ import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Mail, Lock, User, AtSign } from "lucide-react";
+import { Mail, Lock, User, AtSign, ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
+
+type Role = "attendee" | "organizer";
+type Step = "role" | "form";
 
 function GoogleIcon() {
   return (
@@ -38,13 +42,29 @@ function InstagramIcon() {
   );
 }
 
+const ROLE_OPTIONS: { role: Role; emoji: string; title: string; description: string }[] = [
+  {
+    role: "attendee",
+    emoji: "🎟️",
+    title: "Discover Events",
+    description: "Find concerts, parties, festivals, and experiences near you",
+  },
+  {
+    role: "organizer",
+    emoji: "🎤",
+    title: "Host Events",
+    description: "Create and manage events, sell tickets, grow your audience",
+  },
+];
+
 export default function SignupPage() {
   const router = useRouter();
   const { setAuth } = useAuthStore();
 
-  const [form, setForm] = useState({
-    full_name: "", username: "", email: "", password: "",
-  });
+  const [step, setStep] = useState<Step>("role");
+  const [role, setRole] = useState<Role | null>(null);
+
+  const [form, setForm] = useState({ full_name: "", username: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -59,7 +79,7 @@ export default function SignupPage() {
       const token = await authApi.register(form);
       const user = await authApi.me(token.access_token);
       setAuth(token.access_token, user);
-      router.replace("/onboarding");
+      router.replace(role === "organizer" ? "/onboarding/organizer" : "/onboarding");
     } catch (err: any) {
       setError(err.message ?? "Registration failed");
     } finally {
@@ -76,18 +96,103 @@ export default function SignupPage() {
     }
   }
 
+  // ── Step 1: Role selection ─────────────────────────────────────────────────
+  if (step === "role") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-bg">
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-black text-primary">turnup</h1>
+          <p className="text-sm text-text-muted mt-1">Find your next great experience</p>
+        </div>
+
+        <div className="w-full max-w-sm space-y-5">
+          <div className="space-y-1 text-center">
+            <h2 className="text-2xl font-black text-text">What brings you here?</h2>
+            <p className="text-xs font-bold text-text-muted uppercase tracking-widest">
+              Choose your path
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {ROLE_OPTIONS.map(({ role: r, emoji, title, description }) => (
+              <button
+                key={r}
+                onClick={() => setRole(r)}
+                className={cn(
+                  "w-full text-left p-5 rounded border-2 transition-all duration-100",
+                  "shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg",
+                  "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
+                  role === r
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-bg-card hover:border-primary/60",
+                )}
+              >
+                <div className="flex items-start gap-4">
+                  <span className="text-4xl leading-none mt-0.5">{emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-text text-base uppercase tracking-wide">{title}</span>
+                      {role === r && (
+                        <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shrink-0">
+                          <span className="text-white text-[11px] font-black">✓</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-muted mt-1 leading-relaxed">{description}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <Button fullWidth size="lg" disabled={!role} onClick={() => setStep("form")}>
+            Continue
+          </Button>
+
+          <p className="text-center text-sm text-text-muted">
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary font-medium hover:underline">Log in</Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 2: Registration form ──────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-bg">
       <div className="mb-8 text-center">
         <h1 className="text-4xl font-black text-primary">turnup</h1>
-        <p className="text-sm text-text-muted mt-1">Find your next great experience</p>
+        <p className="text-sm text-text-muted mt-1">
+          {role === "organizer" ? "Set up your organizer account" : "Find your next great experience"}
+        </p>
       </div>
 
       <div className="w-full max-w-sm space-y-4">
-        <h2 className="text-2xl font-black text-text text-center">Create your account</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setStep("role"); setError(""); }}
+            className="p-1.5 -ml-1.5 rounded hover:bg-bg-elevated transition-colors"
+            aria-label="Back to role selection"
+          >
+            <ChevronLeft size={18} className="text-text-muted" />
+          </button>
+          <h2 className="text-2xl font-black text-text">
+            {role === "organizer" ? "Organizer account" : "Create your account"}
+          </h2>
+        </div>
+
+        <div className={cn(
+          "inline-flex items-center gap-2 px-3 py-1.5 rounded border-2 text-xs font-black uppercase tracking-widest",
+          role === "organizer"
+            ? "border-primary text-primary bg-primary/10"
+            : "border-border text-text-muted bg-bg-elevated",
+        )}>
+          {role === "organizer" ? "🎤 Organizer" : "🎟️ Event goer"}
+        </div>
 
         {error && (
-          <div className="px-4 py-3 rounded-2xl bg-error/10 border border-error/30 text-sm text-error">
+          <div className="px-4 py-3 rounded bg-error/10 border border-error/30 text-sm text-error">
             {error}
           </div>
         )}
@@ -103,11 +208,10 @@ export default function SignupPage() {
           <Input label="Password" type="password" value={form.password} onChange={set("password")}
             placeholder="Min. 6 characters" icon={<Lock size={16} />} minLength={6} required />
           <Button type="submit" fullWidth size="lg" loading={loading} className="mt-2">
-            Create Account
+            {role === "organizer" ? "Create Organizer Account" : "Create Account"}
           </Button>
         </form>
 
-        {/* OAuth divider */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-0.5 bg-border" />
           <span className="text-xs font-bold text-text-muted uppercase tracking-wide">or</span>
@@ -115,21 +219,13 @@ export default function SignupPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => handleOAuth("google")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
-          >
-            <GoogleIcon />
-            Google
+          <button type="button" onClick={() => handleOAuth("google")}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
+            <GoogleIcon /> Google
           </button>
-          <button
-            type="button"
-            onClick={() => handleOAuth("instagram")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
-          >
-            <InstagramIcon />
-            Instagram
+          <button type="button" onClick={() => handleOAuth("instagram")}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
+            <InstagramIcon /> Instagram
           </button>
         </div>
 

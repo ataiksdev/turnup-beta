@@ -151,6 +151,28 @@ export const usersApi = {
     request<User[]>(`/users/${username}/following`),
 };
 
+// ── Organizer ─────────────────────────────────────────────────────────────────
+
+export interface OrganizerDashboard {
+  total_events: number;
+  published_events: number;
+  draft_events: number;
+  total_attendees: number;
+  total_revenue: number;
+  pending_cohost_invites: number;
+}
+
+export const organizerApi = {
+  become: (token: string, data: { organization_name?: string; organizer_bio?: string; website?: string }) =>
+    request<User>("/organizer/become", { method: "POST", body: JSON.stringify(data) }, token),
+
+  dashboard: (token: string) =>
+    request<OrganizerDashboard>("/organizer/dashboard", {}, token),
+
+  myEvents: (token: string) =>
+    request<Event[]>("/events?my=true&limit=50", {}, token),
+};
+
 // ── Social ─────────────────────────────────────────────────────────────────────
 export const socialApi = {
   follow: (token: string, username: string) =>

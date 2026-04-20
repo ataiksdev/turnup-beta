@@ -3,6 +3,7 @@ export interface User {
   username: string;
   full_name: string;
   email?: string;
+  role?: "attendee" | "organizer";
   bio?: string | null;
   avatar_url?: string | null;
   location?: string | null;
