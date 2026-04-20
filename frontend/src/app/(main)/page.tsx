@@ -9,6 +9,24 @@ import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
+
+function getGreeting(name?: string): string {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+  return name ? `Good ${part}, ${name.split(" ")[0]}` : `Good ${part}`;
+}
+
+const CATEGORY_TILES = [
+  { label: "Music",     slug: "music",     emoji: "🎵", color: "bg-[#1a472a]" },
+  { label: "Nightlife", slug: "nightlife", emoji: "🌙", color: "bg-[#2d1b69]" },
+  { label: "Arts",      slug: "arts",      emoji: "🎨", color: "bg-[#6b2d2d]" },
+  { label: "Food",      slug: "food",      emoji: "🍕", color: "bg-[#6b4c1a]" },
+  { label: "Tech",      slug: "tech",      emoji: "💻", color: "bg-[#0d3b59]" },
+  { label: "Sports",    slug: "sports",    emoji: "⚽", color: "bg-[#1a5c2d]" },
+  { label: "Comedy",    slug: "comedy",    emoji: "😂", color: "bg-[#5c3d1a]" },
+  { label: "Wellness",  slug: "wellness",  emoji: "🧘", color: "bg-[#2d4a1a]" },
+];
 
 export default function DiscoverPage() {
   const { token, user } = useAuthStore();
@@ -46,42 +64,15 @@ export default function DiscoverPage() {
 
       {/* Greeting */}
       <div className="px-4 -mt-2">
-        <h1 className="text-2xl font-black text-text">
-          {user ? `Hey, ${user.full_name.split(" ")[0]} 👋` : "Discover Events"}
-        </h1>
-        <p className="text-sm text-text-muted mt-0.5">
+        <h1 className="text-2xl font-black text-text">{getGreeting(user?.full_name)}</h1>
+        <p className="text-xs font-bold text-text-muted uppercase tracking-widest mt-1">
           What are you doing this weekend?
         </p>
       </div>
 
-      {/* Category quick filters */}
-      <div className="snap-scroll px-4 gap-2">
-        {[
-          { label: "All", slug: "" },
-          { label: "🎵 Music", slug: "music" },
-          { label: "🌙 Nightlife", slug: "nightlife" },
-          { label: "🎨 Arts", slug: "arts" },
-          { label: "🍕 Food", slug: "food" },
-          { label: "💻 Tech", slug: "tech" },
-          { label: "⚽ Sports", slug: "sports" },
-          { label: "😂 Comedy", slug: "comedy" },
-          { label: "🧘 Wellness", slug: "wellness" },
-        ].map(({ label, slug }) => (
-          <Link
-            key={slug}
-            href={slug ? `/search?category=${slug}` : "/search"}
-            className="shrink-0 px-4 py-2 rounded-2xl bg-bg-card border border-border text-sm font-medium text-text-secondary hover:border-primary hover:text-primary transition-colors"
-          >
-            {label}
-          </Link>
-        ))}
-      </div>
-
-      {/* Hero event */}
+      {/* Hero event — full bleed */}
       {loadingFeatured ? (
-        <div className="mx-4 h-[420px] rounded-3xl">
-          <Skeleton className="h-full w-full rounded-3xl" />
-        </div>
+        <Skeleton className="h-[500px] w-full rounded-none" />
       ) : heroEvent ? (
         <HeroEvent event={heroEvent} />
       ) : null}
@@ -94,10 +85,38 @@ export default function DiscoverPage() {
         seeAllHref="/search?trending=true"
       />
 
-      {/* For You (based on preferences) */}
+      {/* Browse categories */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between px-4">
+          <h2 className="text-xs font-black text-text uppercase tracking-widest">Browse</h2>
+          <Link href="/search" className="text-[10px] font-black text-primary uppercase tracking-widest">
+            All categories
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 gap-3 px-4">
+          {CATEGORY_TILES.map(({ label, slug, emoji, color }) => (
+            <Link
+              key={slug}
+              href={`/search?category=${slug}`}
+              className={cn(
+                "relative h-20 rounded border-2 border-border shadow-brutal overflow-hidden",
+                "hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg transition-all duration-100",
+                color,
+              )}
+            >
+              <span className="absolute bottom-2 right-3 text-3xl opacity-70">{emoji}</span>
+              <span className="absolute top-3 left-3 text-sm font-black text-white uppercase tracking-wide">
+                {label}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* For You */}
       {user && (
         <EventCarousel
-          title={prefs.length > 0 ? `✨ Based on your taste` : "✨ Picked for You"}
+          title={prefs.length > 0 ? "✨ Based on your taste" : "✨ Picked for You"}
           events={forYou}
           loading={loadingForYou}
         />
@@ -114,7 +133,7 @@ export default function DiscoverPage() {
       {/* Featured grid */}
       {featured && featured.length > 1 && (
         <section className="space-y-3 px-4">
-          <h2 className="text-base font-bold text-text">⭐ Featured</h2>
+          <h2 className="text-xs font-black text-text uppercase tracking-widest">⭐ Featured</h2>
           <div className="grid grid-cols-2 gap-3">
             {featured.slice(1).map((e) => (
               <EventCard key={e.id} event={e} size="sm" className="w-full" />

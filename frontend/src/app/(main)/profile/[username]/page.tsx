@@ -61,7 +61,7 @@ export default function ProfilePage() {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3">
         <span className="text-5xl">👤</span>
-        <p className="text-text-secondary">User not found</p>
+        <p className="text-text-secondary font-bold uppercase tracking-wide text-sm">User not found</p>
       </div>
     );
   }
@@ -72,36 +72,45 @@ export default function ProfilePage() {
     <div className="flex flex-col pb-4">
       <TopBar back title={`@${profile.username}`} />
 
-      {/* Profile header */}
-      <div className="px-4 py-5 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <Avatar src={profile.avatar_url} name={profile.full_name} size="xl" verified={profile.is_verified} />
+      {/* Spotify-style hero banner */}
+      <div className="relative h-52 bg-gradient-to-br from-primary/60 to-bg-elevated border-b-2 border-border overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
-          <div className="flex gap-2 mt-2">
-            {isOwnProfile ? (
-              <Button variant="secondary" size="sm">Edit Profile</Button>
-            ) : token ? (
-              <Button
-                variant={profile.is_following ? "secondary" : "primary"}
-                size="sm"
-                loading={followMutation.isPending}
-                onClick={() => followMutation.mutate()}
-              >
-                {profile.is_following ? "Following" : "Follow"}
-              </Button>
-            ) : null}
+        {/* Avatar — overlaid at bottom-left */}
+        <div className="absolute -bottom-10 left-4">
+          <div className="border-4 border-bg rounded-full shadow-brutal">
+            <Avatar src={profile.avatar_url} name={profile.full_name} size="xl" verified={profile.is_verified} />
           </div>
         </div>
+      </div>
 
+      {/* Name + action — offset for avatar overlap */}
+      <div className="flex items-end justify-between px-4 pt-3 pb-4" style={{ marginTop: "2.5rem" }}>
         <div>
           <h1 className="text-xl font-black text-text">{profile.full_name}</h1>
-          <p className="text-sm text-text-muted">@{profile.username}</p>
+          <p className="text-xs text-text-muted font-bold uppercase tracking-widest">@{profile.username}</p>
         </div>
+        <div className="flex gap-2">
+          {isOwnProfile ? (
+            <Button variant="secondary" size="sm">Edit Profile</Button>
+          ) : token ? (
+            <Button
+              variant={profile.is_following ? "secondary" : "primary"}
+              size="sm"
+              loading={followMutation.isPending}
+              onClick={() => followMutation.mutate()}
+            >
+              {profile.is_following ? "Following" : "Follow"}
+            </Button>
+          ) : null}
+        </div>
+      </div>
 
+      {/* Bio + links */}
+      <div className="px-4 space-y-2 pb-4">
         {profile.bio && (
           <p className="text-sm text-text-secondary leading-relaxed">{profile.bio}</p>
         )}
-
         <div className="flex flex-wrap gap-3 text-xs text-text-muted">
           {profile.location && (
             <span className="flex items-center gap-1">
@@ -115,51 +124,58 @@ export default function ProfilePage() {
             </a>
           )}
         </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-2 py-3 border-y border-border">
-          {[
-            { label: "Followers", value: formatCount(profile.followers_count) },
-            { label: "Following", value: formatCount(profile.following_count) },
-            { label: "Hosted",    value: profile.events_hosted },
-            { label: "Attended",  value: profile.events_attended },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex flex-col items-center gap-0.5">
-              <span className="text-lg font-black text-text">{value}</span>
-              <span className="text-[10px] text-text-muted">{label}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Category preferences */}
-        {prefs.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-xs text-text-muted font-medium uppercase tracking-wide">Interests</p>
-            <div className="flex flex-wrap gap-2">
-              {prefs.map((p) => (
-                <Badge key={p} variant="primary">{p}</Badge>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
+      {/* Stats — horizontal Spotify-style */}
+      <div className="mx-4 grid grid-cols-4 border-2 border-border rounded shadow-brutal-sm mb-4">
+        {[
+          { label: "Followers", value: formatCount(profile.followers_count) },
+          { label: "Following", value: formatCount(profile.following_count) },
+          { label: "Hosted",    value: profile.events_hosted },
+          { label: "Attended",  value: profile.events_attended },
+        ].map(({ label, value }, i, arr) => (
+          <div
+            key={label}
+            className={cn(
+              "flex flex-col items-center py-3 gap-0.5",
+              i < arr.length - 1 && "border-r-2 border-border",
+            )}
+          >
+            <span className="text-lg font-black text-text">{value}</span>
+            <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Interests */}
+      {prefs.length > 0 && (
+        <div className="px-4 space-y-2 pb-4">
+          <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Interests</p>
+          <div className="flex flex-wrap gap-2">
+            {prefs.map((p) => (
+              <Badge key={p} variant="primary">{p}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex border-b border-border px-4">
-        {(["events", ...(isOwnProfile ? ["saved"] : [])] as Tab[]).map((t) => (
+      <div className="flex border-y-2 border-border mx-4 mb-4 rounded">
+        {(["events", ...(isOwnProfile ? ["saved"] : [])] as Tab[]).map((t, i, arr) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "flex-1 py-3 text-sm font-medium capitalize transition-colors",
+              "flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors",
+              i < arr.length - 1 && "border-r-2 border-border",
               tab === t
-                ? "text-primary border-b-2 border-primary"
-                : "text-text-muted hover:text-text-secondary",
+                ? "bg-primary text-white"
+                : "text-text-muted hover:text-text bg-bg-card",
             )}
           >
             {t === "saved" ? (
               <span className="flex items-center justify-center gap-1.5">
-                <Bookmark size={14} /> Saved
+                <Bookmark size={11} /> Saved
               </span>
             ) : t}
           </button>
@@ -167,7 +183,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Events grid */}
-      <div className="px-4 pt-4">
+      <div className="px-4">
         {displayEvents && displayEvents.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
             {displayEvents.map((e) => (
@@ -177,7 +193,7 @@ export default function ProfilePage() {
         ) : (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
             <span className="text-4xl">{tab === "saved" ? "🔖" : "🎟️"}</span>
-            <p className="text-sm text-text-secondary">
+            <p className="text-sm font-black text-text-secondary uppercase tracking-wide">
               {tab === "saved" ? "No saved events yet" : "No events hosted yet"}
             </p>
           </div>
