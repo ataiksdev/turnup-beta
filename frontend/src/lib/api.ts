@@ -110,6 +110,18 @@ export const eventsApi = {
   create: (token: string, data: Partial<Event>) =>
     request<Event>("/events", { method: "POST", body: JSON.stringify(data) }, token),
 
+  update: (token: string, eventId: string, data: Partial<Event>) =>
+    request<Event>(`/events/${eventId}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+
+  createTier: (token: string, eventId: string, data: {
+    name: string; description?: string; price: number; currency?: string;
+    quantity?: number | null; max_per_order?: number; is_active?: boolean;
+    sale_start?: string | null; sale_end?: string | null;
+  }) =>
+    request<{ id: string; name: string; price: number }>(`/events/${eventId}/tickets`, {
+      method: "POST", body: JSON.stringify(data),
+    }, token),
+
   attend: (token: string, eventId: string, status: "going" | "interested") =>
     request<{ status: string; attendees_count: number }>(
       `/events/${eventId}/attend`,
