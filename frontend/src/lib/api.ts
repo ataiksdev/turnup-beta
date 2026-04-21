@@ -113,6 +113,9 @@ export const eventsApi = {
   update: (token: string, eventId: string, data: Partial<Event>) =>
     request<Event>(`/events/${eventId}`, { method: "PATCH", body: JSON.stringify(data) }, token),
 
+  tiers: (eventId: string) =>
+    request<{ id: string; name: string; price: number; quantity: number | null; quantity_sold: number; is_active: boolean }[]>(`/events/${eventId}/tickets`),
+
   createTier: (token: string, eventId: string, data: {
     name: string; description?: string; price: number; currency?: string;
     quantity?: number | null; max_per_order?: number; is_active?: boolean;

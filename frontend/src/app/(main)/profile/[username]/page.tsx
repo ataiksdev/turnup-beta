@@ -11,6 +11,7 @@ import { parsePreferences, formatCount } from "@/lib/utils";
 import { Globe, MapPin, Bookmark } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 type Tab = "events" | "saved";
@@ -92,7 +93,7 @@ export default function ProfilePage() {
         </div>
         <div className="flex gap-2">
           {isOwnProfile ? (
-            <Button variant="secondary" size="sm">Edit Profile</Button>
+            <Link href="/profile/edit"><Button variant="secondary" size="sm">Edit Profile</Button></Link>
           ) : token ? (
             <Button
               variant={profile.is_following ? "secondary" : "primary"}
