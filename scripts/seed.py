@@ -102,7 +102,7 @@ def make_events(user_ids: dict, cat_ids: dict) -> list[dict]:
 
         dict(title="Street Art & Mural Festival",
              desc="Four-day open-air festival. Watch 30+ artists transform blank walls in real time. Free admission.",
-             img="https://images.unsplash.com/photo-1541414779317-a3cb69bf24d1?w=800",
+             img="https://images.unsplash.com/photo-1499781350541-7783f6c6a0c8?w=800",
              venue="Wynwood Walls", addr="2520 NW 2nd Ave", city="Miami",
              lat=25.8008, lng=-80.1993, start=utc(10, 11), end=utc(13, 20),
              free=True, pmin=None, pmax=None, cap=None, going=892, interested=634, saves=211,
