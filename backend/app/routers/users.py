@@ -38,7 +38,7 @@ def _event_row(event: Event, is_saved: bool = False, attendance_status: str | No
         "created_at": event.created_at,
         "description": event.description, "gallery": event.gallery,
         "latitude": event.latitude, "longitude": event.longitude,
-        "timezone": event.timezone, "ticket_url": event.ticket_url,
+        "timezone": event.timezone,
         "capacity": event.capacity,
         "is_saved": is_saved, "attendance_status": attendance_status,
     }

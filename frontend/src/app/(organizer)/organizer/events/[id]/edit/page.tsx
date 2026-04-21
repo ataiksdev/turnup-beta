@@ -43,7 +43,6 @@ interface FormState {
   capacity: string;
   waitlist_enabled: boolean;
   is_free: boolean;
-  ticket_url: string;
   tags: string;
   status: string;
   newTiers: TierDraft[];
@@ -149,7 +148,7 @@ export default function EditEventPage() {
     event_type: "physical", venue_name: "", address: "", city: "", country: "US", meeting_url: "",
     start_date: "", end_date: "", timezone: "America/New_York",
     capacity: "", waitlist_enabled: false,
-    is_free: true, ticket_url: "", tags: "", status: "published",
+    is_free: true, tags: "", status: "published",
     newTiers: [],
   });
 
@@ -190,7 +189,6 @@ export default function EditEventPage() {
       capacity: event.capacity ? String(event.capacity) : "",
       waitlist_enabled: event.waitlist_enabled ?? false,
       is_free: event.is_free ?? true,
-      ticket_url: event.ticket_url ?? "",
       tags: event.tags ?? "",
       status: event.status ?? "published",
       newTiers: [],
@@ -260,7 +258,6 @@ export default function EditEventPage() {
         end_date: new Date(form.end_date).toISOString(),
         timezone: form.timezone,
         is_free: form.is_free,
-        ticket_url: form.ticket_url.trim() || undefined,
         capacity: form.capacity ? Number(form.capacity) : undefined,
         waitlist_enabled: form.waitlist_enabled,
         tags: form.tags.trim() || undefined,
@@ -505,12 +502,6 @@ export default function EditEventPage() {
           ))}
         </div>
       )}
-
-      <FieldWrap>
-        <Label>External Ticket URL</Label>
-        <Input value={form.ticket_url} onChange={(e) => set("ticket_url")(e.target.value)}
-          placeholder="https://eventbrite.com/..." icon={<Globe size={16} />} />
-      </FieldWrap>
 
       <FieldWrap>
         <Label>Tags</Label>

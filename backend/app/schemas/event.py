@@ -29,7 +29,6 @@ class EventCreate(BaseModel):
     price_min: float | None = None
     price_max: float | None = None
     currency: str = "NGN"
-    ticket_url: str | None = None
     capacity: int | None = None
     waitlist_enabled: bool = False
     category_id: str | None = None
@@ -52,7 +51,6 @@ class EventUpdate(BaseModel):
     is_free: bool | None = None
     price_min: float | None = None
     price_max: float | None = None
-    ticket_url: str | None = None
     capacity: int | None = None
     waitlist_enabled: bool | None = None
     event_type: str | None = Field(None, pattern=r"^(physical|virtual|hybrid)$")
@@ -102,7 +100,6 @@ class EventDetail(EventOut):
     latitude: float | None
     longitude: float | None
     timezone: str
-    ticket_url: str | None
     meeting_url: str | None
     capacity: int | None
     template_id: str | None

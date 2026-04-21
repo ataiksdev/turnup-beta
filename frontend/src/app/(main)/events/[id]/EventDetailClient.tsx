@@ -254,20 +254,11 @@ export function EventDetailClient({ id }: { id: string }) {
         </dl>
 
         {/* Price */}
-        <div className="flex items-center justify-between p-4 rounded-2xl bg-bg-card border border-border">
-          <div>
-            <p className="text-xs text-text-muted">Admission</p>
-            <p className={`text-xl font-black ${event.is_free ? "text-success" : "text-primary"}`}>
-              {formatPrice(event.is_free, event.price_min, event.price_max)}
-            </p>
-          </div>
-          {event.ticket_url && (
-            <a href={event.ticket_url} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" variant="outline">
-                Get Tickets <ExternalLink size={12} aria-hidden />
-              </Button>
-            </a>
-          )}
+        <div className="p-4 rounded-2xl bg-bg-card border border-border">
+          <p className="text-xs text-text-muted">Admission</p>
+          <p className={`text-xl font-black ${event.is_free ? "text-success" : "text-primary"}`}>
+            {formatPrice(event.is_free, event.price_min, event.price_max)}
+          </p>
         </div>
 
         {/* Meeting link for virtual/hybrid events */}

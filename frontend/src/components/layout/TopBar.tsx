@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { Bell, ChevronLeft } from "lucide-react";
+import { Bell, ChevronLeft, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -18,6 +18,7 @@ interface TopBarProps {
 export function TopBar({ title, back, transparent, actions, className }: TopBarProps) {
   const router = useRouter();
   const { user } = useAuthStore();
+  const isOrganizer = user?.role === "organizer";
 
   return (
     <header
@@ -53,6 +54,19 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
       {/* Right */}
       <div className="flex items-center gap-1">
         {actions}
+        {/* Organizer shortcut — visible to organizers in the attendee layout */}
+        {!back && isOrganizer && (
+          <Link
+            href="/organizer/dashboard"
+            aria-label="Switch to organizer view"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded border-2 border-primary/40 bg-primary/10 hover:bg-primary/20 transition-colors"
+          >
+            <LayoutDashboard size={13} className="text-primary" aria-hidden />
+            <span className="text-[10px] font-black text-primary uppercase tracking-wider hidden xs:inline">
+              Organizer
+            </span>
+          </Link>
+        )}
         <ThemeToggle />
         {!back && user && (
           <Link href={`/profile/${user.username}`} aria-label={`${user.full_name}'s profile`}>
