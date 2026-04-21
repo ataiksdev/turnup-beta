@@ -218,7 +218,8 @@ async def run():
         print(f"✓ {len(CATEGORIES)} categories")
 
         # ── Events ─────────────────────────────────────────────────────────────
-        for ev in make_events(user_ids, cat_ids):
+        events = make_events(user_ids, cat_ids)
+        for ev in events:
             eid = str(uuid.uuid4())
             db.add(Event(
                 id=eid, slug=slugify(ev["title"], eid),
@@ -239,7 +240,7 @@ async def run():
                 category_id=ev.get("cat"),
             ))
         await db.commit()
-        print(f"✓ {len(make_events({}, {}))} events")
+        print(f"✓ {len(events)} events")
 
         # ── Some follows ────────────────────────────────────────────────────────
         follow_pairs = [

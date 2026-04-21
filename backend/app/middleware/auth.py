@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.auth_tokens import UserSession
@@ -35,7 +36,9 @@ async def _resolve_user(token: str | None, db: AsyncSession) -> User | None:
         return None
 
     result = await db.execute(
-        select(User).where(User.id == user_id, User.is_active == True, User.is_deleted == False)
+        select(User)
+        .options(selectinload(User.organizer_profile))
+        .where(User.id == user_id, User.is_active == True, User.is_deleted == False)
     )
     return result.scalar_one_or_none()
 

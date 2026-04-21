@@ -60,6 +60,7 @@ def _serialize(event: Event, is_saved: bool = False,
         "latitude": event.latitude, "longitude": event.longitude,
         "timezone": event.timezone, "ticket_url": event.ticket_url,
         "capacity": event.capacity, "template_id": event.template_id,
+        "event_type": event.event_type, "meeting_url": event.meeting_url,
         "is_saved": is_saved, "attendance_status": attendance_status,
         "is_waitlisted": is_waitlisted,
     }
