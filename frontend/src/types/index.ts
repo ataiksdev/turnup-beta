@@ -48,6 +48,8 @@ export interface Event {
   price_min?: number | null;
   price_max?: number | null;
   currency: string;
+  event_type?: "physical" | "virtual" | "hybrid";
+  meeting_url?: string | null;
   ticket_url?: string | null;
   capacity?: number | null;
   attendees_count: number;

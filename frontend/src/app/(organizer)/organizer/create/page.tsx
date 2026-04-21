@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   AlignLeft, Calendar, DollarSign, Image, MapPin,
   Plus, Tag, Ticket, Trash2, ToggleLeft, ToggleRight,
-  Users, Globe, ChevronRight, ChevronLeft,
+  Users, Globe, ChevronRight, ChevronLeft, Monitor, Video, Blend,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,16 +25,20 @@ interface TierDraft {
   max_per_order: string;
 }
 
+type EventType = "physical" | "virtual" | "hybrid";
+
 interface FormState {
   // Step 1 — Basics
   title: string;
   category_id: string;
   description: string;
   // Step 2 — Location & Time
+  event_type: EventType;
   venue_name: string;
   address: string;
   city: string;
   country: string;
+  meeting_url: string;
   start_date: string;
   end_date: string;
   timezone: string;
@@ -167,7 +171,8 @@ export default function CreateEventPage() {
 
   const [form, setForm] = useState<FormState>({
     title: "", category_id: "", description: "",
-    venue_name: "", address: "", city: "", country: "US",
+    event_type: "physical",
+    venue_name: "", address: "", city: "", country: "US", meeting_url: "",
     start_date: "", end_date: "", timezone: "America/New_York",
     capacity: "", waitlist_enabled: false,
     is_free: true, ticket_url: "", cover_image: "", tags: "",
@@ -201,8 +206,11 @@ export default function CreateEventPage() {
     }
     if (step === 1) {
       if (!form.venue_name.trim()) return "Venue name is required";
-      if (!form.address.trim()) return "Address is required";
-      if (!form.city.trim()) return "City is required";
+      if (form.event_type !== "virtual") {
+        if (!form.address.trim()) return "Address is required";
+        if (!form.city.trim()) return "City is required";
+      }
+      if (form.event_type !== "physical" && !form.meeting_url.trim()) return "Meeting URL is required for virtual/hybrid events";
       if (!form.start_date) return "Start date is required";
       if (!form.end_date) return "End date is required";
       if (new Date(form.end_date) <= new Date(form.start_date)) return "End date must be after start date";
@@ -236,13 +244,16 @@ export default function CreateEventPage() {
     setSubmitting(true);
     setError("");
     try {
+      const isVirtual = form.event_type === "virtual";
       const payload = {
         title: form.title.trim(),
         description: form.description.trim(),
         cover_image: form.cover_image.trim() || undefined,
+        event_type: form.event_type,
+        meeting_url: form.meeting_url.trim() || undefined,
         venue_name: form.venue_name.trim(),
-        address: form.address.trim(),
-        city: form.city.trim(),
+        address: isVirtual ? (form.address.trim() || "Online") : form.address.trim(),
+        city: isVirtual ? (form.city.trim() || "Online") : form.city.trim(),
         country: form.country.trim() || "US",
         start_date: new Date(form.start_date).toISOString(),
         end_date: new Date(form.end_date).toISOString(),
@@ -359,51 +370,107 @@ export default function CreateEventPage() {
 
   // ── Step 2: Time & Place ────────────────────────────────────────────────────
 
+  const EVENT_TYPES: { type: EventType; icon: React.ElementType; label: string; description: string }[] = [
+    { type: "physical", icon: MapPin,   label: "In Person",  description: "At a physical venue" },
+    { type: "virtual",  icon: Monitor,  label: "Virtual",    description: "Online — Zoom, Meet, etc." },
+    { type: "hybrid",   icon: Blend,    label: "Hybrid",     description: "Both in-person and online" },
+  ];
+
   const step1 = (
     <div className="space-y-5">
+      {/* Event type selector */}
       <FieldWrap>
-        <Label>Venue Name *</Label>
+        <Label>Event Format *</Label>
+        <div className="grid grid-cols-3 gap-2">
+          {EVENT_TYPES.map(({ type, icon: Icon, label, description }) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => set("event_type")(type)}
+              className={cn(
+                "flex flex-col items-center gap-1.5 p-3 rounded border-2 transition-all duration-100 text-center",
+                "hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-sm active:translate-x-0.5 active:translate-y-0.5",
+                form.event_type === type
+                  ? "border-primary bg-primary/10 shadow-brutal-sm"
+                  : "border-border bg-bg-card",
+              )}
+            >
+              <Icon size={18} className={form.event_type === type ? "text-primary" : "text-text-muted"} />
+              <span className={cn(
+                "text-[11px] font-black uppercase tracking-wide",
+                form.event_type === type ? "text-primary" : "text-text",
+              )}>
+                {label}
+              </span>
+              <span className="text-[9px] text-text-muted leading-tight">{description}</span>
+            </button>
+          ))}
+        </div>
+      </FieldWrap>
+
+      <FieldWrap>
+        <Label>{form.event_type === "virtual" ? "Platform / Event Name *" : "Venue Name *"}</Label>
         <Input
           value={form.venue_name}
           onChange={(e) => set("venue_name")(e.target.value)}
-          placeholder="e.g. Warehouse 23, Rooftop Bar"
+          placeholder={form.event_type === "virtual" ? "e.g. Zoom Webinar, Google Meet" : "e.g. Warehouse 23, Rooftop Bar"}
           icon={<MapPin size={16} />}
           required
         />
       </FieldWrap>
 
-      <FieldWrap>
-        <Label>Address *</Label>
-        <Input
-          value={form.address}
-          onChange={(e) => set("address")(e.target.value)}
-          placeholder="123 Main St"
-          icon={<MapPin size={16} />}
-          required
-        />
-      </FieldWrap>
-
-      <div className="grid grid-cols-2 gap-3">
+      {/* Meeting URL — virtual + hybrid */}
+      {form.event_type !== "physical" && (
         <FieldWrap>
-          <Label>City *</Label>
+          <Label>Meeting URL *</Label>
           <Input
-            value={form.city}
-            onChange={(e) => set("city")(e.target.value)}
-            placeholder="Lagos"
+            value={form.meeting_url}
+            onChange={(e) => set("meeting_url")(e.target.value)}
+            placeholder="https://zoom.us/j/..."
+            icon={<Video size={16} />}
+            type="url"
             required
           />
         </FieldWrap>
-        <FieldWrap>
-          <Label>Country</Label>
-          <Input
-            value={form.country}
-            onChange={(e) => set("country")(e.target.value)}
-            placeholder="US"
-            maxLength={2}
-            icon={<Globe size={16} />}
-          />
-        </FieldWrap>
-      </div>
+      )}
+
+      {/* Physical address — physical + hybrid */}
+      {form.event_type !== "virtual" && (
+        <>
+          <FieldWrap>
+            <Label>Address *</Label>
+            <Input
+              value={form.address}
+              onChange={(e) => set("address")(e.target.value)}
+              placeholder="123 Main St"
+              icon={<MapPin size={16} />}
+              required
+            />
+          </FieldWrap>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FieldWrap>
+              <Label>City *</Label>
+              <Input
+                value={form.city}
+                onChange={(e) => set("city")(e.target.value)}
+                placeholder="Lagos"
+                required
+              />
+            </FieldWrap>
+            <FieldWrap>
+              <Label>Country</Label>
+              <Input
+                value={form.country}
+                onChange={(e) => set("country")(e.target.value)}
+                placeholder="US"
+                maxLength={2}
+                icon={<Globe size={16} />}
+              />
+            </FieldWrap>
+          </div>
+        </>
+      )}
 
       <FieldWrap>
         <Label>Start Date & Time *</Label>
@@ -600,14 +667,32 @@ export default function CreateEventPage() {
           <p className="text-xs text-text-muted line-clamp-3">{form.description}</p>
 
           <div className="space-y-1.5 pt-1">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest",
+                form.event_type === "physical" ? "border-border text-text-muted"
+                  : form.event_type === "virtual" ? "border-[#3B82F6]/40 text-[#3B82F6] bg-[#3B82F6]/10"
+                  : "border-primary/40 text-primary bg-primary/10",
+              )}>
+                {form.event_type === "physical" ? "🏟️ In Person"
+                  : form.event_type === "virtual" ? "💻 Virtual"
+                  : "🌐 Hybrid"}
+              </span>
+            </div>
             <div className="flex items-center gap-2 text-xs text-text-secondary">
               <Calendar size={12} className="text-primary" />
               {form.start_date ? new Date(form.start_date).toLocaleString() : "—"}
             </div>
             <div className="flex items-center gap-2 text-xs text-text-secondary">
               <MapPin size={12} className="text-primary" />
-              {[form.venue_name, form.city].filter(Boolean).join(", ") || "—"}
+              {[form.venue_name, form.event_type !== "virtual" ? form.city : "Online"].filter(Boolean).join(", ") || "—"}
             </div>
+            {form.event_type !== "physical" && form.meeting_url && (
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
+                <Monitor size={12} className="text-primary" />
+                <span className="truncate">{form.meeting_url}</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-xs text-text-secondary">
               <DollarSign size={12} className="text-primary" />
               {form.is_free ? "Free" : form.tiers.length > 0

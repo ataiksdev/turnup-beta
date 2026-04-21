@@ -57,6 +57,14 @@ class Event(Base):
     waitlist_count: Mapped[int] = mapped_column(Integer, default=0)
     views_count: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Event format
+    event_type: Mapped[str] = mapped_column(
+        Enum("physical", "virtual", "hybrid", name="event_type_enum"),
+        default="physical",
+        server_default="physical",
+    )
+    meeting_url: Mapped[str | None] = mapped_column(String(500))
+
     # Waitlist
     waitlist_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
