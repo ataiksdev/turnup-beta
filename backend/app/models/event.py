@@ -97,6 +97,7 @@ class Event(Base):
     cohosts = relationship("EventCoHost", back_populates="event", cascade="all, delete-orphan")
     waitlist_entries = relationship("EventWaitlist", back_populates="event", cascade="all, delete-orphan")
     views = relationship("EventView", back_populates="event", cascade="all, delete-orphan")
+    reviews = relationship("EventReview", back_populates="event", cascade="all, delete-orphan")
 
 
 class EventAttendee(Base):

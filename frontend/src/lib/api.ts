@@ -3,6 +3,33 @@ import type {
   Notification, Token, User,
 } from "@/types";
 
+export interface TicketTierDetail {
+  id: string; event_id: string; name: string; description: string | null;
+  price: number; currency: string; quantity: number | null; quantity_sold: number;
+  available: number | null; max_per_order: number; is_active: boolean;
+  sale_start: string | null; sale_end: string | null; created_at: string;
+}
+
+export interface TicketOrder {
+  id: string; event_id: string; tier_id: string; tier_name: string;
+  quantity: number; unit_price: number; total_price: number;
+  status: string; created_at: string;
+}
+
+export interface DailyView { date: string; views: number; }
+export interface EventAnalytics {
+  event_id: string; total_views: number; unique_views: number;
+  rsvp_going: number; rsvp_interested: number; saves_count: number;
+  waitlist_count: number; ticket_orders_count: number; estimated_revenue: number;
+  daily_views: DailyView[];
+}
+
+export interface Review {
+  id: string; event_id: string; user_id: string; username: string;
+  full_name: string; avatar_url: string | null; rating: number;
+  body: string | null; created_at: string;
+}
+
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 class ApiError extends Error {
@@ -114,7 +141,7 @@ export const eventsApi = {
     request<Event>(`/events/${eventId}`, { method: "PATCH", body: JSON.stringify(data) }, token),
 
   tiers: (eventId: string) =>
-    request<{ id: string; name: string; price: number; quantity: number | null; quantity_sold: number; is_active: boolean }[]>(`/events/${eventId}/tickets`),
+    request<TicketTierDetail[]>(`/events/${eventId}/tickets`),
 
   createTier: (token: string, eventId: string, data: {
     name: string; description?: string; price: number; currency?: string;
@@ -146,6 +173,28 @@ export const eventsApi = {
   },
 
   categories: () => request<Category[]>("/categories"),
+
+  analytics: (token: string, eventId: string) =>
+    request<EventAnalytics>(`/events/${eventId}/analytics`, {}, token),
+
+  purchase: (token: string, eventId: string, tierId: string, quantity: number) =>
+    request<TicketOrder>(`/events/${eventId}/tickets/${tierId}/purchase`, {
+      method: "POST", body: JSON.stringify({ quantity }),
+    }, token),
+
+  reviews: (eventId: string) =>
+    request<Review[]>(`/events/${eventId}/reviews`),
+
+  myReview: (token: string, eventId: string) =>
+    request<Review | null>(`/events/${eventId}/reviews/me`, {}, token),
+
+  createReview: (token: string, eventId: string, rating: number, body?: string) =>
+    request<Review>(`/events/${eventId}/reviews`, {
+      method: "POST", body: JSON.stringify({ rating, body }),
+    }, token),
+
+  deleteReview: (token: string, eventId: string) =>
+    request<void>(`/events/${eventId}/reviews/me`, { method: "DELETE" }, token),
 };
 
 // ── Users ──────────────────────────────────────────────────────────────────────

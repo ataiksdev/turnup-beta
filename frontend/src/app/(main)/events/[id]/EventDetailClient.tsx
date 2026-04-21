@@ -12,10 +12,12 @@ import { formatEventDate, formatPrice, parseTags, timeAgo } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
+  Star, Ticket, Minus, Plus,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -34,9 +36,37 @@ export function EventDetailClient({ id }: { id: string }) {
     enabled: !!id,
   });
 
+  const { data: tiers } = useQuery({
+    queryKey: ["tiers", id],
+    queryFn: () => eventsApi.tiers(id),
+    enabled: !!id,
+  });
+
+  const { data: reviews } = useQuery({
+    queryKey: ["reviews", id],
+    queryFn: () => eventsApi.reviews(id),
+    enabled: !!id,
+  });
+
+  const { data: myReview } = useQuery({
+    queryKey: ["my-review", id],
+    queryFn: () => eventsApi.myReview(token!, id),
+    enabled: !!token && !!id,
+  });
+
   const [comment, setComment]   = useState("");
   const [saved, setSaved]       = useState(event?.is_saved ?? false);
   const [attendance, setAttend] = useState(event?.attendance_status ?? null);
+
+  // Ticket purchase state
+  const [selectedTier, setSelectedTier] = useState<string | null>(null);
+  const [qty, setQty] = useState(1);
+  const [purchaseSuccess, setPurchaseSuccess] = useState(false);
+
+  // Review state
+  const [reviewRating, setReviewRating] = useState(myReview?.rating ?? 0);
+  const [reviewBody, setReviewBody]     = useState(myReview?.body ?? "");
+  const [hoverStar, setHoverStar]       = useState(0);
 
   const attendMutation = useMutation({
     mutationFn: (status: "going" | "interested") =>
@@ -68,6 +98,40 @@ export function EventDetailClient({ id }: { id: string }) {
     onSuccess: () => {
       setComment("");
       qc.invalidateQueries({ queryKey: ["comments", id] });
+    },
+  });
+
+  const purchaseMutation = useMutation({
+    mutationFn: () =>
+      token && selectedTier
+        ? eventsApi.purchase(token, id, selectedTier, qty)
+        : Promise.reject(),
+    onSuccess: () => {
+      setPurchaseSuccess(true);
+      setSelectedTier(null);
+      qc.invalidateQueries({ queryKey: ["tiers", id] });
+      qc.invalidateQueries({ queryKey: ["event", id] });
+    },
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: () =>
+      token && reviewRating > 0
+        ? eventsApi.createReview(token, id, reviewRating, reviewBody || undefined)
+        : Promise.reject(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reviews", id] });
+      qc.invalidateQueries({ queryKey: ["my-review", id] });
+    },
+  });
+
+  const deleteReviewMutation = useMutation({
+    mutationFn: () => token ? eventsApi.deleteReview(token, id) : Promise.reject(),
+    onSuccess: () => {
+      setReviewRating(0);
+      setReviewBody("");
+      qc.invalidateQueries({ queryKey: ["reviews", id] });
+      qc.invalidateQueries({ queryKey: ["my-review", id] });
     },
   });
 
@@ -258,6 +322,204 @@ export function EventDetailClient({ id }: { id: string }) {
               <p className="text-xs text-text-muted">{event.city}</p>
             </div>
           </div>
+        )}
+
+        {/* Ticket tiers */}
+        {tiers && tiers.length > 0 && (
+          <section aria-labelledby="tickets-heading">
+            <h2 id="tickets-heading" className="text-base font-bold text-text flex items-center gap-2 mb-3">
+              <Ticket size={18} className="text-primary" /> Tickets
+            </h2>
+
+            {purchaseSuccess && (
+              <div className="mb-3 px-4 py-3 rounded border-2 border-success/40 bg-success/10 text-sm text-success font-bold">
+                ✓ Ticket confirmed! You're going.
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {tiers.filter((t) => t.is_active).map((tier) => {
+                const available = tier.available;
+                const soldOut = available !== null && available <= 0;
+                const isSelected = selectedTier === tier.id;
+                return (
+                  <div key={tier.id} className={cn(
+                    "rounded border-2 transition-all",
+                    isSelected ? "border-primary" : "border-border",
+                    soldOut ? "opacity-60" : "cursor-pointer hover:border-primary/60",
+                  )}>
+                    <button
+                      className="w-full flex items-center justify-between p-3 text-left"
+                      onClick={() => !soldOut && setSelectedTier(isSelected ? null : tier.id)}
+                      disabled={soldOut}
+                    >
+                      <div>
+                        <p className="font-bold text-text text-sm">{tier.name}</p>
+                        {tier.description && <p className="text-xs text-text-muted">{tier.description}</p>}
+                        {available !== null && (
+                          <p className="text-xs text-text-muted mt-0.5">
+                            {soldOut ? "Sold out" : `${available} left`}
+                          </p>
+                        )}
+                      </div>
+                      <p className={cn(
+                        "text-base font-black shrink-0 ml-3",
+                        tier.price === 0 ? "text-success" : "text-primary",
+                      )}>
+                        {tier.price === 0 ? "Free" : `$${tier.price}`}
+                      </p>
+                    </button>
+
+                    {isSelected && user && (
+                      <div className="px-3 pb-3 border-t border-border pt-3 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-text-muted">Quantity</span>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => setQty(Math.max(1, qty - 1))}
+                              className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors"
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <span className="font-black text-text w-6 text-center">{qty}</span>
+                            <button
+                              onClick={() => setQty(Math.min(tier.max_per_order, available ?? 99, qty + 1))}
+                              className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors"
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-text-muted">Total</span>
+                          <span className="font-black text-text">
+                            {tier.price === 0 ? "Free" : `$${(tier.price * qty).toFixed(2)}`}
+                          </span>
+                        </div>
+                        <Button
+                          fullWidth
+                          loading={purchaseMutation.isPending}
+                          onClick={() => purchaseMutation.mutate()}
+                        >
+                          {tier.price === 0 ? "Claim Free Ticket" : `Pay $${(tier.price * qty).toFixed(2)}`}
+                        </Button>
+                        {purchaseMutation.isError && (
+                          <p className="text-xs text-error text-center">
+                            {(purchaseMutation.error as any)?.message ?? "Purchase failed"}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {isSelected && !user && (
+                      <div className="px-3 pb-3 border-t border-border pt-3">
+                        <Link href="/login">
+                          <Button fullWidth>Log in to get tickets</Button>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Rate & Review */}
+        {user && attendance === "going" && (
+          <section aria-labelledby="review-heading">
+            <h2 id="review-heading" className="text-base font-bold text-text flex items-center gap-2 mb-3">
+              <Star size={18} className="text-primary" /> Rate This Event
+            </h2>
+
+            {myReview ? (
+              <div className="bg-bg-card border-2 border-border rounded p-4 space-y-2">
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map((s) => (
+                    <Star key={s} size={18} className={s <= myReview.rating ? "fill-primary text-primary" : "text-border"} />
+                  ))}
+                  <span className="text-xs text-text-muted ml-2">Your review</span>
+                </div>
+                {myReview.body && <p className="text-sm text-text-secondary">{myReview.body}</p>}
+                <button
+                  onClick={() => deleteReviewMutation.mutate()}
+                  className="text-xs text-error hover:underline"
+                >
+                  Delete review
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => { e.preventDefault(); reviewMutation.mutate(); }}
+                className="bg-bg-card border-2 border-border rounded p-4 space-y-3"
+              >
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onMouseEnter={() => setHoverStar(s)}
+                      onMouseLeave={() => setHoverStar(0)}
+                      onClick={() => setReviewRating(s)}
+                      className="p-0.5"
+                    >
+                      <Star
+                        size={24}
+                        className={cn(
+                          "transition-colors",
+                          s <= (hoverStar || reviewRating) ? "fill-primary text-primary" : "text-border",
+                        )}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={reviewBody}
+                  onChange={(e) => setReviewBody(e.target.value)}
+                  placeholder="Share your experience… (optional)"
+                  rows={3}
+                  maxLength={2000}
+                  className="w-full bg-bg border-2 border-border rounded px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:border-primary resize-none"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={reviewRating === 0}
+                  loading={reviewMutation.isPending}
+                >
+                  Submit Review
+                </Button>
+              </form>
+            )}
+          </section>
+        )}
+
+        {/* Community reviews */}
+        {reviews && reviews.length > 0 && (
+          <section aria-labelledby="all-reviews-heading">
+            <h2 id="all-reviews-heading" className="text-base font-bold text-text flex items-center gap-2 mb-3">
+              <Star size={18} className="text-primary" />
+              Reviews <span className="text-text-muted font-normal text-sm">({reviews.length})</span>
+            </h2>
+            <div className="space-y-3">
+              {reviews.map((r) => (
+                <div key={r.id} className="flex gap-2.5">
+                  <Avatar src={r.avatar_url} name={r.full_name} size="sm" />
+                  <div className="flex-1 bg-bg-card rounded-2xl px-3 py-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-text">@{r.username}</span>
+                      <div className="flex items-center gap-0.5">
+                        {[1,2,3,4,5].map((s) => (
+                          <Star key={s} size={10} className={s <= r.rating ? "fill-primary text-primary" : "text-border"} />
+                        ))}
+                      </div>
+                    </div>
+                    {r.body && <p className="text-sm text-text-secondary">{r.body}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Comments */}

@@ -143,3 +143,21 @@ class EventView(Base):
     viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
     event = relationship("Event", back_populates="views")
+
+
+class EventReview(Base):
+    __tablename__ = "event_reviews"
+    __table_args__ = (UniqueConstraint("event_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"),
+                                          nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"),
+                                         nullable=False, index=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)   # 1–5
+    body: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    event = relationship("Event", back_populates="reviews")
+    user = relationship("User", back_populates="reviews")

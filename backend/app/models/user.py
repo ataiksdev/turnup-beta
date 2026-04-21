@@ -66,3 +66,4 @@ class User(Base):
     ticket_orders = relationship("TicketOrder", back_populates="user")
     cohost_invites = relationship("EventCoHost", back_populates="user", cascade="all, delete-orphan")
     waitlist_entries = relationship("EventWaitlist", back_populates="user", cascade="all, delete-orphan")
+    reviews = relationship("EventReview", back_populates="user", cascade="all, delete-orphan")

@@ -12,7 +12,7 @@ from app.database import get_db
 from app.middleware.auth import get_current_organizer, get_current_user, get_optional_user
 from app.models.event import Category, Event, EventAttendee, EventSave
 from app.models.organizer import (
-    EventCoHost, EventView, EventWaitlist, TicketOrder, TicketTier,
+    EventCoHost, EventReview, EventView, EventWaitlist, TicketOrder, TicketTier,
 )
 from app.models.social import Notification
 from app.models.user import User
@@ -21,9 +21,9 @@ from app.schemas.event import (
 )
 from app.schemas.organizer import (
     AnalyticsOut, CoHostInviteRequest, CoHostOut, CoHostRespondRequest,
-    DailyViewOut, PurchaseTicketRequest, TicketOrderOut, TicketTierCreate,
-    TicketTierOut, TicketTierUpdate, WaitlistEntryOut, WaitlistNotifyRequest,
-    WaitlistStatusOut,
+    DailyViewOut, PurchaseTicketRequest, ReviewCreate, ReviewOut,
+    TicketOrderOut, TicketTierCreate, TicketTierOut, TicketTierUpdate,
+    WaitlistEntryOut, WaitlistNotifyRequest, WaitlistStatusOut,
 )
 from app.schemas.user import UserSummary
 
@@ -842,3 +842,117 @@ async def notify_waitlist(
         notified.append(entry.user.username)
     await db.flush()
     return {"notified": notified, "count": len(notified)}
+
+
+# ── Reviews ───────────────────────────────────────────────────────────────────
+
+@router.get("/{event_id}/reviews", response_model=list[ReviewOut])
+async def list_reviews(event_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(EventReview)
+        .options(selectinload(EventReview.user))
+        .where(EventReview.event_id == event_id)
+        .order_by(EventReview.created_at.desc())
+    )
+    reviews = result.scalars().all()
+    return [
+        ReviewOut(
+            id=r.id, event_id=r.event_id, user_id=r.user_id,
+            username=r.user.username, full_name=r.user.full_name,
+            avatar_url=r.user.avatar_url, rating=r.rating,
+            body=r.body, created_at=r.created_at,
+        )
+        for r in reviews
+    ]
+
+
+@router.get("/{event_id}/reviews/me", response_model=ReviewOut | None)
+async def my_review(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(EventReview)
+        .options(selectinload(EventReview.user))
+        .where(EventReview.event_id == event_id, EventReview.user_id == user.id)
+    )
+    r = result.scalar_one_or_none()
+    if not r:
+        return None
+    return ReviewOut(
+        id=r.id, event_id=r.event_id, user_id=r.user_id,
+        username=r.user.username, full_name=r.user.full_name,
+        avatar_url=r.user.avatar_url, rating=r.rating,
+        body=r.body, created_at=r.created_at,
+    )
+
+
+@router.post("/{event_id}/reviews", response_model=ReviewOut, status_code=201)
+async def create_review(
+    event_id: str,
+    payload: ReviewCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    event = (await db.execute(
+        select(Event).where(Event.id == event_id)
+    )).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    attended = (await db.execute(
+        select(EventAttendee).where(
+            EventAttendee.event_id == event_id,
+            EventAttendee.user_id == user.id,
+            EventAttendee.status == "going",
+        )
+    )).scalar_one_or_none()
+    if not attended:
+        raise HTTPException(403, "You can only review events you attended")
+
+    existing = (await db.execute(
+        select(EventReview).where(
+            EventReview.event_id == event_id, EventReview.user_id == user.id
+        )
+    )).scalar_one_or_none()
+    if existing:
+        existing.rating = payload.rating
+        existing.body = payload.body
+        await db.flush()
+        r = existing
+    else:
+        r = EventReview(
+            id=str(uuid.uuid4()),
+            event_id=event_id,
+            user_id=user.id,
+            rating=payload.rating,
+            body=payload.body,
+        )
+        db.add(r)
+        await db.flush()
+
+    return ReviewOut(
+        id=r.id, event_id=r.event_id, user_id=r.user_id,
+        username=user.username, full_name=user.full_name,
+        avatar_url=user.avatar_url, rating=r.rating,
+        body=r.body, created_at=r.created_at,
+    )
+
+
+@router.delete("/{event_id}/reviews/me", status_code=204)
+async def delete_review(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(EventReview).where(
+            EventReview.event_id == event_id, EventReview.user_id == user.id
+        )
+    )
+    r = result.scalar_one_or_none()
+    if not r:
+        raise HTTPException(404, "Review not found")
+    await db.delete(r)
+    await db.flush()

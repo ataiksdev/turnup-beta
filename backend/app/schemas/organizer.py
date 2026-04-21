@@ -188,3 +188,23 @@ class DashboardOut(BaseModel):
     total_attendees: int
     total_revenue: float
     pending_cohost_invites: int
+
+
+# ── Reviews ───────────────────────────────────────────────────────────────────
+
+class ReviewCreate(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    body: str | None = Field(None, max_length=2000)
+
+
+class ReviewOut(BaseModel):
+    id: str
+    event_id: str
+    user_id: str
+    username: str
+    full_name: str
+    avatar_url: str | None
+    rating: int
+    body: str | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
