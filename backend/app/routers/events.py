@@ -109,6 +109,7 @@ async def list_events(
     q: str | None = None,
     city: str | None = None,
     category: str | None = None,
+    event_type: str | None = None,
     featured: bool | None = None,
     trending: bool | None = None,
     free: bool | None = None,
@@ -130,6 +131,8 @@ async def list_events(
         cat = (await db.execute(select(Category).where(Category.slug == category))).scalar_one_or_none()
         if cat:
             stmt = stmt.where(Event.category_id == cat.id)
+    if event_type and event_type in ("physical", "virtual", "hybrid"):
+        stmt = stmt.where(Event.event_type == event_type)
     if featured is not None:
         stmt = stmt.where(Event.is_featured == featured)
     if trending is not None:
@@ -233,12 +236,52 @@ async def update_event(
 ):
     event = await _require_event_access(event_id, user, db)
     was_draft = event.status == "draft"
-    for k, v in payload.model_dump(exclude_none=True).items():
+    old_status = event.status
+    old_start = event.start_date
+
+    changes = payload.model_dump(exclude_none=True)
+    for k, v in changes.items():
         setattr(event, k, v)
+
     # Increment events_hosted counter when publishing for the first time
     if was_draft and event.status == "published":
         await db.execute(update(User).where(User.id == user.id).values(
             events_hosted=User.events_hosted + 1))
+
+    # Notify attendees on cancellation or reschedule
+    new_status = changes.get("status")
+    new_start  = changes.get("start_date")
+    notify_type = None
+    notify_title = None
+    notify_body  = None
+
+    if new_status == "cancelled" and old_status != "cancelled":
+        notify_type  = "event_update"
+        notify_title = f"Event cancelled: {event.title}"
+        notify_body  = f'"{event.title}" has been cancelled by the organizer.'
+    elif new_start and old_start and str(new_start) != str(old_start):
+        notify_type  = "event_update"
+        notify_title = f"Event rescheduled: {event.title}"
+        notify_body  = f'"{event.title}" has been moved to a new date. Check the event page for details.'
+
+    if notify_type:
+        attendee_rows = (await db.execute(
+            select(EventAttendee.user_id)
+            .where(EventAttendee.event_id == event_id,
+                   EventAttendee.user_id != user.id)
+        )).scalars().all()
+        for attendee_id in attendee_rows:
+            db.add(Notification(
+                id=str(uuid.uuid4()),
+                user_id=attendee_id,
+                type=notify_type,
+                title=notify_title,
+                body=notify_body,
+                reference_id=event_id,
+                reference_type="event",
+                actor_id=user.id,
+            ))
+
     await db.flush()
     stmt = select(Event).options(*_load()).where(Event.id == event_id)
     return _serialize((await db.execute(stmt)).scalar_one())

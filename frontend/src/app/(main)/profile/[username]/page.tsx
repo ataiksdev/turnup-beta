@@ -8,19 +8,20 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount } from "@/lib/utils";
-import { Globe, MapPin, Bookmark } from "lucide-react";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
-type Tab = "events" | "saved";
+type Tab = "events" | "attending" | "saved";
 
 export default function ProfilePage() {
   const { username } = useParams<{ username: string }>();
   const { token, user: me } = useAuthStore();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("events");
+  const [showPast, setShowPast] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["user", username],
@@ -28,9 +29,15 @@ export default function ProfilePage() {
   });
 
   const { data: events } = useQuery({
-    queryKey: ["user-events", username],
-    queryFn: () => usersApi.events(username),
+    queryKey: ["user-events", username, showPast],
+    queryFn: () => usersApi.events(username, showPast),
     enabled: tab === "events",
+  });
+
+  const { data: attending } = useQuery({
+    queryKey: ["user-attending", username, showPast],
+    queryFn: () => token ? usersApi.attending(username, token, showPast) : Promise.resolve([]),
+    enabled: tab === "attending" && !!token && me?.username === username,
   });
 
   const { data: saved } = useQuery({
@@ -50,6 +57,15 @@ export default function ProfilePage() {
   const isOwnProfile = me?.username === username;
   const prefs = parsePreferences(profile?.category_preferences);
 
+  const tabs: Tab[] = isOwnProfile ? ["events", "attending", "saved"] : ["events"];
+  const displayEvents = tab === "events" ? events : tab === "attending" ? attending : saved;
+
+  const EMPTY: Record<Tab, { emoji: string; label: string }> = {
+    events:    { emoji: "🎟️", label: showPast ? "No past events hosted" : "No upcoming events hosted" },
+    attending: { emoji: "🎫", label: showPast ? "No past events attended" : "No upcoming events" },
+    saved:     { emoji: "🔖", label: "No saved events yet" },
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -67,8 +83,6 @@ export default function ProfilePage() {
     );
   }
 
-  const displayEvents = tab === "events" ? events : saved;
-
   return (
     <div className="flex flex-col pb-4">
       <TopBar back title={`@${profile.username}`} />
@@ -76,8 +90,6 @@ export default function ProfilePage() {
       {/* Spotify-style hero banner */}
       <div className="relative h-52 bg-gradient-to-br from-primary/60 to-bg-elevated border-b-2 border-border overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-
-        {/* Avatar — overlaid at bottom-left */}
         <div className="absolute -bottom-10 left-4">
           <div className="border-4 border-bg rounded-full shadow-brutal">
             <Avatar src={profile.avatar_url} name={profile.full_name} size="xl" verified={profile.is_verified} />
@@ -85,7 +97,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Name + action — offset for avatar overlap */}
+      {/* Name + action */}
       <div className="flex items-end justify-between px-4 pt-3 pb-4" style={{ marginTop: "2.5rem" }}>
         <div>
           <h1 className="text-xl font-black text-text">{profile.full_name}</h1>
@@ -127,7 +139,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Stats — horizontal Spotify-style */}
+      {/* Stats */}
       <div className="mx-4 grid grid-cols-4 border-2 border-border rounded shadow-brutal-sm mb-4">
         {[
           { label: "Followers", value: formatCount(profile.followers_count) },
@@ -161,27 +173,51 @@ export default function ProfilePage() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-y-2 border-border mx-4 mb-4 rounded">
-        {(["events", ...(isOwnProfile ? ["saved"] : [])] as Tab[]).map((t, i, arr) => (
+      <div className="flex border-y-2 border-border mx-4 mb-3 rounded overflow-hidden">
+        {tabs.map((t, i, arr) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => { setTab(t); setShowPast(false); }}
             className={cn(
               "flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors",
               i < arr.length - 1 && "border-r-2 border-border",
-              tab === t
-                ? "bg-primary text-white"
-                : "text-text-muted hover:text-text bg-bg-card",
+              tab === t ? "bg-primary text-white" : "text-text-muted hover:text-text bg-bg-card",
             )}
           >
             {t === "saved" ? (
-              <span className="flex items-center justify-center gap-1.5">
-                <Bookmark size={11} /> Saved
-              </span>
-            ) : t}
+              <span className="flex items-center justify-center gap-1"><Bookmark size={10} /> Saved</span>
+            ) : t === "attending" ? (
+              <span className="flex items-center justify-center gap-1"><CheckCircle2 size={10} /> Attending</span>
+            ) : (
+              "Events"
+            )}
           </button>
         ))}
       </div>
+
+      {/* Past / Upcoming toggle for events and attending tabs */}
+      {(tab === "events" || tab === "attending") && (
+        <div className="flex mx-4 mb-4 gap-2">
+          <button
+            onClick={() => setShowPast(false)}
+            className={cn(
+              "flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded border-2 transition-colors",
+              !showPast ? "border-primary text-primary bg-primary/10" : "border-border text-text-muted bg-bg-card hover:border-primary/50",
+            )}
+          >
+            Upcoming
+          </button>
+          <button
+            onClick={() => setShowPast(true)}
+            className={cn(
+              "flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded border-2 transition-colors",
+              showPast ? "border-primary text-primary bg-primary/10" : "border-border text-text-muted bg-bg-card hover:border-primary/50",
+            )}
+          >
+            Past
+          </button>
+        </div>
+      )}
 
       {/* Events grid */}
       <div className="px-4">
@@ -193,9 +229,9 @@ export default function ProfilePage() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <span className="text-4xl">{tab === "saved" ? "🔖" : "🎟️"}</span>
+            <span className="text-4xl">{EMPTY[tab].emoji}</span>
             <p className="text-sm font-black text-text-secondary uppercase tracking-wide">
-              {tab === "saved" ? "No saved events yet" : "No events hosted yet"}
+              {EMPTY[tab].label}
             </p>
           </div>
         )}

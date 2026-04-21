@@ -219,15 +219,26 @@ export function EventDetailClient({ id }: { id: string }) {
 
         {/* Meta */}
         <dl className="space-y-2.5">
-          <div className="flex items-center gap-2.5 text-sm text-text-secondary">
-            <Calendar size={16} className="text-primary shrink-0" aria-hidden />
+          <div className="flex items-start gap-2.5 text-sm text-text-secondary">
+            <Calendar size={16} className="text-primary shrink-0 mt-0.5" aria-hidden />
             <dt className="sr-only">Date</dt>
-            <dd>{formatEventDate(event.start_date)}</dd>
+            <dd>
+              <span>{formatEventDate(event.start_date)}</span>
+              {event.timezone && (
+                <span className="block text-xs text-text-muted mt-0.5">{event.timezone}</span>
+              )}
+            </dd>
           </div>
           <div className="flex items-center gap-2.5 text-sm text-text-secondary">
             <MapPin size={16} className="text-primary shrink-0" aria-hidden />
             <dt className="sr-only">Location</dt>
-            <dd>{event.venue_name}, {event.address}, {event.city}</dd>
+            <dd>
+              {event.event_type === "virtual" ? (
+                <span className="flex items-center gap-1">💻 Online event</span>
+              ) : (
+                `${event.venue_name}, ${event.address}, ${event.city}`
+              )}
+            </dd>
           </div>
           <div className="flex items-center gap-2.5 text-sm text-text-secondary">
             <Users size={16} className="text-primary shrink-0" aria-hidden />
@@ -255,6 +266,22 @@ export function EventDetailClient({ id }: { id: string }) {
             </a>
           )}
         </div>
+
+        {/* Meeting link for virtual/hybrid events */}
+        {event.meeting_url && (attendance === "going") && (
+          <a
+            href={event.meeting_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between p-4 rounded-2xl bg-primary/10 border-2 border-primary/30 hover:border-primary transition-colors"
+          >
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-primary mb-0.5">Join Online</p>
+              <p className="text-sm text-text truncate max-w-[220px]">{event.meeting_url}</p>
+            </div>
+            <ExternalLink size={16} className="text-primary shrink-0" />
+          </a>
+        )}
 
         {/* RSVP */}
         {user && (
@@ -366,7 +393,7 @@ export function EventDetailClient({ id }: { id: string }) {
                         "text-base font-black shrink-0 ml-3",
                         tier.price === 0 ? "text-success" : "text-primary",
                       )}>
-                        {tier.price === 0 ? "Free" : `$${tier.price}`}
+                        {tier.price === 0 ? "Free" : `${tier.currency} ${tier.price}`}
                       </p>
                     </button>
 
@@ -393,7 +420,7 @@ export function EventDetailClient({ id }: { id: string }) {
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-text-muted">Total</span>
                           <span className="font-black text-text">
-                            {tier.price === 0 ? "Free" : `$${(tier.price * qty).toFixed(2)}`}
+                            {tier.price === 0 ? "Free" : `${tier.currency} ${(tier.price * qty).toFixed(2)}`}
                           </span>
                         </div>
                         <Button
@@ -401,7 +428,7 @@ export function EventDetailClient({ id }: { id: string }) {
                           loading={purchaseMutation.isPending}
                           onClick={() => purchaseMutation.mutate()}
                         >
-                          {tier.price === 0 ? "Claim Free Ticket" : `Pay $${(tier.price * qty).toFixed(2)}`}
+                          {tier.price === 0 ? "Claim Free Ticket" : `Pay ${tier.currency} ${(tier.price * qty).toFixed(2)}`}
                         </Button>
                         {purchaseMutation.isError && (
                           <p className="text-xs text-error text-center">

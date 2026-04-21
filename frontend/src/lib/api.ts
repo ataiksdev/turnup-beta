@@ -202,8 +202,11 @@ export const usersApi = {
   get: (username: string, token?: string) =>
     request<User>(`/users/${username}`, {}, token),
 
-  events: (username: string, page = 1) =>
-    request<Event[]>(`/users/${username}/events?page=${page}`),
+  events: (username: string, past = false, page = 1) =>
+    request<Event[]>(`/users/${username}/events?past=${past}&page=${page}`),
+
+  attending: (username: string, token: string, past = false, page = 1) =>
+    request<Event[]>(`/users/${username}/attending?past=${past}&page=${page}`, {}, token),
 
   saved: (username: string, token: string, page = 1) =>
     request<Event[]>(`/users/${username}/saved?page=${page}`, {}, token),

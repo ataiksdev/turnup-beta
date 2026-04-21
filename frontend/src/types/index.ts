@@ -116,6 +116,7 @@ export interface EventFilters extends PaginatedParams {
   q?: string;
   city?: string;
   category?: string;
+  event_type?: "physical" | "virtual" | "hybrid";
   featured?: boolean;
   trending?: boolean;
   free?: boolean;
