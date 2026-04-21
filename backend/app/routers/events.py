@@ -15,6 +15,7 @@ from app.models.organizer import (
     EventCoHost, EventReview, EventView, EventWaitlist, TicketOrder, TicketTier,
 )
 from app.models.social import Notification
+from app.models.social import Follow
 from app.models.user import User
 from app.schemas.event import (
     AttendRequest, CategoryOut, EventCreate, EventDetail, EventOut, EventUpdate,
@@ -108,6 +109,7 @@ async def list_categories(db: AsyncSession = Depends(get_db)):
 @router.get("", response_model=list[EventOut])
 async def list_events(
     q: str | None = None,
+    tag: str | None = None,
     city: str | None = None,
     category: str | None = None,
     event_type: str | None = None,
@@ -126,6 +128,9 @@ async def list_events(
     if q:
         stmt = stmt.where(or_(Event.title.ilike(f"%{q}%"), Event.city.ilike(f"%{q}%"),
                               Event.tags.ilike(f"%{q}%"), Event.venue_name.ilike(f"%{q}%")))
+    if tag:
+        # match comma-separated tag list exactly or as substring
+        stmt = stmt.where(Event.tags.ilike(f"%{tag}%"))
     if city:
         stmt = stmt.where(Event.city.ilike(f"%{city}%"))
     if category:
@@ -171,6 +176,163 @@ async def featured_events(
             .where(Event.status == "published", Event.is_featured == True)
             .order_by(Event.start_date.asc()).limit(limit))
     return [_serialize(e) for e in (await db.execute(stmt)).scalars().all()]
+
+
+@router.get("/for-you", response_model=list[EventOut])
+async def for_you_events(
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    """
+    Personalised recommendation feed. Scores every upcoming published event
+    against six signals: category taste, location, budget history, social
+    graph activity, tag overlap, and platform flags (trending/featured).
+    Anonymous callers receive a trending-weighted fallback.
+    """
+    now = datetime.now(timezone.utc)
+
+    # Candidate pool: upcoming published events (capped for scoring performance)
+    candidates = (await db.execute(
+        select(Event).options(*_load())
+        .where(Event.status == "published", Event.start_date > now)
+        .order_by(Event.start_date.asc())
+        .limit(300)
+    )).scalars().all()
+
+    if not user:
+        candidates.sort(key=lambda e: (e.is_trending, e.is_featured, e.attendees_count), reverse=True)
+        return [_serialize(e) for e in candidates[:limit]]
+
+    # ── Gather user signals ────────────────────────────────────────────────────
+
+    # 1. Category preferences → category IDs
+    raw_prefs = [p.strip() for p in (user.category_preferences or "").split(",") if p.strip()]
+    pref_category_ids: set[str] = set()
+    if raw_prefs:
+        cats = (await db.execute(select(Category).where(Category.slug.in_(raw_prefs)))).scalars().all()
+        pref_category_ids = {c.id for c in cats}
+
+    # 2. User city from profile location field (first token before comma)
+    user_city = (user.location or "").split(",")[0].strip().lower()
+
+    # 3. Events user already saved or attending → exclude from results
+    attended_ids = {
+        r[0] for r in (await db.execute(
+            select(EventAttendee.event_id).where(EventAttendee.user_id == user.id)
+        )).all()
+    }
+    saved_ids = {
+        r[0] for r in (await db.execute(
+            select(EventSave.event_id).where(EventSave.user_id == user.id)
+        )).all()
+    }
+    excluded_ids = attended_ids | saved_ids
+
+    # 4. Taste tag profile: tags from events the user has attended
+    history_tags_rows = (await db.execute(
+        select(Event.tags).where(Event.id.in_(attended_ids), Event.tags.isnot(None))
+    )).scalars().all()
+    user_tags: set[str] = set()
+    for row in history_tags_rows:
+        user_tags.update(t.strip().lower() for t in row.split(",") if t.strip())
+
+    # 5. Social signal: event IDs attended by people the user follows
+    followed_ids = {
+        r[0] for r in (await db.execute(
+            select(Follow.following_id).where(Follow.follower_id == user.id)
+        )).all()
+    }
+    social_event_ids: set[str] = set()
+    if followed_ids:
+        social_event_ids = {
+            r[0] for r in (await db.execute(
+                select(EventAttendee.event_id).where(
+                    EventAttendee.user_id.in_(followed_ids),
+                    EventAttendee.status == "going",
+                )
+            )).all()
+        }
+
+    # 6. Budget signal: infer max comfortable spend from confirmed orders
+    paid_prices = (await db.execute(
+        select(TicketOrder.unit_price).where(
+            TicketOrder.user_id == user.id,
+            TicketOrder.status == "confirmed",
+            TicketOrder.unit_price > 0,
+        )
+    )).scalars().all()
+    max_spend = max(paid_prices, default=0.0)
+    prefers_free = max_spend == 0 and user.events_attended < 3
+
+    # ── Score candidates ───────────────────────────────────────────────────────
+
+    scored: list[tuple[float, Event]] = []
+    for e in candidates:
+        if e.id in excluded_ids:
+            continue
+        score = 0.0
+
+        # Category preference match (strongest signal)
+        if e.category_id and e.category_id in pref_category_ids:
+            score += 3.0
+
+        # Location proximity
+        if user_city and e.city.lower().startswith(user_city):
+            score += 2.0
+
+        # Budget fit
+        if e.is_free:
+            score += 1.5 if prefers_free else 0.5
+        elif max_spend > 0 and e.price_min is not None and e.price_min <= max_spend * 1.3:
+            score += 1.5
+
+        # Social proof from followed accounts
+        if e.id in social_event_ids:
+            score += 2.0
+
+        # Tag taste overlap (each matching tag = 0.8)
+        if e.tags and user_tags:
+            e_tags = {t.strip().lower() for t in e.tags.split(",") if t.strip()}
+            score += len(e_tags & user_tags) * 0.8
+
+        # Platform quality signals
+        if e.is_trending:
+            score += 0.8
+        if e.is_featured:
+            score += 0.5
+
+        # Popularity (soft cap at 1.0)
+        score += min(e.attendees_count / 50.0, 1.0)
+
+        # Freshness: events within the next 7 days get a boost
+        days_away = max((e.start_date.replace(tzinfo=timezone.utc) - now).days, 0)
+        if days_away <= 7:
+            score += 0.5
+
+        # Add a tiny noise term so equal-scored events vary between users
+        score += (hash(f"{user.id}:{e.id}") % 100) / 1000.0
+
+        scored.append((score, e))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    # Resolve user-state for top N and build response
+    result = []
+    for _, e in scored[:limit]:
+        sv, at, wl = await _user_state(e.id, user, db)
+        result.append(_serialize(e, sv, at, wl))
+
+    # Pad with trending events if personalised pool is thin
+    if len(result) < limit:
+        seen = {r["id"] for r in result} | excluded_ids
+        fallback = [e for e in candidates if e.id not in seen]
+        fallback.sort(key=lambda e: (e.is_trending, e.attendees_count), reverse=True)
+        for e in fallback[: limit - len(result)]:
+            sv, at, wl = await _user_state(e.id, user, db)
+            result.append(_serialize(e, sv, at, wl))
+
+    return result
 
 
 @router.get("/{event_id}", response_model=EventDetail)

@@ -6,9 +6,12 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { EventCard } from "@/components/events/EventCard";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Search, X, Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf, MapPin, Shuffle, Tag } from "lucide-react";
+import {
+  Search, X, Music, Moon, Palette, Utensils, Monitor,
+  Trophy, Laugh, Leaf, MapPin, Shuffle, Tag, Hash,
+} from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -41,6 +44,17 @@ function SearchContent() {
   const [activeType, setActiveType] = useState(searchParams.get("event_type") ?? "");
   const [freeOnly, setFreeOnly] = useState(searchParams.get("free") === "true");
 
+  // Seed tag from URL param (e.g. from ForYouCard tag click → /search?tag=afrobeats)
+  const urlTag = searchParams.get("tag") ?? "";
+  useEffect(() => {
+    if (urlTag && !q) setQ(`#${urlTag}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTag]);
+
+  // Detect tag search: input starting with #
+  const isTagSearch = q.trim().startsWith("#");
+  const tagValue = isTagSearch ? q.trim().slice(1).trim() : "";
+
   const isSearching = q.trim().length > 0 || !!activeCategory || freeOnly || !!activeType;
 
   const { data: events, isLoading } = useQuery({
@@ -48,7 +62,8 @@ function SearchContent() {
     queryFn: () =>
       eventsApi.list(
         {
-          q: q || undefined,
+          q: (!isTagSearch && q) ? q : undefined,
+          tag: (isTagSearch && tagValue) ? tagValue : undefined,
           category: activeCategory || undefined,
           event_type: (activeType as "physical" | "virtual" | "hybrid") || undefined,
           free: freeOnly || undefined,
@@ -74,6 +89,10 @@ function SearchContent() {
     router.replace(`/search?${params}`);
   }
 
+  const placeholder = isTagSearch
+    ? `Tag: #${tagValue || "…"}`
+    : "Events, venues, cities, or #tag…";
+
   return (
     <div className="flex flex-col gap-4 pb-4">
       <TopBar title="Search" />
@@ -82,15 +101,38 @@ function SearchContent() {
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Events, venues, cities..."
-          icon={<Search size={16} />}
+          placeholder={placeholder}
+          icon={isTagSearch ? <Hash size={16} className="text-primary" /> : <Search size={16} />}
           iconRight={q ? (
             <button onClick={() => setQ("")}><X size={14} /></button>
           ) : undefined}
         />
 
+        {/* Tag search hint */}
+        {!q && (
+          <p className="text-[10px] text-text-disabled font-medium">
+            Tip: type <span className="text-primary font-bold">#afrobeats</span> to search by tag
+          </p>
+        )}
+
+        {/* Active tag badge */}
+        {isTagSearch && tagValue && (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 px-2.5 py-1 bg-primary/15 border-2 border-primary/40 rounded text-xs font-black text-primary uppercase tracking-wide">
+              <Hash size={11} aria-hidden />
+              {tagValue}
+            </span>
+            <button
+              onClick={() => setQ("")}
+              className="text-[10px] text-text-muted hover:text-text-secondary"
+            >
+              Clear tag
+            </button>
+          </div>
+        )}
+
         {/* Category filter chips */}
-        {isSearching && (
+        {isSearching && !isTagSearch && (
           <div className="snap-scroll gap-2">
             {[{ label: "All", slug: "" }, ...CATEGORIES].map(({ label, slug }) => (
               <button
@@ -110,7 +152,7 @@ function SearchContent() {
         )}
 
         {/* Event type + free chips */}
-        {isSearching && (
+        {isSearching && !isTagSearch && (
           <div className="flex flex-wrap gap-2">
             {EVENT_TYPES.map(({ label, value, icon: TypeIcon }) => (
               <button
@@ -180,7 +222,9 @@ function SearchContent() {
           ) : events && events.length > 0 ? (
             <>
               <p className="text-xs font-bold text-text-muted uppercase tracking-widest mb-3">
-                {events.length} event{events.length !== 1 ? "s" : ""} found
+                {isTagSearch
+                  ? `${events.length} event${events.length !== 1 ? "s" : ""} tagged #${tagValue}`
+                  : `${events.length} event${events.length !== 1 ? "s" : ""} found`}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {events.map((e) => (
@@ -191,7 +235,9 @@ function SearchContent() {
           ) : (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <Search size={40} className="text-border-strong" aria-hidden />
-              <p className="text-text-secondary font-bold uppercase tracking-wide text-sm">No events found</p>
+              <p className="text-text-secondary font-bold uppercase tracking-wide text-sm">
+                {isTagSearch ? `No events tagged #${tagValue}` : "No events found"}
+              </p>
               <p className="text-xs text-text-muted">Try different keywords or filters</p>
             </div>
           )}

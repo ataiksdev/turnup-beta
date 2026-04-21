@@ -5,13 +5,12 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { HeroEvent } from "@/components/events/HeroEvent";
 import { EventCarousel } from "@/components/events/EventCarousel";
-import { EventCard } from "@/components/events/EventCard";
+import { ForYouCard } from "@/components/events/ForYouCard";
 import { parsePreferences } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import type { Event } from "@/types";
 
 function getGreeting(name?: string): string {
   const hour = new Date().getHours();
@@ -19,20 +18,22 @@ function getGreeting(name?: string): string {
   return name ? `Good ${part}, ${name.split(" ")[0]}` : `Good ${part}`;
 }
 
-const CATEGORY_TILES: { label: string; slug: string; icon: LucideIcon; color: string }[] = [
-  { label: "Music",     slug: "music",     icon: Music,   color: "bg-[#1a472a]" },
-  { label: "Nightlife", slug: "nightlife", icon: Moon,    color: "bg-[#2d1b69]" },
-  { label: "Arts",      slug: "arts",      icon: Palette, color: "bg-[#6b2d2d]" },
-  { label: "Food",      slug: "food",      icon: Utensils, color: "bg-[#6b4c1a]" },
-  { label: "Tech",      slug: "tech",      icon: Monitor, color: "bg-[#0d3b59]" },
-  { label: "Sports",    slug: "sports",    icon: Trophy,  color: "bg-[#1a5c2d]" },
-  { label: "Comedy",    slug: "comedy",    icon: Laugh,   color: "bg-[#5c3d1a]" },
-  { label: "Wellness",  slug: "wellness",  icon: Leaf,    color: "bg-[#2d4a1a]" },
-];
+function deriveReason(event: Event, prefs: string[]): string | undefined {
+  if (!event.category) return undefined;
+  if (prefs.includes(event.category.slug)) return `Your ${event.category.name} pick`;
+  if (event.is_trending) return "Trending";
+  if (event.is_featured) return "Editor's choice";
+  return undefined;
+}
 
 export default function DiscoverPage() {
   const { token, user } = useAuthStore();
   const prefs = parsePreferences(user?.category_preferences);
+
+  const { data: forYou, isLoading: loadingForYou } = useQuery({
+    queryKey: ["events", "for-you", token],
+    queryFn: () => eventsApi.forYou(20, token ?? undefined),
+  });
 
   const { data: featured, isLoading: loadingFeatured } = useQuery({
     queryKey: ["events", "featured"],
@@ -44,21 +45,13 @@ export default function DiscoverPage() {
     queryFn: () => eventsApi.trending(10, token ?? undefined),
   });
 
-  const { data: forYou, isLoading: loadingForYou } = useQuery({
-    queryKey: ["events", "for-you", prefs.join(",")],
-    queryFn: () =>
-      prefs.length > 0
-        ? eventsApi.list({ category: prefs[0], limit: 10 }, token ?? undefined)
-        : eventsApi.list({ limit: 10 }, token ?? undefined),
-    enabled: true,
-  });
-
   const { data: free, isLoading: loadingFree } = useQuery({
     queryKey: ["events", "free"],
     queryFn: () => eventsApi.list({ free: true, limit: 10 }, token ?? undefined),
   });
 
   const heroEvent = featured?.[0];
+  const topPicks = forYou?.slice(0, 3) ?? [];
 
   return (
     <div className="flex flex-col gap-6 pb-4">
@@ -72,12 +65,70 @@ export default function DiscoverPage() {
         </p>
       </div>
 
-      {/* Hero event — full bleed */}
-      {loadingFeatured ? (
-        <Skeleton className="h-[500px] w-full rounded-none" />
-      ) : heroEvent ? (
+      {/* ── Top Picks / For You — main hero section ── */}
+      <section className="px-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xs font-black text-text uppercase tracking-widest">
+              {user ? "Top Picks for You" : "Top Picks"}
+            </h2>
+            {user && prefs.length > 0 && (
+              <p className="text-[10px] text-text-muted mt-0.5">
+                Personalised · {prefs.slice(0, 2).join(" · ")}
+              </p>
+            )}
+          </div>
+          <Link
+            href="/search"
+            className="text-[10px] font-black text-primary uppercase tracking-widest hover:opacity-80 transition-opacity"
+          >
+            See all →
+          </Link>
+        </div>
+
+        {loadingForYou ? (
+          <div className="space-y-3">
+            <Skeleton className="h-[220px] w-full" />
+            <div className="grid grid-cols-2 gap-3">
+              <Skeleton className="h-[280px] w-full" />
+              <Skeleton className="h-[280px] w-full" />
+            </div>
+          </div>
+        ) : topPicks.length > 0 ? (
+          <div className="space-y-3">
+            {/* #1 pick — full width */}
+            <ForYouCard
+              event={topPicks[0]}
+              rank={1}
+              reason={deriveReason(topPicks[0], prefs)}
+            />
+            {/* #2 and #3 — side by side */}
+            {topPicks.length > 1 && (
+              <div className="grid grid-cols-2 gap-3">
+                {topPicks.slice(1, 3).map((e, i) => (
+                  <ForYouCard
+                    key={e.id}
+                    event={e}
+                    rank={(i + 2) as 2 | 3}
+                    reason={deriveReason(e, prefs)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-32 border-2 border-dashed border-border rounded">
+            <p className="text-xs text-text-muted font-bold uppercase tracking-wide">
+              No picks yet — check back soon
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Hero featured event — full bleed */}
+      {!loadingFeatured && heroEvent && (
         <HeroEvent event={heroEvent} />
-      ) : null}
+      )}
 
       {/* Trending */}
       <EventCarousel
@@ -87,40 +138,12 @@ export default function DiscoverPage() {
         seeAllHref="/search?trending=true"
       />
 
-      {/* Browse categories */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between px-4">
-          <h2 className="text-xs font-black text-text uppercase tracking-widest">Browse</h2>
-          <Link href="/search" className="text-[10px] font-black text-primary uppercase tracking-widest">
-            All categories
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-3 px-4">
-          {CATEGORY_TILES.map(({ label, slug, icon: Icon, color }) => (
-            <Link
-              key={slug}
-              href={`/search?category=${slug}`}
-              className={cn(
-                "relative h-20 rounded border-2 border-border shadow-brutal overflow-hidden",
-                "hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg transition-all duration-100",
-                color,
-              )}
-            >
-              <Icon size={32} className="absolute bottom-2 right-3 text-white opacity-60" aria-hidden />
-              <span className="absolute top-3 left-3 text-sm font-black text-white uppercase tracking-wide">
-                {label}
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* For You */}
-      {user && (
+      {/* Remaining For You — rest of the personalised list as a carousel */}
+      {forYou && forYou.length > 3 && (
         <EventCarousel
-          title={prefs.length > 0 ? "Based on Your Taste" : "Picked for You"}
-          events={forYou}
-          loading={loadingForYou}
+          title={user ? "More for You" : "You Might Like"}
+          events={forYou.slice(3)}
+          loading={false}
         />
       )}
 
@@ -131,18 +154,6 @@ export default function DiscoverPage() {
         loading={loadingFree}
         seeAllHref="/search?free=true"
       />
-
-      {/* Featured grid */}
-      {featured && featured.length > 1 && (
-        <section className="space-y-3 px-4">
-          <h2 className="text-xs font-black text-text uppercase tracking-widest">Featured</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {featured.slice(1).map((e) => (
-              <EventCard key={e.id} event={e} size="sm" className="w-full" />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

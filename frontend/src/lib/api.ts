@@ -131,6 +131,9 @@ export const eventsApi = {
   featured: (limit = 6, token?: string) =>
     request<Event[]>(`/events/featured?limit=${limit}`, {}, token),
 
+  forYou: (limit = 20, token?: string) =>
+    request<Event[]>(`/events/for-you?limit=${limit}`, {}, token),
+
   get: (idOrSlug: string, token?: string) =>
     request<Event>(`/events/${idOrSlug}`, {}, token),
 
