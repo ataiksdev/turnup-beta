@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.middleware.auth import get_current_user, get_optional_user
-from app.models.event import Event, EventSave
+from app.models.event import Event, EventAttendee, EventSave
 from app.models.social import Follow
 from app.models.user import User
 from app.schemas.event import EventOut
@@ -21,7 +23,7 @@ async def _is_following(db: AsyncSession, follower_id: str, following_id: str) -
     return r is not None
 
 
-def _event_row(event: Event, is_saved: bool = False) -> dict:
+def _event_row(event: Event, is_saved: bool = False, attendance_status: str | None = None) -> dict:
     return {
         "id": event.id, "title": event.title, "slug": event.slug,
         "cover_image": event.cover_image, "venue_name": event.venue_name,
@@ -38,7 +40,7 @@ def _event_row(event: Event, is_saved: bool = False) -> dict:
         "latitude": event.latitude, "longitude": event.longitude,
         "timezone": event.timezone, "ticket_url": event.ticket_url,
         "capacity": event.capacity,
-        "is_saved": is_saved, "attendance_status": None,
+        "is_saved": is_saved, "attendance_status": attendance_status,
     }
 
 
@@ -61,6 +63,7 @@ async def get_profile(
 @router.get("/{username}/events", response_model=list[EventOut])
 async def get_user_events(
     username: str,
+    past: bool = False,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
@@ -68,12 +71,45 @@ async def get_user_events(
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if not u:
         raise HTTPException(404, "User not found")
+    now = datetime.now(timezone.utc)
     stmt = (select(Event).options(selectinload(Event.host), selectinload(Event.category))
-            .where(Event.host_id == u.id, Event.status == "published")
-            .order_by(Event.start_date.desc())
-            .offset((page - 1) * limit).limit(limit))
+            .where(Event.host_id == u.id, Event.status == "published"))
+    if past:
+        stmt = stmt.where(Event.end_date < now).order_by(Event.start_date.desc())
+    else:
+        stmt = stmt.where(Event.end_date >= now).order_by(Event.start_date.asc())
+    stmt = stmt.offset((page - 1) * limit).limit(limit)
     events = (await db.execute(stmt)).scalars().all()
     return [_event_row(e) for e in events]
+
+
+@router.get("/{username}/attending", response_model=list[EventOut])
+async def get_attending_events(
+    username: str,
+    past: bool = False,
+    status: str | None = None,   # "going" | "interested" | None = both
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    if not u or u.id != me.id:
+        raise HTTPException(403, "Access denied")
+    now = datetime.now(timezone.utc)
+    stmt = (select(Event, EventAttendee.status)
+            .options(selectinload(Event.host), selectinload(Event.category))
+            .join(EventAttendee, EventAttendee.event_id == Event.id)
+            .where(EventAttendee.user_id == u.id))
+    if status in ("going", "interested"):
+        stmt = stmt.where(EventAttendee.status == status)
+    if past:
+        stmt = stmt.where(Event.end_date < now).order_by(Event.start_date.desc())
+    else:
+        stmt = stmt.where(Event.end_date >= now).order_by(Event.start_date.asc())
+    stmt = stmt.offset((page - 1) * limit).limit(limit)
+    rows = (await db.execute(stmt)).all()
+    return [_event_row(row.Event, attendance_status=row.status) for row in rows]
 
 
 @router.get("/{username}/saved", response_model=list[EventOut])

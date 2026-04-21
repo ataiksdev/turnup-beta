@@ -6,7 +6,7 @@ from app.models.auth_tokens import (
 )
 from app.models.organizer import (
     OrganizerProfile, TicketTier, TicketOrder, EventTemplate,
-    EventCoHost, EventWaitlist, EventView,
+    EventCoHost, EventWaitlist, EventView, EventReview,
 )
 
 __all__ = [
@@ -15,5 +15,5 @@ __all__ = [
     "UserSession", "EmailVerification", "PasswordReset",
     "MagicLink", "TwoFactor", "OAuthAccount", "PhoneOTP",
     "OrganizerProfile", "TicketTier", "TicketOrder", "EventTemplate",
-    "EventCoHost", "EventWaitlist", "EventView",
+    "EventCoHost", "EventWaitlist", "EventView", "EventReview",
 ]

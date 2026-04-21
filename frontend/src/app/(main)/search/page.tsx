@@ -23,6 +23,13 @@ const CATEGORIES = [
   { label: "Wellness",  slug: "wellness",  emoji: "🧘", color: "bg-[#2d4a1a]" },
 ];
 
+const EVENT_TYPES = [
+  { label: "All Types", value: "" },
+  { label: "In Person", value: "physical", emoji: "📍" },
+  { label: "Virtual",   value: "virtual",  emoji: "💻" },
+  { label: "Hybrid",    value: "hybrid",   emoji: "🔀" },
+] as const;
+
 function SearchContent() {
   const { token } = useAuthStore();
   const searchParams = useSearchParams();
@@ -30,15 +37,22 @@ function SearchContent() {
 
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [activeCategory, setActiveCategory] = useState(searchParams.get("category") ?? "");
+  const [activeType, setActiveType] = useState(searchParams.get("event_type") ?? "");
   const [freeOnly, setFreeOnly] = useState(searchParams.get("free") === "true");
 
-  const isSearching = q.trim().length > 0 || activeCategory || freeOnly;
+  const isSearching = q.trim().length > 0 || !!activeCategory || freeOnly || !!activeType;
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["events", "search", q, activeCategory, freeOnly],
+    queryKey: ["events", "search", q, activeCategory, activeType, freeOnly],
     queryFn: () =>
       eventsApi.list(
-        { q: q || undefined, category: activeCategory || undefined, free: freeOnly || undefined, limit: 30 },
+        {
+          q: q || undefined,
+          category: activeCategory || undefined,
+          event_type: (activeType as "physical" | "virtual" | "hybrid") || undefined,
+          free: freeOnly || undefined,
+          limit: 30,
+        },
         token ?? undefined,
       ),
     staleTime: 30_000,
@@ -48,8 +62,14 @@ function SearchContent() {
   function applyCategory(slug: string) {
     setActiveCategory(slug);
     const params = new URLSearchParams(searchParams.toString());
-    if (slug) params.set("category", slug);
-    else params.delete("category");
+    if (slug) params.set("category", slug); else params.delete("category");
+    router.replace(`/search?${params}`);
+  }
+
+  function applyType(value: string) {
+    setActiveType(value);
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set("event_type", value); else params.delete("event_type");
     router.replace(`/search?${params}`);
   }
 
@@ -68,7 +88,7 @@ function SearchContent() {
           ) : undefined}
         />
 
-        {/* Category filter chips — shown when actively searching */}
+        {/* Category filter chips */}
         {isSearching && (
           <div className="snap-scroll gap-2">
             {[{ label: "All", slug: "" }, ...CATEGORIES].map(({ label, slug }) => (
@@ -88,18 +108,36 @@ function SearchContent() {
           </div>
         )}
 
+        {/* Event type + free chips */}
         {isSearching && (
-          <button
-            onClick={() => setFreeOnly(!freeOnly)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
-              freeOnly
-                ? "bg-success/15 text-success border-success/40 shadow-brutal-sm"
-                : "bg-bg-card text-text-secondary border-border hover:border-success/40 hover:text-success",
-            )}
-          >
-            🆓 Free only
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {EVENT_TYPES.map(({ label, value, emoji }) => (
+              <button
+                key={value}
+                onClick={() => applyType(value)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
+                  activeType === value
+                    ? "bg-primary text-white border-primary shadow-brutal-sm"
+                    : "bg-bg-card text-text-secondary border-border hover:border-primary hover:text-primary",
+                )}
+              >
+                {"emoji" in { label, value, emoji } && emoji && <span>{emoji}</span>}
+                {label}
+              </button>
+            ))}
+            <button
+              onClick={() => setFreeOnly(!freeOnly)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
+                freeOnly
+                  ? "bg-success/15 text-success border-success/40 shadow-brutal-sm"
+                  : "bg-bg-card text-text-secondary border-border hover:border-success/40 hover:text-success",
+              )}
+            >
+              🆓 Free only
+            </button>
+          </div>
         )}
       </div>
 

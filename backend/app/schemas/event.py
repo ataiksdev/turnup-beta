@@ -34,6 +34,8 @@ class EventCreate(BaseModel):
     waitlist_enabled: bool = False
     category_id: str | None = None
     tags: str | None = None
+    event_type: str = Field("physical", pattern=r"^(physical|virtual|hybrid)$")
+    meeting_url: str | None = None
     status: str = Field("published", pattern=r"^(draft|published)$")
     template_id: str | None = None  # optional: create from template
 
@@ -53,6 +55,8 @@ class EventUpdate(BaseModel):
     ticket_url: str | None = None
     capacity: int | None = None
     waitlist_enabled: bool | None = None
+    event_type: str | None = Field(None, pattern=r"^(physical|virtual|hybrid)$")
+    meeting_url: str | None = None
     status: str | None = Field(None, pattern=r"^(draft|published|cancelled|completed)$")
     tags: str | None = None
 
@@ -85,6 +89,7 @@ class EventOut(BaseModel):
     host: UserSummary
     category: CategoryOut | None
     created_at: datetime
+    event_type: str = "physical"
     is_saved: bool = False
     attendance_status: str | None = None
     is_waitlisted: bool = False
@@ -98,6 +103,7 @@ class EventDetail(EventOut):
     longitude: float | None
     timezone: str
     ticket_url: str | None
+    meeting_url: str | None
     capacity: int | None
     template_id: str | None
 
