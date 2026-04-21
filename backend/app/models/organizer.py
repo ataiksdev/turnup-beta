@@ -43,7 +43,7 @@ class TicketTier(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     price: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    currency: Mapped[str] = mapped_column(String(3), default="NGN")
     quantity: Mapped[int | None] = mapped_column(Integer)          # null = unlimited
     quantity_sold: Mapped[int] = mapped_column(Integer, default=0)
     max_per_order: Mapped[int] = mapped_column(Integer, default=10)

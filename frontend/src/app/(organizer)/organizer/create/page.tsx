@@ -580,7 +580,7 @@ export default function CreateEventPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <FieldWrap>
-                  <Label>Price (USD) *</Label>
+                  <Label>Price (NGN) *</Label>
                   <Input
                     type="number"
                     value={tier.price}

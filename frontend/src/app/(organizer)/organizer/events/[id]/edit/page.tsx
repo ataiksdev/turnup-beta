@@ -491,7 +491,7 @@ export default function EditEventPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <FieldWrap>
-                  <Label>Price (USD) *</Label>
+                  <Label>Price (NGN) *</Label>
                   <Input type="number" value={tier.price} onChange={(e) => updateTier(tier.id, "price", e.target.value)}
                     placeholder="0.00" icon={<DollarSign size={14} />} min="0" step="0.01" />
                 </FieldWrap>
