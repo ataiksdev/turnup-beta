@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { usersApi } from "@/lib/api";
+import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -77,12 +77,12 @@ function EventRow({ event }: { event: Event }) {
 }
 
 export default function OrganizerEventsPage() {
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["user-events", user?.username],
-    queryFn: () => usersApi.events(user!.username),
-    enabled: !!user?.username,
+    queryKey: ["organizer-events", user?.id],
+    queryFn: () => organizerApi.myEvents(token!),
+    enabled: !!token,
   });
 
   const published = events?.filter((e) => e.status === "published") ?? [];

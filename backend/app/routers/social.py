@@ -88,10 +88,22 @@ async def add_comment(
     db: AsyncSession = Depends(get_db),
     me: User = Depends(get_current_user),
 ):
+    from app.models.event import Event
     comment = Comment(id=str(uuid.uuid4()), content=payload.content,
                       user_id=me.id, event_id=event_id, parent_id=payload.parent_id)
     db.add(comment)
     await db.flush()
+
+    # Notify event host (unless commenter is the host)
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if event and event.host_id != me.id:
+        db.add(Notification(
+            id=str(uuid.uuid4()), user_id=event.host_id, type="comment",
+            title=f"{me.full_name} commented on your event",
+            body=payload.content[:120] if payload.content else None,
+            reference_id=event_id, reference_type="event", actor_id=me.id,
+        ))
+
     result = await db.execute(
         select(Comment).options(selectinload(Comment.user)).where(Comment.id == comment.id))
     return result.scalar_one()
@@ -128,6 +140,22 @@ async def get_notifications(
     if unread_only:
         stmt = stmt.where(Notification.is_read == False)
     return (await db.execute(stmt)).scalars().all()
+
+
+@router.post("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    notif = (await db.execute(select(Notification).where(
+        Notification.id == notification_id,
+        Notification.user_id == me.id,
+    ))).scalar_one_or_none()
+    if not notif:
+        raise HTTPException(404, "Notification not found")
+    notif.is_read = True
+    return {"ok": True}
 
 
 @router.post("/notifications/read-all")

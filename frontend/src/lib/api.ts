@@ -240,7 +240,7 @@ export const organizerApi = {
     request<OrganizerDashboard>("/organizer/dashboard", {}, token),
 
   myEvents: (token: string) =>
-    request<Event[]>("/events?my=true&limit=50", {}, token),
+    request<Event[]>("/organizer/events?limit=50", {}, token),
 };
 
 // ── Social ─────────────────────────────────────────────────────────────────────
@@ -266,6 +266,9 @@ export const socialApi = {
 
   notifications: (token: string, unreadOnly = false) =>
     request<Notification[]>(`/social/notifications?unread_only=${unreadOnly}`, {}, token),
+
+  markRead: (token: string, notificationId: string) =>
+    request<{ ok: boolean }>(`/social/notifications/${notificationId}/read`, { method: "POST" }, token),
 
   markAllRead: (token: string) =>
     request<{ ok: boolean }>("/social/notifications/read-all", { method: "POST" }, token),

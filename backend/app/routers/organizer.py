@@ -160,7 +160,7 @@ async def my_events(
     return [
         {
             "id": e.id, "title": e.title, "slug": e.slug, "status": e.status,
-            "start_date": e.start_date, "city": e.city,
+            "start_date": e.start_date, "city": e.city, "venue_name": e.venue_name,
             "attendees_count": e.attendees_count, "waitlist_count": e.waitlist_count,
             "views_count": e.views_count, "cover_image": e.cover_image,
             "category": e.category, "is_free": e.is_free,

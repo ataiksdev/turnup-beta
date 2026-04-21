@@ -27,11 +27,17 @@ export default function ActivityPage() {
   const { data: notifications, isLoading: notifsLoading } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => token ? socialApi.notifications(token) : Promise.resolve([]),
-    enabled: !!token && tab === "notifications",
+    enabled: !!token,
+    refetchInterval: 60_000,
   });
 
   const markReadMutation = useMutation({
     mutationFn: () => token ? socialApi.markAllRead(token) : Promise.reject(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const markOneMutation = useMutation({
+    mutationFn: (id: string) => token ? socialApi.markRead(token, id) : Promise.reject(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
@@ -153,29 +159,52 @@ export default function ActivityPage() {
                 <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
               </div>
             ) : notifications && notifications.length > 0 ? (
-              notifications.map((n) => (
-                <div key={n.id} className={cn(
-                  "flex items-start gap-3 px-4 py-3.5",
-                  !n.is_read && "bg-primary/5",
-                )}>
-                  <div className="w-9 h-9 rounded-full bg-bg-card border border-border flex items-center justify-center shrink-0 text-text-muted">
-                    {n.type === "follow"         && <UserPlus    size={16} aria-hidden />}
-                    {n.type === "going"          && <PartyPopper size={16} aria-hidden />}
-                    {n.type === "comment"        && <MessageCircle size={16} aria-hidden />}
-                    {n.type === "event_reminder" && <Clock       size={16} aria-hidden />}
-                    {n.type === "event_update"   && <Megaphone   size={16} aria-hidden />}
-                    {n.type === "event_invite"   && <Mail        size={16} aria-hidden />}
+              notifications.map((n) => {
+                const href =
+                  n.reference_type === "event" ? `/events/${n.reference_id}` :
+                  n.reference_type === "user"  ? `/profile/${n.actor?.username}` :
+                  null;
+
+                const inner = (
+                  <div className={cn(
+                    "flex items-start gap-3 px-4 py-3.5 w-full transition-colors",
+                    !n.is_read && "bg-primary/5",
+                    href && "hover:bg-bg-elevated cursor-pointer",
+                  )}>
+                    <div className={cn(
+                      "w-9 h-9 rounded-full border flex items-center justify-center shrink-0",
+                      n.is_read ? "bg-bg-card border-border text-text-muted" : "bg-primary/10 border-primary/30 text-primary",
+                    )}>
+                      {n.type === "follow"         && <UserPlus      size={16} aria-hidden />}
+                      {n.type === "going"          && <PartyPopper   size={16} aria-hidden />}
+                      {n.type === "comment"        && <MessageCircle size={16} aria-hidden />}
+                      {n.type === "event_reminder" && <Clock         size={16} aria-hidden />}
+                      {n.type === "event_update"   && <Megaphone     size={16} aria-hidden />}
+                      {n.type === "event_invite"   && <Mail          size={16} aria-hidden />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-text leading-snug">{n.title}</p>
+                      {n.body && <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{n.body}</p>}
+                      <p className="text-[11px] text-text-muted mt-1">{timeAgo(n.created_at)}</p>
+                    </div>
+                    {!n.is_read && (
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); markOneMutation.mutate(n.id); }}
+                        title="Mark as read"
+                        className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0 hover:opacity-60 transition-opacity"
+                      />
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-text">{n.title}</p>
-                    {n.body && <p className="text-xs text-text-muted mt-0.5">{n.body}</p>}
-                    <p className="text-[11px] text-text-muted mt-1">{timeAgo(n.created_at)}</p>
-                  </div>
-                  {!n.is_read && (
-                    <div className="w-2 h-2 rounded-full bg-primary mt-1 shrink-0" />
-                  )}
-                </div>
-              ))
+                );
+
+                return href ? (
+                  <Link key={n.id} href={href} onClick={() => { if (!n.is_read) markOneMutation.mutate(n.id); }}>
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={n.id}>{inner}</div>
+                );
+              })
             ) : (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-8">
                 <Bell size={40} className="text-border-strong" />

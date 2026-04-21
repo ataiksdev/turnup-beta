@@ -505,6 +505,15 @@ async def attend(
     else:
         event.interested_count += 1
 
+    # Notify host when someone RSVPs going (skip if user is the host)
+    if payload.status == "going" and event.host_id != user.id:
+        db.add(Notification(
+            id=str(uuid.uuid4()), user_id=event.host_id, type="going",
+            title=f"{user.full_name} is going to your event",
+            body=event.title,
+            reference_id=event_id, reference_type="event", actor_id=user.id,
+        ))
+
     return {"status": payload.status, "attendees_count": event.attendees_count,
             "interested_count": event.interested_count}
 
