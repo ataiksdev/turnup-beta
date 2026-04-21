@@ -46,7 +46,6 @@ interface FormState {
   waitlist_enabled: boolean;
   // Step 3 — Tickets
   is_free: boolean;
-  ticket_url: string;
   cover_image: string;
   tags: string;
   tiers: TierDraft[];
@@ -175,7 +174,7 @@ export default function CreateEventPage() {
     venue_name: "", address: "", city: "", country: "US", meeting_url: "",
     start_date: "", end_date: "", timezone: "America/New_York",
     capacity: "", waitlist_enabled: false,
-    is_free: true, ticket_url: "", cover_image: "", tags: "",
+    is_free: true, cover_image: "", tags: "",
     tiers: [newTier()],
   });
 
@@ -265,7 +264,6 @@ export default function CreateEventPage() {
         price_max: (!form.is_free && form.tiers.length > 0)
           ? Math.max(...form.tiers.map((t) => Number(t.price) || 0))
           : undefined,
-        ticket_url: form.ticket_url.trim() || undefined,
         capacity: form.capacity ? Number(form.capacity) : undefined,
         waitlist_enabled: form.waitlist_enabled,
         category_id: form.category_id || undefined,
@@ -629,16 +627,6 @@ export default function CreateEventPage() {
           ))}
         </div>
       )}
-
-      <FieldWrap>
-        <Label>External Ticket URL</Label>
-        <Input
-          value={form.ticket_url}
-          onChange={(e) => set("ticket_url")(e.target.value)}
-          placeholder="https://eventbrite.com/..."
-          icon={<Globe size={16} />}
-        />
-      </FieldWrap>
 
       <FieldWrap>
         <Label>Tags</Label>

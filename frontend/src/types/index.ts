@@ -50,7 +50,6 @@ export interface Event {
   currency: string;
   event_type?: "physical" | "virtual" | "hybrid";
   meeting_url?: string | null;
-  ticket_url?: string | null;
   capacity?: number | null;
   attendees_count: number;
   interested_count: number;
