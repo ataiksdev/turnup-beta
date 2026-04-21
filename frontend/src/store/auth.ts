@@ -1,6 +1,6 @@
 "use client";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { User } from "@/types";
 
 interface AuthState {
@@ -24,6 +24,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "turnup-auth",
+      storage: createJSONStorage(() => {
+        if (typeof window === "undefined") return { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+        return localStorage;
+      }),
       partialize: (s) => ({ token: s.token, user: s.user }),
     },
   ),
