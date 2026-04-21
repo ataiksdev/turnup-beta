@@ -7,7 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { timeAgo } from "@/lib/utils";
 import Link from "next/link";
-import { Bell, Check } from "lucide-react";
+import { Bell, Check, UserPlus, PartyPopper, MessageCircle, Clock, Megaphone, Mail, Eye, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -40,7 +40,7 @@ export default function ActivityPage() {
   if (!user || !token) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4 px-8 text-center">
-        <span className="text-6xl">🎉</span>
+        <Zap size={48} className="text-primary" aria-hidden />
         <h2 className="text-xl font-black text-text">Join the action</h2>
         <p className="text-sm text-text-secondary">Log in to see activity from people you follow.</p>
         <Link href="/login"><Button fullWidth>Log In</Button></Link>
@@ -125,7 +125,7 @@ export default function ActivityPage() {
             ))
           ) : (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-8">
-              <span className="text-5xl">👀</span>
+              <Eye size={40} className="text-border-strong" aria-hidden />
               <p className="text-text-secondary font-medium">Nothing here yet</p>
               <p className="text-sm text-text-muted">Follow people to see their activity</p>
             </div>
@@ -158,13 +158,13 @@ export default function ActivityPage() {
                   "flex items-start gap-3 px-4 py-3.5",
                   !n.is_read && "bg-primary/5",
                 )}>
-                  <div className="w-9 h-9 rounded-full bg-bg-card border border-border flex items-center justify-center shrink-0">
-                    {n.type === "follow" && "👤"}
-                    {n.type === "going" && "🎉"}
-                    {n.type === "comment" && "💬"}
-                    {n.type === "event_reminder" && "⏰"}
-                    {n.type === "event_update" && "📢"}
-                    {n.type === "event_invite" && "📩"}
+                  <div className="w-9 h-9 rounded-full bg-bg-card border border-border flex items-center justify-center shrink-0 text-text-muted">
+                    {n.type === "follow"         && <UserPlus    size={16} aria-hidden />}
+                    {n.type === "going"          && <PartyPopper size={16} aria-hidden />}
+                    {n.type === "comment"        && <MessageCircle size={16} aria-hidden />}
+                    {n.type === "event_reminder" && <Clock       size={16} aria-hidden />}
+                    {n.type === "event_update"   && <Megaphone   size={16} aria-hidden />}
+                    {n.type === "event_invite"   && <Mail        size={16} aria-hidden />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-text">{n.title}</p>

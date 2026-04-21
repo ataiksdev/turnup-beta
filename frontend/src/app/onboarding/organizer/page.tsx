@@ -5,7 +5,7 @@ import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Building2, FileText, Globe } from "lucide-react";
+import { Building2, FileText, Globe, Mic2 } from "lucide-react";
 
 export default function OrganizerOnboardingPage() {
   const router = useRouter();
@@ -65,7 +65,9 @@ export default function OrganizerOnboardingPage() {
 
       {/* Organizer badge */}
       <div className="flex items-center gap-3 p-4 rounded border-2 border-primary bg-primary/10 shadow-brutal mb-8">
-        <span className="text-3xl">🎤</span>
+        <div className="w-10 h-10 rounded border-2 border-primary/40 flex items-center justify-center shrink-0">
+          <Mic2 size={20} className="text-primary" aria-hidden />
+        </div>
         <div>
           <p className="font-black text-primary text-sm uppercase tracking-wide">Organizer Account</p>
           <p className="text-xs text-text-muted">You can create and manage events, sell tickets, and build an audience</p>

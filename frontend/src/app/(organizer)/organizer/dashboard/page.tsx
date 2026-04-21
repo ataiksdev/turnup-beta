@@ -6,7 +6,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { EventCard } from "@/components/events/EventCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
-import { CalendarPlus, TrendingUp, Users, DollarSign, FileText } from "lucide-react";
+import { CalendarPlus, TrendingUp, Users, DollarSign, FileText, Ticket } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +59,7 @@ export default function OrganizerDashboardPage() {
       <div className="px-4 py-4 space-y-1">
         <span className="text-xs font-black text-primary uppercase tracking-widest">Organizer Dashboard</span>
         <h1 className="text-2xl font-black text-text">
-          {user?.full_name?.split(" ")[0] ?? "Hey"} 👋
+          {user?.full_name?.split(" ")[0] ?? "Hey"}
         </h1>
         <p className="text-xs font-bold text-text-muted uppercase tracking-widest">
           Here's how your events are doing
@@ -141,7 +141,7 @@ export default function OrganizerDashboardPage() {
           </div>
         ) : (
           <div className="mx-4 flex flex-col items-center justify-center py-12 gap-3 border-2 border-dashed border-border rounded">
-            <span className="text-4xl">🎟️</span>
+            <Ticket size={36} className="text-border-strong" aria-hidden />
             <p className="text-sm font-black text-text-secondary uppercase tracking-wide">No events yet</p>
             <Link href="/organizer/create">
               <Button size="sm">Create your first event</Button>

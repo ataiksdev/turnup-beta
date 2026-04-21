@@ -5,7 +5,7 @@ import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Mail, Lock, User, AtSign, ChevronLeft } from "lucide-react";
+import { Mail, Lock, User, AtSign, ChevronLeft, Ticket, Mic2, Check, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -42,16 +42,16 @@ function InstagramIcon() {
   );
 }
 
-const ROLE_OPTIONS: { role: Role; emoji: string; title: string; description: string }[] = [
+const ROLE_OPTIONS: { role: Role; icon: LucideIcon; title: string; description: string }[] = [
   {
     role: "attendee",
-    emoji: "🎟️",
+    icon: Ticket,
     title: "Discover Events",
     description: "Find concerts, parties, festivals, and experiences near you",
   },
   {
     role: "organizer",
-    emoji: "🎤",
+    icon: Mic2,
     title: "Host Events",
     description: "Create and manage events, sell tickets, grow your audience",
   },
@@ -114,7 +114,7 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-3">
-            {ROLE_OPTIONS.map(({ role: r, emoji, title, description }) => (
+            {ROLE_OPTIONS.map(({ role: r, icon: RoleIcon, title, description }) => (
               <button
                 key={r}
                 onClick={() => setRole(r)}
@@ -128,13 +128,15 @@ export default function SignupPage() {
                 )}
               >
                 <div className="flex items-start gap-4">
-                  <span className="text-4xl leading-none mt-0.5">{emoji}</span>
+                  <div className="w-10 h-10 rounded border-2 border-border flex items-center justify-center shrink-0 bg-bg-elevated mt-0.5">
+                    <RoleIcon size={20} className="text-primary" aria-hidden />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <span className="font-black text-text text-base uppercase tracking-wide">{title}</span>
                       {role === r && (
                         <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shrink-0">
-                          <span className="text-white text-[11px] font-black">✓</span>
+                          <Check size={11} className="text-white" aria-hidden />
                         </span>
                       )}
                     </div>
@@ -188,7 +190,9 @@ export default function SignupPage() {
             ? "border-primary text-primary bg-primary/10"
             : "border-border text-text-muted bg-bg-elevated",
         )}>
-          {role === "organizer" ? "🎤 Organizer" : "🎟️ Event goer"}
+          {role === "organizer"
+            ? <><Mic2 size={12} aria-hidden /> Organizer</>
+            : <><Ticket size={12} aria-hidden /> Event goer</>}
         </div>
 
         {error && (

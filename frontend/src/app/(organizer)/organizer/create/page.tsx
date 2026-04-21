@@ -674,9 +674,9 @@ export default function CreateEventPage() {
                   : form.event_type === "virtual" ? "border-[#3B82F6]/40 text-[#3B82F6] bg-[#3B82F6]/10"
                   : "border-primary/40 text-primary bg-primary/10",
               )}>
-                {form.event_type === "physical" ? "🏟️ In Person"
-                  : form.event_type === "virtual" ? "💻 Virtual"
-                  : "🌐 Hybrid"}
+                {form.event_type === "physical" ? "In Person"
+                  : form.event_type === "virtual" ? "Virtual"
+                  : "Hybrid"}
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs text-text-secondary">

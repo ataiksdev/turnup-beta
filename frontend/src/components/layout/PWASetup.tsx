@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Download, Share, X } from "lucide-react";
+import { Download, Share, X, Zap } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -74,7 +74,7 @@ export function PWASetup() {
         </button>
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded border-2 border-border bg-primary/15 flex items-center justify-center shrink-0">
-            <span className="text-2xl">🎉</span>
+            <Zap size={24} className="text-primary" aria-hidden />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-text text-sm">Add Turnup to Home Screen</p>

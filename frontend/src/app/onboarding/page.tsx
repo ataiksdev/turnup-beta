@@ -6,16 +6,17 @@ import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf, Check, type LucideIcon } from "lucide-react";
 
-const CATEGORIES = [
-  { slug: "music",     label: "Music",      icon: "🎵", color: "#F97316" },
-  { slug: "nightlife", label: "Nightlife",   icon: "🌙", color: "#3B82F6" },
-  { slug: "arts",      label: "Arts",        icon: "🎨", color: "#A855F7" },
-  { slug: "food",      label: "Food & Drink",icon: "🍕", color: "#EF4444" },
-  { slug: "tech",      label: "Tech",        icon: "💻", color: "#06B6D4" },
-  { slug: "sports",    label: "Sports",      icon: "⚽", color: "#22C55E" },
-  { slug: "comedy",    label: "Comedy",      icon: "😂", color: "#EAB308" },
-  { slug: "wellness",  label: "Wellness",    icon: "🧘", color: "#10B981" },
+const CATEGORIES: { slug: string; label: string; icon: LucideIcon; color: string }[] = [
+  { slug: "music",     label: "Music",       icon: Music,    color: "#A855F7" },
+  { slug: "nightlife", label: "Nightlife",    icon: Moon,     color: "#3B82F6" },
+  { slug: "arts",      label: "Arts",         icon: Palette,  color: "#A855F7" },
+  { slug: "food",      label: "Food & Drink", icon: Utensils, color: "#EF4444" },
+  { slug: "tech",      label: "Tech",         icon: Monitor,  color: "#06B6D4" },
+  { slug: "sports",    label: "Sports",       icon: Trophy,   color: "#22C55E" },
+  { slug: "comedy",    label: "Comedy",       icon: Laugh,    color: "#EAB308" },
+  { slug: "wellness",  label: "Wellness",     icon: Leaf,     color: "#10B981" },
 ];
 
 const MIN_SELECTIONS = 1;
@@ -75,6 +76,7 @@ export default function OnboardingPage() {
       <div className="grid grid-cols-2 gap-3 flex-1">
         {CATEGORIES.map((cat, i) => {
           const isSelected = selected.has(cat.slug);
+          const CatIcon = cat.icon;
           return (
             <motion.button
               key={cat.slug}
@@ -94,7 +96,7 @@ export default function OnboardingPage() {
                 borderColor: cat.color,
               } : undefined}
             >
-              <span className="text-3xl">{cat.icon}</span>
+              <CatIcon size={28} style={{ color: isSelected ? cat.color : undefined }} className={isSelected ? "" : "text-text-muted"} aria-hidden />
               <span className={cn(
                 "text-sm font-semibold",
                 isSelected ? "text-white" : "text-text-secondary",
@@ -107,7 +109,7 @@ export default function OnboardingPage() {
                   animate={{ scale: 1 }}
                   className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-white/90 flex items-center justify-center"
                 >
-                  <span className="text-[11px] font-black" style={{ color: cat.color }}>✓</span>
+                  <Check size={11} style={{ color: cat.color }} aria-hidden />
                 </motion.span>
               )}
             </motion.button>

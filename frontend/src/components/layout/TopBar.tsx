@@ -43,7 +43,6 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
         ) : (
           <Link href="/" aria-label="Turnup home" className="flex items-center gap-1.5">
             <span className="text-xl font-black text-primary tracking-tight">turnup</span>
-            <span className="text-xl" aria-hidden>🎉</span>
           </Link>
         )}
         {title && (

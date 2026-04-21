@@ -12,7 +12,7 @@ import { formatEventDate, formatPrice, parseTags, timeAgo } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
-  Star, Ticket, Minus, Plus,
+  Star, Ticket, Minus, Plus, Flame, Monitor, AlertCircle,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -143,7 +143,7 @@ export function EventDetailClient({ id }: { id: string }) {
   if (!event) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3">
-        <span className="text-5xl" aria-hidden>😕</span>
+        <AlertCircle size={40} className="text-border-strong" aria-hidden />
         <p className="text-text-secondary">Event not found</p>
         <Link href="/" className="text-primary text-sm font-medium">← Back to Discover</Link>
       </div>
@@ -202,8 +202,8 @@ export function EventDetailClient({ id }: { id: string }) {
 
         {event.is_trending && (
           <div className="absolute top-16 left-4">
-            <span className="px-2.5 py-1 rounded-full bg-primary text-white text-xs font-bold">
-              🔥 Trending
+            <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary text-white text-xs font-bold">
+              <Flame size={11} aria-hidden /> Trending
             </span>
           </div>
         )}
@@ -237,7 +237,7 @@ export function EventDetailClient({ id }: { id: string }) {
             <dt className="sr-only">Location</dt>
             <dd>
               {event.event_type === "virtual" ? (
-                <span className="flex items-center gap-1">💻 Online event</span>
+                <span className="flex items-center gap-1"><Monitor size={14} aria-hidden /> Online event</span>
               ) : (
                 `${event.venue_name}, ${event.address}, ${event.city}`
               )}

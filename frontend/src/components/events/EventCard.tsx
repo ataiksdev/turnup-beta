@@ -1,7 +1,7 @@
 "use client";
 import { cn, formatEventDateShort, formatPrice } from "@/lib/utils";
 import type { Event } from "@/types";
-import { Bookmark, BookmarkCheck } from "lucide-react";
+import { Bookmark, BookmarkCheck, Flame } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
@@ -61,8 +61,8 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
         {/* Badges */}
         <div className="absolute top-1.5 left-1.5 flex gap-1">
           {event.is_trending && (
-            <span className="px-1.5 py-0.5 rounded bg-primary text-white text-[9px] font-bold uppercase">
-              🔥
+            <span className="px-1.5 py-0.5 rounded bg-primary text-white text-[9px] font-bold uppercase flex items-center">
+              <Flame size={9} aria-hidden />
             </span>
           )}
           {event.is_free && (

@@ -54,7 +54,7 @@ export default function EventAnalyticsPage() {
   if (!analytics) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3 px-6 text-center">
-        <span className="text-5xl">📊</span>
+        <BarChart2 size={40} className="text-border-strong" aria-hidden />
         <p className="text-text-secondary font-bold text-sm uppercase tracking-wide">
           No analytics yet
         </p>

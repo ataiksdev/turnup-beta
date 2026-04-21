@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
-import { BarChart2, CalendarPlus, Edit2, Users, Eye } from "lucide-react";
+import { BarChart2, CalendarPlus, Edit2, Users, Eye, Ticket } from "lucide-react";
 import Link from "next/link";
 import { cn, formatEventDateShort, formatPrice } from "@/lib/utils";
 import type { Event } from "@/types";
@@ -110,7 +110,7 @@ export default function OrganizerEventsPage() {
         </div>
       ) : !events || events.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-center px-4">
-          <span className="text-5xl">🎟️</span>
+          <Ticket size={40} className="text-border-strong" aria-hidden />
           <p className="font-black text-text-secondary text-sm uppercase tracking-wide">No events yet</p>
           <p className="text-xs text-text-muted">Create your first event and start selling tickets</p>
         </div>

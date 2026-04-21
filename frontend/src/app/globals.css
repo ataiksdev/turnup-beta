@@ -18,7 +18,7 @@
     --text-secondary: 185 185 185;
     --text-muted:     115 115 115;
     --text-disabled:  65 65 65;
-    --primary-muted:  67 20 7;
+    --primary-muted:  88 28 135;
     --shadow-color:   255 255 255;    /* offset shadow color — white in dark */
     color-scheme: dark;
   }
@@ -37,7 +37,7 @@
     --text-secondary: 185 185 185;
     --text-muted:     115 115 115;
     --text-disabled:  65 65 65;
-    --primary-muted:  67 20 7;
+    --primary-muted:  88 28 135;
     --shadow-color:   255 255 255;
     color-scheme: dark;
   }
@@ -56,7 +56,7 @@
     --text-secondary: 50 50 50;
     --text-muted:     115 115 115;
     --text-disabled:  175 175 175;
-    --primary-muted:  255 237 213;
+    --primary-muted:  237 233 254;
     --shadow-color:   0 0 0;          /* black offset shadow in light */
     color-scheme: light;
   }

@@ -10,6 +10,8 @@ import { parsePreferences } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 function getGreeting(name?: string): string {
   const hour = new Date().getHours();
@@ -17,15 +19,15 @@ function getGreeting(name?: string): string {
   return name ? `Good ${part}, ${name.split(" ")[0]}` : `Good ${part}`;
 }
 
-const CATEGORY_TILES = [
-  { label: "Music",     slug: "music",     emoji: "🎵", color: "bg-[#1a472a]" },
-  { label: "Nightlife", slug: "nightlife", emoji: "🌙", color: "bg-[#2d1b69]" },
-  { label: "Arts",      slug: "arts",      emoji: "🎨", color: "bg-[#6b2d2d]" },
-  { label: "Food",      slug: "food",      emoji: "🍕", color: "bg-[#6b4c1a]" },
-  { label: "Tech",      slug: "tech",      emoji: "💻", color: "bg-[#0d3b59]" },
-  { label: "Sports",    slug: "sports",    emoji: "⚽", color: "bg-[#1a5c2d]" },
-  { label: "Comedy",    slug: "comedy",    emoji: "😂", color: "bg-[#5c3d1a]" },
-  { label: "Wellness",  slug: "wellness",  emoji: "🧘", color: "bg-[#2d4a1a]" },
+const CATEGORY_TILES: { label: string; slug: string; icon: LucideIcon; color: string }[] = [
+  { label: "Music",     slug: "music",     icon: Music,   color: "bg-[#1a472a]" },
+  { label: "Nightlife", slug: "nightlife", icon: Moon,    color: "bg-[#2d1b69]" },
+  { label: "Arts",      slug: "arts",      icon: Palette, color: "bg-[#6b2d2d]" },
+  { label: "Food",      slug: "food",      icon: Utensils, color: "bg-[#6b4c1a]" },
+  { label: "Tech",      slug: "tech",      icon: Monitor, color: "bg-[#0d3b59]" },
+  { label: "Sports",    slug: "sports",    icon: Trophy,  color: "bg-[#1a5c2d]" },
+  { label: "Comedy",    slug: "comedy",    icon: Laugh,   color: "bg-[#5c3d1a]" },
+  { label: "Wellness",  slug: "wellness",  icon: Leaf,    color: "bg-[#2d4a1a]" },
 ];
 
 export default function DiscoverPage() {
@@ -79,7 +81,7 @@ export default function DiscoverPage() {
 
       {/* Trending */}
       <EventCarousel
-        title="🔥 Trending Now"
+        title="Trending Now"
         events={trending}
         loading={loadingTrending}
         seeAllHref="/search?trending=true"
@@ -94,7 +96,7 @@ export default function DiscoverPage() {
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-3 px-4">
-          {CATEGORY_TILES.map(({ label, slug, emoji, color }) => (
+          {CATEGORY_TILES.map(({ label, slug, icon: Icon, color }) => (
             <Link
               key={slug}
               href={`/search?category=${slug}`}
@@ -104,7 +106,7 @@ export default function DiscoverPage() {
                 color,
               )}
             >
-              <span className="absolute bottom-2 right-3 text-3xl opacity-70">{emoji}</span>
+              <Icon size={32} className="absolute bottom-2 right-3 text-white opacity-60" aria-hidden />
               <span className="absolute top-3 left-3 text-sm font-black text-white uppercase tracking-wide">
                 {label}
               </span>
@@ -116,7 +118,7 @@ export default function DiscoverPage() {
       {/* For You */}
       {user && (
         <EventCarousel
-          title={prefs.length > 0 ? "✨ Based on your taste" : "✨ Picked for You"}
+          title={prefs.length > 0 ? "Based on Your Taste" : "Picked for You"}
           events={forYou}
           loading={loadingForYou}
         />
@@ -124,7 +126,7 @@ export default function DiscoverPage() {
 
       {/* Free events */}
       <EventCarousel
-        title="🆓 Free to Attend"
+        title="Free to Attend"
         events={free}
         loading={loadingFree}
         seeAllHref="/search?free=true"
@@ -133,7 +135,7 @@ export default function DiscoverPage() {
       {/* Featured grid */}
       {featured && featured.length > 1 && (
         <section className="space-y-3 px-4">
-          <h2 className="text-xs font-black text-text uppercase tracking-widest">⭐ Featured</h2>
+          <h2 className="text-xs font-black text-text uppercase tracking-widest">Featured</h2>
           <div className="grid grid-cols-2 gap-3">
             {featured.slice(1).map((e) => (
               <EventCard key={e.id} event={e} size="sm" className="w-full" />

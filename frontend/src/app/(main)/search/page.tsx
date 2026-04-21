@@ -6,29 +6,30 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { EventCard } from "@/components/events/EventCard";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Search, X } from "lucide-react";
+import { Search, X, Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf, MapPin, Shuffle, Tag } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, Suspense } from "react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 
-const CATEGORIES = [
-  { label: "Music",     slug: "music",     emoji: "🎵", color: "bg-[#1a472a]" },
-  { label: "Nightlife", slug: "nightlife", emoji: "🌙", color: "bg-[#2d1b69]" },
-  { label: "Arts",      slug: "arts",      emoji: "🎨", color: "bg-[#6b2d2d]" },
-  { label: "Food",      slug: "food",      emoji: "🍕", color: "bg-[#6b4c1a]" },
-  { label: "Tech",      slug: "tech",      emoji: "💻", color: "bg-[#0d3b59]" },
-  { label: "Sports",    slug: "sports",    emoji: "⚽", color: "bg-[#1a5c2d]" },
-  { label: "Comedy",    slug: "comedy",    emoji: "😂", color: "bg-[#5c3d1a]" },
-  { label: "Wellness",  slug: "wellness",  emoji: "🧘", color: "bg-[#2d4a1a]" },
+const CATEGORIES: { label: string; slug: string; icon: LucideIcon; color: string }[] = [
+  { label: "Music",     slug: "music",     icon: Music,    color: "bg-[#1a472a]" },
+  { label: "Nightlife", slug: "nightlife", icon: Moon,     color: "bg-[#2d1b69]" },
+  { label: "Arts",      slug: "arts",      icon: Palette,  color: "bg-[#6b2d2d]" },
+  { label: "Food",      slug: "food",      icon: Utensils, color: "bg-[#6b4c1a]" },
+  { label: "Tech",      slug: "tech",      icon: Monitor,  color: "bg-[#0d3b59]" },
+  { label: "Sports",    slug: "sports",    icon: Trophy,   color: "bg-[#1a5c2d]" },
+  { label: "Comedy",    slug: "comedy",    icon: Laugh,    color: "bg-[#5c3d1a]" },
+  { label: "Wellness",  slug: "wellness",  icon: Leaf,     color: "bg-[#2d4a1a]" },
 ];
 
-const EVENT_TYPES = [
+const EVENT_TYPES: { label: string; value: string; icon?: LucideIcon }[] = [
   { label: "All Types", value: "" },
-  { label: "In Person", value: "physical", emoji: "📍" },
-  { label: "Virtual",   value: "virtual",  emoji: "💻" },
-  { label: "Hybrid",    value: "hybrid",   emoji: "🔀" },
-] as const;
+  { label: "In Person", value: "physical", icon: MapPin },
+  { label: "Virtual",   value: "virtual",  icon: Monitor },
+  { label: "Hybrid",    value: "hybrid",   icon: Shuffle },
+];
 
 function SearchContent() {
   const { token } = useAuthStore();
@@ -111,7 +112,7 @@ function SearchContent() {
         {/* Event type + free chips */}
         {isSearching && (
           <div className="flex flex-wrap gap-2">
-            {EVENT_TYPES.map(({ label, value, emoji }) => (
+            {EVENT_TYPES.map(({ label, value, icon: TypeIcon }) => (
               <button
                 key={value}
                 onClick={() => applyType(value)}
@@ -122,7 +123,7 @@ function SearchContent() {
                     : "bg-bg-card text-text-secondary border-border hover:border-primary hover:text-primary",
                 )}
               >
-                {"emoji" in { label, value, emoji } && emoji && <span>{emoji}</span>}
+                {TypeIcon && <TypeIcon size={11} aria-hidden />}
                 {label}
               </button>
             ))}
@@ -135,7 +136,7 @@ function SearchContent() {
                   : "bg-bg-card text-text-secondary border-border hover:border-success/40 hover:text-success",
               )}
             >
-              🆓 Free only
+              <Tag size={11} aria-hidden /> Free only
             </button>
           </div>
         )}
@@ -146,7 +147,7 @@ function SearchContent() {
         <div className="px-4 space-y-3">
           <h2 className="text-xs font-black text-text uppercase tracking-widest">Browse categories</h2>
           <div className="grid grid-cols-2 gap-3">
-            {CATEGORIES.map(({ label, slug, emoji, color }) => (
+            {CATEGORIES.map(({ label, slug, icon: CatIcon, color }) => (
               <Link
                 key={slug}
                 href={`/search?category=${slug}`}
@@ -157,7 +158,7 @@ function SearchContent() {
                   color,
                 )}
               >
-                <span className="absolute bottom-2 right-3 text-4xl opacity-70">{emoji}</span>
+                <CatIcon size={36} className="absolute bottom-2 right-3 text-white opacity-60" aria-hidden />
                 <span className="absolute top-3 left-3 text-sm font-black text-white uppercase tracking-wide">
                   {label}
                 </span>
@@ -189,7 +190,7 @@ function SearchContent() {
             </>
           ) : (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-              <span className="text-5xl">🔍</span>
+              <Search size={40} className="text-border-strong" aria-hidden />
               <p className="text-text-secondary font-bold uppercase tracking-wide text-sm">No events found</p>
               <p className="text-xs text-text-muted">Try different keywords or filters</p>
             </div>

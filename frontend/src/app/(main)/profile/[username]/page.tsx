@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount } from "@/lib/utils";
-import { Globe, MapPin, Bookmark, CheckCircle2, Heart } from "lucide-react";
-import { useParams } from "next/navigation";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, type LucideIcon } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,8 @@ type Tab = "events" | "attending" | "saved";
 
 export default function ProfilePage() {
   const { username } = useParams<{ username: string }>();
-  const { token, user: me } = useAuthStore();
+  const { token, user: me, logout } = useAuthStore();
+  const router = useRouter();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("events");
   const [showPast, setShowPast] = useState(false);
@@ -60,10 +61,10 @@ export default function ProfilePage() {
   const tabs: Tab[] = isOwnProfile ? ["events", "attending", "saved"] : ["events"];
   const displayEvents = tab === "events" ? events : tab === "attending" ? attending : saved;
 
-  const EMPTY: Record<Tab, { emoji: string; label: string }> = {
-    events:    { emoji: "🎟️", label: showPast ? "No past events hosted" : "No upcoming events hosted" },
-    attending: { emoji: "🎫", label: showPast ? "No past events attended" : "No upcoming events" },
-    saved:     { emoji: "🔖", label: "No saved events yet" },
+  const EMPTY: Record<Tab, { icon: LucideIcon; label: string }> = {
+    events:    { icon: Ticket,   label: showPast ? "No past events hosted" : "No upcoming events hosted" },
+    attending: { icon: Ticket,   label: showPast ? "No past events attended" : "No upcoming events" },
+    saved:     { icon: Bookmark, label: "No saved events yet" },
   };
 
   if (isLoading) {
@@ -77,7 +78,7 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3">
-        <span className="text-5xl">👤</span>
+        <UserX size={40} className="text-border-strong" aria-hidden />
         <p className="text-text-secondary font-bold uppercase tracking-wide text-sm">User not found</p>
       </div>
     );
@@ -105,7 +106,16 @@ export default function ProfilePage() {
         </div>
         <div className="flex gap-2">
           {isOwnProfile ? (
-            <Link href="/profile/edit"><Button variant="secondary" size="sm">Edit Profile</Button></Link>
+            <>
+              <Link href="/profile/edit"><Button variant="secondary" size="sm">Edit Profile</Button></Link>
+              <button
+                onClick={() => { logout(); router.replace("/login"); }}
+                aria-label="Log out"
+                className="p-2 rounded border-2 border-border bg-bg-card hover:border-error hover:text-error transition-colors shadow-brutal-sm"
+              >
+                <LogOut size={15} aria-hidden />
+              </button>
+            </>
           ) : token ? (
             <Button
               variant={profile.is_following ? "secondary" : "primary"}
@@ -229,7 +239,7 @@ export default function ProfilePage() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <span className="text-4xl">{EMPTY[tab].emoji}</span>
+            {(() => { const Icon = EMPTY[tab].icon; return <Icon size={36} className="text-border-strong" aria-hidden />; })()}
             <p className="text-sm font-black text-text-secondary uppercase tracking-wide">
               {EMPTY[tab].label}
             </p>
