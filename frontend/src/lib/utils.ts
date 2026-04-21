@@ -24,10 +24,10 @@ export function formatPrice(
   isFree: boolean,
   priceMin?: number | null,
   priceMax?: number | null,
-  currency = "USD",
+  currency = "NGN",
 ): string {
   if (isFree) return "Free";
-  const sym = currency === "USD" ? "$" : currency;
+  const sym = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : `${currency} `;
   if (priceMin && priceMax && priceMin !== priceMax) {
     return `${sym}${priceMin}–${sym}${priceMax}`;
   }

@@ -32,7 +32,7 @@ class TicketTierCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = None
     price: float = Field(ge=0)
-    currency: str = "USD"
+    currency: str = "NGN"
     quantity: int | None = Field(None, ge=1)
     max_per_order: int = Field(10, ge=1, le=100)
     is_active: bool = True

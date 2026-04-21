@@ -28,7 +28,7 @@ class EventCreate(BaseModel):
     is_free: bool = True
     price_min: float | None = None
     price_max: float | None = None
-    currency: str = "USD"
+    currency: str = "NGN"
     ticket_url: str | None = None
     capacity: int | None = None
     waitlist_enabled: bool = False

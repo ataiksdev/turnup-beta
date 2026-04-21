@@ -30,28 +30,31 @@ export function EventDetailClient({ id }: { id: string }) {
     queryFn: () => eventsApi.get(id, token ?? undefined),
   });
 
+  // Use the real UUID for all subsequent API calls — the URL param may be a slug
+  const eid = event?.id ?? "";
+
   const { data: comments } = useQuery({
-    queryKey: ["comments", id],
-    queryFn: () => socialApi.comments(id),
-    enabled: !!id,
+    queryKey: ["comments", eid],
+    queryFn: () => socialApi.comments(eid),
+    enabled: !!eid,
   });
 
   const { data: tiers } = useQuery({
-    queryKey: ["tiers", id],
-    queryFn: () => eventsApi.tiers(id),
-    enabled: !!id,
+    queryKey: ["tiers", eid],
+    queryFn: () => eventsApi.tiers(eid),
+    enabled: !!eid,
   });
 
   const { data: reviews } = useQuery({
-    queryKey: ["reviews", id],
-    queryFn: () => eventsApi.reviews(id),
-    enabled: !!id,
+    queryKey: ["reviews", eid],
+    queryFn: () => eventsApi.reviews(eid),
+    enabled: !!eid,
   });
 
   const { data: myReview } = useQuery({
-    queryKey: ["my-review", id],
-    queryFn: () => eventsApi.myReview(token!, id),
-    enabled: !!token && !!id,
+    queryKey: ["my-review", eid],
+    queryFn: () => eventsApi.myReview(token!, eid),
+    enabled: !!token && !!eid,
   });
 
   const [comment, setComment]   = useState("");
@@ -70,7 +73,7 @@ export function EventDetailClient({ id }: { id: string }) {
 
   const attendMutation = useMutation({
     mutationFn: (status: "going" | "interested") =>
-      token ? eventsApi.attend(token, id, status) : Promise.reject(),
+      token ? eventsApi.attend(token, eid, status) : Promise.reject(),
     onSuccess: (_, status) => {
       setAttend(status);
       qc.invalidateQueries({ queryKey: ["event", id] });
@@ -78,7 +81,7 @@ export function EventDetailClient({ id }: { id: string }) {
   });
 
   const removeAttendMutation = useMutation({
-    mutationFn: () => token ? eventsApi.removeAttendance(token, id) : Promise.reject(),
+    mutationFn: () => token ? eventsApi.removeAttendance(token, eid) : Promise.reject(),
     onSuccess: () => {
       setAttend(null);
       qc.invalidateQueries({ queryKey: ["event", id] });
@@ -86,30 +89,30 @@ export function EventDetailClient({ id }: { id: string }) {
   });
 
   const saveMutation = useMutation({
-    mutationFn: () => token ? eventsApi.save(token, id) : Promise.reject(),
+    mutationFn: () => token ? eventsApi.save(token, eid) : Promise.reject(),
     onSuccess: (res) => setSaved(res.saved),
   });
 
   const commentMutation = useMutation({
     mutationFn: () =>
       token && comment.trim()
-        ? socialApi.addComment(token, id, comment.trim())
+        ? socialApi.addComment(token, eid, comment.trim())
         : Promise.reject(),
     onSuccess: () => {
       setComment("");
-      qc.invalidateQueries({ queryKey: ["comments", id] });
+      qc.invalidateQueries({ queryKey: ["comments", eid] });
     },
   });
 
   const purchaseMutation = useMutation({
     mutationFn: () =>
       token && selectedTier
-        ? eventsApi.purchase(token, id, selectedTier, qty)
+        ? eventsApi.purchase(token, eid, selectedTier, qty)
         : Promise.reject(),
     onSuccess: () => {
       setPurchaseSuccess(true);
       setSelectedTier(null);
-      qc.invalidateQueries({ queryKey: ["tiers", id] });
+      qc.invalidateQueries({ queryKey: ["tiers", eid] });
       qc.invalidateQueries({ queryKey: ["event", id] });
     },
   });
@@ -117,21 +120,21 @@ export function EventDetailClient({ id }: { id: string }) {
   const reviewMutation = useMutation({
     mutationFn: () =>
       token && reviewRating > 0
-        ? eventsApi.createReview(token, id, reviewRating, reviewBody || undefined)
+        ? eventsApi.createReview(token, eid, reviewRating, reviewBody || undefined)
         : Promise.reject(),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["reviews", id] });
-      qc.invalidateQueries({ queryKey: ["my-review", id] });
+      qc.invalidateQueries({ queryKey: ["reviews", eid] });
+      qc.invalidateQueries({ queryKey: ["my-review", eid] });
     },
   });
 
   const deleteReviewMutation = useMutation({
-    mutationFn: () => token ? eventsApi.deleteReview(token, id) : Promise.reject(),
+    mutationFn: () => token ? eventsApi.deleteReview(token, eid) : Promise.reject(),
     onSuccess: () => {
       setReviewRating(0);
       setReviewBody("");
-      qc.invalidateQueries({ queryKey: ["reviews", id] });
-      qc.invalidateQueries({ queryKey: ["my-review", id] });
+      qc.invalidateQueries({ queryKey: ["reviews", eid] });
+      qc.invalidateQueries({ queryKey: ["my-review", eid] });
     },
   });
 
