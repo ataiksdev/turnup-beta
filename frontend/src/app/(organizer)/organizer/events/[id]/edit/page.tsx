@@ -10,7 +10,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import {
-  AlignLeft, Calendar, DollarSign, Image, MapPin, Plus, Tag,
+  AlignLeft, Calendar, CheckCircle2, DollarSign, FileEdit, Image, MapPin, Plus, Tag,
   Ticket, Trash2, ToggleLeft, ToggleRight, Users, Globe,
   ChevronRight, ChevronLeft, Monitor, Video, Blend,
 } from "lucide-react";
@@ -525,7 +525,7 @@ export default function EditEventPage() {
           <div className="space-y-1.5 pt-1">
             <span className={cn("inline-block px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest",
               form.event_type === "physical" ? "border-border text-text-muted"
-                : form.event_type === "virtual" ? "border-[#3B82F6]/40 text-[#3B82F6] bg-[#3B82F6]/10"
+                : form.event_type === "virtual" ? "border-info/40 text-info bg-info/10"
                 : "border-primary/40 text-primary bg-primary/10")}>
               {form.event_type === "physical" ? "In Person" : form.event_type === "virtual" ? "Virtual" : "Hybrid"}
             </span>
@@ -555,8 +555,10 @@ export default function EditEventPage() {
       <div className={cn("flex items-center justify-between p-4 rounded border-2",
         form.status === "published" ? "border-success/40 bg-success/10" : "border-border bg-bg-card")}>
         <div>
-          <p className="text-sm font-black text-text uppercase tracking-wide">
-            {form.status === "published" ? "✅ Published" : "📝 Draft"}
+          <p className="flex items-center gap-1.5 text-sm font-black text-text uppercase tracking-wide">
+            {form.status === "published"
+              ? <><CheckCircle2 size={14} className="text-success" /> Published</>
+              : <><FileEdit size={14} className="text-text-muted" /> Draft</>}
           </p>
           <p className="text-xs text-text-muted mt-0.5">
             {form.status === "published" ? "Visible to everyone" : "Only you can see this"}

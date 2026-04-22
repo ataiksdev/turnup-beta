@@ -14,7 +14,7 @@ const STATUS_STYLES: Record<string, string> = {
   published: "bg-success/15 text-success border-success/40",
   draft:     "bg-bg-elevated text-text-muted border-border",
   cancelled: "bg-error/15 text-error border-error/40",
-  completed: "bg-[#3B82F6]/15 text-[#3B82F6] border-[#3B82F6]/40",
+  completed: "bg-info/15 text-info border-info/40",
 };
 
 function EventRow({ event }: { event: Event }) {

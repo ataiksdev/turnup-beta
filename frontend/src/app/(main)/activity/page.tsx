@@ -122,7 +122,7 @@ export default function ActivityPage() {
                 </div>
                 {item.type === "attendance" && item.event?.cover_image && (
                   <Link href={`/events/${item.event.slug}`}>
-                    <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-bg-elevated">
+                    <div className="w-12 h-12 rounded overflow-hidden shrink-0 bg-bg-elevated border-2 border-border">
                       <img src={item.event.cover_image} alt="" className="w-full h-full object-cover" />
                     </div>
                   </Link>
@@ -146,7 +146,8 @@ export default function ActivityPage() {
             <div className="px-4 py-2 flex justify-end">
               <button
                 onClick={() => markReadMutation.mutate()}
-                className="flex items-center gap-1.5 text-xs text-primary font-medium"
+                disabled={markReadMutation.isPending}
+                className="flex items-center gap-1.5 text-xs text-primary font-medium disabled:opacity-50"
               >
                 <Check size={12} /> Mark all read
               </button>

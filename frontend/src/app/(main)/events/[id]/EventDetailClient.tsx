@@ -60,6 +60,7 @@ export function EventDetailClient({ id }: { id: string }) {
   const [comment, setComment]   = useState("");
   const [saved, setSaved]       = useState(event?.is_saved ?? false);
   const [attendance, setAttend] = useState(event?.attendance_status ?? null);
+  const [actionError, setActionError] = useState("");
 
   // Ticket purchase state
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
@@ -71,6 +72,11 @@ export function EventDetailClient({ id }: { id: string }) {
   const [reviewBody, setReviewBody]     = useState(myReview?.body ?? "");
   const [hoverStar, setHoverStar]       = useState(0);
 
+  function flashError(msg: string) {
+    setActionError(msg);
+    setTimeout(() => setActionError(""), 3500);
+  }
+
   const attendMutation = useMutation({
     mutationFn: (status: "going" | "interested") =>
       token ? eventsApi.attend(token, eid, status) : Promise.reject(),
@@ -78,6 +84,7 @@ export function EventDetailClient({ id }: { id: string }) {
       setAttend(status);
       qc.invalidateQueries({ queryKey: ["event", id] });
     },
+    onError: () => flashError("Could not update RSVP. Please try again."),
   });
 
   const removeAttendMutation = useMutation({
@@ -86,11 +93,13 @@ export function EventDetailClient({ id }: { id: string }) {
       setAttend(null);
       qc.invalidateQueries({ queryKey: ["event", id] });
     },
+    onError: () => flashError("Could not remove RSVP. Please try again."),
   });
 
   const saveMutation = useMutation({
     mutationFn: () => token ? eventsApi.save(token, eid) : Promise.reject(),
     onSuccess: (res) => setSaved(res.saved),
+    onError: () => flashError("Could not save event. Please try again."),
   });
 
   const commentMutation = useMutation({
@@ -102,6 +111,7 @@ export function EventDetailClient({ id }: { id: string }) {
       setComment("");
       qc.invalidateQueries({ queryKey: ["comments", eid] });
     },
+    onError: () => flashError("Could not post comment. Please try again."),
   });
 
   const purchaseMutation = useMutation({
@@ -136,6 +146,7 @@ export function EventDetailClient({ id }: { id: string }) {
       qc.invalidateQueries({ queryKey: ["reviews", eid] });
       qc.invalidateQueries({ queryKey: ["my-review", eid] });
     },
+    onError: () => flashError("Could not delete review. Please try again."),
   });
 
   if (isLoading) return <EventDetailSkeleton />;
@@ -188,9 +199,10 @@ export function EventDetailClient({ id }: { id: string }) {
               />
               <button
                 onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
                 aria-label={saved ? "Remove from saved" : "Save event"}
                 aria-pressed={saved}
-                className="p-2 rounded-xl bg-bg/60 backdrop-blur-sm hover:bg-bg/80 transition-colors"
+                className="p-2 rounded bg-bg/60 backdrop-blur-sm hover:bg-bg/80 transition-colors disabled:opacity-50"
               >
                 {saved
                   ? <BookmarkCheck size={18} className="text-primary" aria-hidden />
@@ -202,7 +214,7 @@ export function EventDetailClient({ id }: { id: string }) {
 
         {event.is_trending && (
           <div className="absolute top-16 left-4">
-            <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary text-white text-xs font-bold">
+            <span className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-white text-xs font-bold">
               <Flame size={11} aria-hidden /> Trending
             </span>
           </div>
@@ -254,7 +266,7 @@ export function EventDetailClient({ id }: { id: string }) {
         </dl>
 
         {/* Price */}
-        <div className="p-4 rounded-2xl bg-bg-card border border-border">
+        <div className="p-4 rounded border-2 border-border bg-bg-card">
           <p className="text-xs text-text-muted">Admission</p>
           <p className={`text-xl font-black ${event.is_free ? "text-success" : "text-primary"}`}>
             {formatPrice(event.is_free, event.price_min, event.price_max)}
@@ -267,7 +279,7 @@ export function EventDetailClient({ id }: { id: string }) {
             href={event.meeting_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between p-4 rounded-2xl bg-primary/10 border-2 border-primary/30 hover:border-primary transition-colors"
+            className="flex items-center justify-between p-4 rounded border-2 border-primary/30 bg-primary/10 hover:border-primary transition-colors"
           >
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-primary mb-0.5">Join Online</p>
@@ -279,32 +291,37 @@ export function EventDetailClient({ id }: { id: string }) {
 
         {/* RSVP */}
         {user && (
-          <div className="flex gap-2" role="group" aria-label="RSVP options">
-            <Button
-              fullWidth
-              variant={isGoing ? "primary" : "secondary"}
-              loading={attendMutation.isPending}
-              aria-pressed={isGoing}
-              onClick={() => isGoing ? removeAttendMutation.mutate() : attendMutation.mutate("going")}
-            >
-              <CheckCircle2 size={16} aria-hidden />
-              {isGoing ? "Going ✓" : "I'm Going"}
-            </Button>
-            <Button
-              variant={isInterested ? "outline" : "secondary"}
-              loading={attendMutation.isPending}
-              aria-pressed={isInterested}
-              onClick={() => isInterested ? removeAttendMutation.mutate() : attendMutation.mutate("interested")}
-            >
-              {isInterested ? "Interested ✓" : "Interested"}
-            </Button>
+          <div className="space-y-2">
+            <div className="flex gap-2" role="group" aria-label="RSVP options">
+              <Button
+                fullWidth
+                variant={isGoing ? "primary" : "secondary"}
+                loading={attendMutation.isPending || removeAttendMutation.isPending}
+                aria-pressed={isGoing}
+                onClick={() => isGoing ? removeAttendMutation.mutate() : attendMutation.mutate("going")}
+              >
+                <CheckCircle2 size={16} aria-hidden />
+                {isGoing ? "Going ✓" : "I'm Going"}
+              </Button>
+              <Button
+                variant={isInterested ? "outline" : "secondary"}
+                loading={attendMutation.isPending || removeAttendMutation.isPending}
+                aria-pressed={isInterested}
+                onClick={() => isInterested ? removeAttendMutation.mutate() : attendMutation.mutate("interested")}
+              >
+                {isInterested ? "Interested ✓" : "Interested"}
+              </Button>
+            </div>
+            {actionError && (
+              <p className="text-xs text-error text-center">{actionError}</p>
+            )}
           </div>
         )}
 
         {/* Host */}
         <Link
           href={`/profile/${event.host.username}`}
-          className="flex items-center gap-3 p-4 rounded-2xl bg-bg-card border border-border hover:border-border-strong transition-colors"
+          className="flex items-center gap-3 p-4 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors"
           aria-label={`View ${event.host.full_name}'s profile`}
         >
           <Avatar src={event.host.avatar_url} name={event.host.full_name} size="md" verified={event.host.is_verified} />
@@ -335,7 +352,7 @@ export function EventDetailClient({ id }: { id: string }) {
 
         {/* Map placeholder */}
         {event.latitude && event.longitude && (
-          <div className="rounded-2xl overflow-hidden border border-border h-40 bg-bg-card flex items-center justify-center"
+          <div className="rounded border-2 border-border overflow-hidden h-40 bg-bg-card flex items-center justify-center"
             role="img" aria-label={`Map showing ${event.venue_name}, ${event.city}`}>
             <div className="text-center space-y-1">
               <MapPin size={24} className="text-primary mx-auto" aria-hidden />
@@ -464,9 +481,10 @@ export function EventDetailClient({ id }: { id: string }) {
                 {myReview.body && <p className="text-sm text-text-secondary">{myReview.body}</p>}
                 <button
                   onClick={() => deleteReviewMutation.mutate()}
-                  className="text-xs text-error hover:underline"
+                  disabled={deleteReviewMutation.isPending}
+                  className="text-xs text-error hover:underline disabled:opacity-50"
                 >
-                  Delete review
+                  {deleteReviewMutation.isPending ? "Deleting…" : "Delete review"}
                 </button>
               </div>
             ) : (
@@ -510,6 +528,11 @@ export function EventDetailClient({ id }: { id: string }) {
                 >
                   Submit Review
                 </Button>
+                {reviewMutation.isError && (
+                  <p className="text-xs text-error">
+                    {(reviewMutation.error as any)?.message ?? "Could not submit review"}
+                  </p>
+                )}
               </form>
             )}
           </section>
@@ -526,7 +549,7 @@ export function EventDetailClient({ id }: { id: string }) {
               {reviews.map((r) => (
                 <div key={r.id} className="flex gap-2.5">
                   <Avatar src={r.avatar_url} name={r.full_name} size="sm" />
-                  <div className="flex-1 bg-bg-card rounded-2xl px-3 py-2">
+                  <div className="flex-1 bg-bg-card border-2 border-border rounded px-3 py-2">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold text-text">@{r.username}</span>
                       <div className="flex items-center gap-0.5">
@@ -557,18 +580,25 @@ export function EventDetailClient({ id }: { id: string }) {
               aria-label="Add a comment"
             >
               <Avatar src={user.avatar_url} name={user.full_name} size="sm" />
-              <div className="flex-1 flex gap-2">
-                <label htmlFor="comment-input" className="sr-only">Comment</label>
-                <input
-                  id="comment-input"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="flex-1 bg-bg-card border border-border rounded-2xl px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
-                />
-                <Button type="submit" size="sm" loading={commentMutation.isPending}>
-                  Post
-                </Button>
+              <div className="flex-1 flex flex-col gap-1">
+                <div className="flex gap-2">
+                  <label htmlFor="comment-input" className="sr-only">Comment</label>
+                  <input
+                    id="comment-input"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="flex-1 bg-bg-card border-2 border-border rounded px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:border-primary"
+                  />
+                  <Button type="submit" size="sm" loading={commentMutation.isPending}>
+                    Post
+                  </Button>
+                </div>
+                {commentMutation.isError && (
+                  <p className="text-xs text-error">
+                    {(commentMutation.error as any)?.message ?? "Could not post comment"}
+                  </p>
+                )}
               </div>
             </form>
           )}
@@ -577,7 +607,7 @@ export function EventDetailClient({ id }: { id: string }) {
             {comments?.map((c) => (
               <li key={c.id} className="flex gap-2.5">
                 <Avatar src={c.user.avatar_url} name={c.user.full_name} size="sm" />
-                <div className="flex-1 bg-bg-card rounded-2xl px-3 py-2">
+                <div className="flex-1 bg-bg-card border-2 border-border rounded px-3 py-2">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold text-text">@{c.user.username}</span>
                     <time className="text-[10px] text-text-muted" dateTime={c.created_at}>

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { TopBar } from "@/components/layout/TopBar";
 import { Avatar } from "@/components/ui/Avatar";
-import { User, MapPin, Globe, FileText, Image } from "lucide-react";
+import { Lock, User, MapPin, Globe, FileText, Image } from "lucide-react";
 import Link from "next/link";
 
 export default function EditProfilePage() {
@@ -55,7 +55,7 @@ export default function EditProfilePage() {
   if (!user || !token) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4 px-8 text-center">
-        <span className="text-5xl">🔒</span>
+        <Lock size={48} className="text-primary" aria-hidden />
         <p className="text-text-secondary font-bold text-sm uppercase tracking-wide">Sign in to edit your profile</p>
         <Link href="/login"><Button>Log In</Button></Link>
       </div>
@@ -156,13 +156,9 @@ export default function EditProfilePage() {
             <Button type="submit" fullWidth size="lg" loading={loading}>
               Save Profile
             </Button>
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="w-full py-3 rounded border-2 border-border bg-bg-card text-sm font-black text-text-muted uppercase tracking-widest hover:border-primary hover:text-text shadow-brutal-sm transition-all"
-            >
+            <Button type="button" variant="secondary" fullWidth size="lg" onClick={() => router.back()}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       </div>

@@ -566,7 +566,8 @@ async def oauth_callback(
     if not cfg:
         raise HTTPException(400, f"Unknown provider: {provider}")
 
-    async with httpx.AsyncClient() as client:
+    try:
+      async with httpx.AsyncClient() as client:
         # Exchange code for access token
         token_params = {
             "client_id": cfg["client_id"](),
@@ -596,6 +597,10 @@ async def oauth_callback(
             )
         ur.raise_for_status()
         userinfo = ur.json()
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(502, f"OAuth provider error: {exc.response.status_code}")
+    except httpx.RequestError:
+        raise HTTPException(502, "Could not reach OAuth provider")
 
     provider_user_id = str(userinfo.get("sub") or userinfo.get("id", ""))
     email = userinfo.get("email")
@@ -614,7 +619,9 @@ async def oauth_callback(
         # Returning user — update token and log in
         oa.access_token = access_token
         user_result = await db.execute(select(User).where(User.id == oa.user_id))
-        user = user_result.scalar_one()
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(401, "Account no longer exists")
         await db.flush()
         token = await _create_session(db, user, request, device_name=f"{provider.title()} OAuth")
         return OAuthCallbackResponse(

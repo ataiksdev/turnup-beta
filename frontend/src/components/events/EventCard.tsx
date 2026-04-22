@@ -1,7 +1,7 @@
 "use client";
 import { cn, formatEventDateShort, formatPrice } from "@/lib/utils";
 import type { Event } from "@/types";
-import { Bookmark, BookmarkCheck, Flame } from "lucide-react";
+import { AlertCircle, Bookmark, BookmarkCheck, Flame } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
@@ -18,15 +18,20 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
   const { token } = useAuthStore();
   const [saved, setSaved] = useState(event.is_saved);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   async function toggleSave(e: React.MouseEvent) {
     e.preventDefault();
     if (!token || saving) return;
     setSaving(true);
+    setSaveError(false);
     try {
       const res = await eventsApi.save(token, event.id);
       setSaved(res.saved);
-    } catch { /* swallow */ } finally {
+    } catch {
+      setSaveError(true);
+      setTimeout(() => setSaveError(false), 2500);
+    } finally {
       setSaving(false);
     }
   }
@@ -79,10 +84,12 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
           className={cn(
             "absolute top-1.5 right-1.5 p-1.5 rounded border border-white/30 transition-all",
             "bg-black/60 hover:bg-black/80",
-            saving && "opacity-50",
+            (saving || saveError) && "opacity-50",
           )}
         >
-          {saved
+          {saveError
+            ? <AlertCircle size={12} className="text-error" />
+            : saved
             ? <BookmarkCheck size={12} className="text-primary" />
             : <Bookmark size={12} className="text-white" />}
         </button>

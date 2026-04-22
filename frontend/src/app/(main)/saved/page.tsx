@@ -12,7 +12,7 @@ import { Bookmark } from "lucide-react";
 export default function SavedPage() {
   const { token, user } = useAuthStore();
 
-  const { data: saved, isLoading } = useQuery({
+  const { data: saved, isLoading, isError } = useQuery({
     queryKey: ["saved", user?.username],
     queryFn: () => (token && user) ? usersApi.saved(user.username, token) : Promise.resolve([]),
     enabled: !!token && !!user,
@@ -39,6 +39,12 @@ export default function SavedPage() {
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-52 w-full" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <Bookmark size={40} className="text-border-strong" aria-hidden />
+            <p className="text-text-secondary font-medium">Could not load saved events</p>
+            <p className="text-sm text-text-muted">Check your connection and try again</p>
           </div>
         ) : saved && saved.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">

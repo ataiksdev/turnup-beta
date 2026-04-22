@@ -25,7 +25,7 @@ const variants: Record<Variant, string> = {
     "text-text-secondary hover:text-text hover:bg-bg-elevated border border-border-subtle font-medium",
   outline:
     "bg-transparent text-primary border-2 border-primary font-bold " +
-    "shadow-brutal-primary hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#A855F7] " +
+    "shadow-brutal-primary hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-primary-lg " +
     "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
   danger:
     "bg-error text-white border-2 border-border font-bold " +

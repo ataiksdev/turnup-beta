@@ -549,7 +549,9 @@ async def remove_attendance(
         EventAttendee.event_id == event_id, EventAttendee.user_id == user.id))).scalar_one_or_none()
     if not att:
         raise HTTPException(404, "Not attending")
-    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one()
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
     if att.status == "going":
         event.attendees_count = max(0, event.attendees_count - 1)
         await db.execute(update(User).where(User.id == user.id).values(

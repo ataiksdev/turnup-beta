@@ -29,7 +29,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             "transition-all duration-100",
             icon && "pl-10",
             iconRight && "pr-10",
-            error && "border-error focus:border-error focus:shadow-[3px_3px_0_#EF4444]",
+            error && "border-error focus:border-error focus:shadow-brutal-error",
             className,
           )}
           {...props}

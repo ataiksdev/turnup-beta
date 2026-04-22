@@ -659,7 +659,7 @@ export default function CreateEventPage() {
               <span className={cn(
                 "px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest",
                 form.event_type === "physical" ? "border-border text-text-muted"
-                  : form.event_type === "virtual" ? "border-[#3B82F6]/40 text-[#3B82F6] bg-[#3B82F6]/10"
+                  : form.event_type === "virtual" ? "border-info/40 text-info bg-info/10"
                   : "border-primary/40 text-primary bg-primary/10",
               )}>
                 {form.event_type === "physical" ? "In Person"
@@ -716,14 +716,9 @@ export default function CreateEventPage() {
         <Button fullWidth size="lg" loading={submitting} onClick={() => submit("published")}>
           Publish Event
         </Button>
-        <button
-          type="button"
-          disabled={submitting}
-          onClick={() => submit("draft")}
-          className="w-full py-3 rounded border-2 border-border bg-bg-card text-sm font-black text-text-muted uppercase tracking-widest hover:border-primary hover:text-text shadow-brutal-sm transition-all disabled:opacity-50"
-        >
+        <Button variant="secondary" fullWidth size="lg" disabled={submitting} onClick={() => submit("draft")}>
           Save as Draft
-        </button>
+        </Button>
       </div>
     </div>
   );
