@@ -2,6 +2,7 @@ import { EventCard } from "./EventCard";
 import { EventCardSkeleton } from "@/components/ui/Skeleton";
 import type { Event } from "@/types";
 import Link from "next/link";
+import { CalendarX } from "lucide-react";
 
 interface EventCarouselProps {
   title: string;
@@ -14,6 +15,9 @@ interface EventCarouselProps {
 export function EventCarousel({
   title, events, loading, seeAllHref, cardSize = "md",
 }: EventCarouselProps) {
+  // Don't render the section at all when events loaded as empty
+  if (!loading && events !== undefined && events.length === 0) return null;
+
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between px-4">

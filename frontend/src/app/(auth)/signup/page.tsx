@@ -88,11 +88,14 @@ export default function SignupPage() {
   }
 
   async function handleOAuth(provider: "google" | "instagram") {
+    setLoading(true);
+    setError("");
     try {
       const { url } = await authApi.getOAuthUrl(provider);
       window.location.href = url;
     } catch (err: any) {
       setError(err.message ?? "OAuth unavailable");
+      setLoading(false);
     }
   }
 
@@ -223,12 +226,12 @@ export default function SignupPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <button type="button" onClick={() => handleOAuth("google")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
+          <button type="button" disabled={loading} onClick={() => handleOAuth("google")}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-brutal-sm disabled:translate-x-0 disabled:translate-y-0">
             <GoogleIcon /> Google
           </button>
-          <button type="button" onClick={() => handleOAuth("instagram")}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
+          <button type="button" disabled={loading} onClick={() => handleOAuth("instagram")}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded border-2 border-border bg-bg-card text-sm font-bold text-text hover:bg-bg-elevated shadow-brutal-sm hover:shadow-brutal transition-all duration-100 active:shadow-none active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-brutal-sm disabled:translate-x-0 disabled:translate-y-0">
             <InstagramIcon /> Instagram
           </button>
         </div>

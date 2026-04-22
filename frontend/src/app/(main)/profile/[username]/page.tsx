@@ -23,25 +23,26 @@ export default function ProfilePage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("events");
   const [showPast, setShowPast] = useState(false);
+  const [followError, setFollowError] = useState("");
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["user", username],
     queryFn: () => usersApi.get(username, token ?? undefined),
   });
 
-  const { data: events } = useQuery({
+  const eventsQuery = useQuery({
     queryKey: ["user-events", username, showPast],
     queryFn: () => usersApi.events(username, showPast),
     enabled: tab === "events",
   });
 
-  const { data: attending } = useQuery({
+  const attendingQuery = useQuery({
     queryKey: ["user-attending", username, showPast],
     queryFn: () => token ? usersApi.attending(username, token, showPast) : Promise.resolve([]),
     enabled: tab === "attending" && !!token && me?.username === username,
   });
 
-  const { data: saved } = useQuery({
+  const savedQuery = useQuery({
     queryKey: ["user-saved", username],
     queryFn: () => token ? usersApi.saved(username, token) : Promise.resolve([]),
     enabled: tab === "saved" && !!token && me?.username === username,
@@ -53,13 +54,19 @@ export default function ProfilePage() {
         ? socialApi.unfollow(token!, username)
         : socialApi.follow(token!, username),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["user", username] }),
+    onError: () => {
+      setFollowError("Could not update follow. Please try again.");
+      setTimeout(() => setFollowError(""), 3000);
+    },
   });
 
   const isOwnProfile = me?.username === username;
   const prefs = parsePreferences(profile?.category_preferences);
 
   const tabs: Tab[] = isOwnProfile ? ["events", "attending", "saved"] : ["events"];
-  const displayEvents = tab === "events" ? events : tab === "attending" ? attending : saved;
+
+  const activeQuery = tab === "events" ? eventsQuery : tab === "attending" ? attendingQuery : savedQuery;
+  const displayEvents = activeQuery.data;
 
   const EMPTY: Record<Tab, { icon: LucideIcon; label: string }> = {
     events:    { icon: Ticket,   label: showPast ? "No past events hosted" : "No upcoming events hosted" },
@@ -117,14 +124,19 @@ export default function ProfilePage() {
               </button>
             </>
           ) : token ? (
-            <Button
-              variant={profile.is_following ? "secondary" : "primary"}
-              size="sm"
-              loading={followMutation.isPending}
-              onClick={() => followMutation.mutate()}
-            >
-              {profile.is_following ? "Following" : "Follow"}
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                variant={profile.is_following ? "secondary" : "primary"}
+                size="sm"
+                loading={followMutation.isPending}
+                onClick={() => followMutation.mutate()}
+              >
+                {profile.is_following ? "Following" : "Follow"}
+              </Button>
+              {followError && (
+                <p className="text-[10px] text-error font-medium">{followError}</p>
+              )}
+            </div>
           ) : null}
         </div>
       </div>
@@ -231,7 +243,17 @@ export default function ProfilePage() {
 
       {/* Events grid */}
       <div className="px-4">
-        {displayEvents && displayEvents.length > 0 ? (
+        {activeQuery.isLoading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        ) : activeQuery.isError ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+            {(() => { const Icon = EMPTY[tab].icon; return <Icon size={36} className="text-border-strong" aria-hidden />; })()}
+            <p className="text-sm font-black text-error uppercase tracking-wide">Failed to load</p>
+            <p className="text-xs text-text-muted">Check your connection and try again</p>
+          </div>
+        ) : displayEvents && displayEvents.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
             {displayEvents.map((e) => (
               <EventCard key={e.id} event={e} size="sm" className="w-full" />

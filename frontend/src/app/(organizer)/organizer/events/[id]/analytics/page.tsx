@@ -33,7 +33,7 @@ export default function EventAnalyticsPage() {
     enabled: !!id,
   });
 
-  const { data: analytics, isLoading } = useQuery({
+  const { data: analytics, isLoading, isError } = useQuery({
     queryKey: ["analytics", id],
     queryFn: () => eventsApi.analytics(token!, id),
     enabled: !!token && !!id,
@@ -51,6 +51,21 @@ export default function EventAnalyticsPage() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-3 px-6 text-center">
+        <BarChart2 size={40} className="text-error/50" aria-hidden />
+        <p className="text-text-secondary font-bold text-sm uppercase tracking-wide">
+          Could not load analytics
+        </p>
+        <p className="text-xs text-text-muted">Check your connection and try again</p>
+        <Link href={`/organizer/events/${id}/edit`} className="text-primary text-sm font-medium hover:underline">
+          ← Back to event
+        </Link>
+      </div>
+    );
+  }
+
   if (!analytics) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3 px-6 text-center">
@@ -58,6 +73,7 @@ export default function EventAnalyticsPage() {
         <p className="text-text-secondary font-bold text-sm uppercase tracking-wide">
           No analytics yet
         </p>
+        <p className="text-xs text-text-muted">Data will appear once your event has views</p>
         <Link href={`/organizer/events/${id}/edit`} className="text-primary text-sm font-medium hover:underline">
           ← Back to event
         </Link>

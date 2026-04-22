@@ -96,7 +96,7 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
     db.add(user)
     await db.flush()
 
-    # Send verification email
+    # Send verification email (non-fatal — user is created regardless)
     ev_token = secrets.token_urlsafe(64)
     db.add(EmailVerification(
         user_id=user.id,
@@ -104,7 +104,10 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
         expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.email_verify_expire_hours),
     ))
     await db.flush()
-    await send_verification_email(user.email, ev_token)
+    try:
+        await send_verification_email(user.email, ev_token)
+    except Exception:
+        pass
 
     return await _create_session(db, user, request)
 
@@ -186,7 +189,10 @@ async def resend_verification(
         expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.email_verify_expire_hours),
     ))
     await db.flush()
-    await send_verification_email(user.email, ev_token)
+    try:
+        await send_verification_email(user.email, ev_token)
+    except Exception:
+        raise HTTPException(503, "Could not send verification email. Please try again later.")
     return MessageResponse(message="Verification email sent")
 
 
@@ -210,7 +216,10 @@ async def forgot_password(
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.password_reset_expire_minutes),
         ))
         await db.flush()
-        await send_password_reset_email(user.email, token)
+        try:
+            await send_password_reset_email(user.email, token)
+        except Exception:
+            pass  # silent — message is already non-committal
     return MessageResponse(message="If that email exists, a reset link has been sent")
 
 
@@ -751,7 +760,10 @@ async def phone_send_otp(
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.otp_expiry_minutes),
     ))
     await db.flush()
-    await send_otp_sms(payload.phone_number, otp_code)
+    try:
+        await send_otp_sms(payload.phone_number, otp_code)
+    except Exception:
+        raise HTTPException(503, "Could not send SMS. Please try again later.")
     return MessageResponse(message="OTP sent")
 
 
