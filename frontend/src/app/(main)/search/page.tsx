@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, Suspense, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { cn, parsePreferences } from "@/lib/utils";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
@@ -35,12 +35,14 @@ const EVENT_TYPES: { label: string; value: string; icon?: LucideIcon }[] = [
 ];
 
 function SearchContent() {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  const userTopCat = parsePreferences(user?.category_preferences)[0];
+
   const [q, setQ] = useState(searchParams.get("q") ?? "");
-  const [activeCategory, setActiveCategory] = useState(searchParams.get("category") ?? "");
+  const [activeCategory, setActiveCategory] = useState(searchParams.get("category") ?? userTopCat ?? "");
   const [activeType, setActiveType] = useState(searchParams.get("event_type") ?? "");
   const [freeOnly, setFreeOnly] = useState(searchParams.get("free") === "true");
 

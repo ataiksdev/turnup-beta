@@ -10,13 +10,26 @@ import { parsePreferences, displayName as getDisplayName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import type { Event } from "@/types";
+import type { Event, User } from "@/types";
 
 function getGreeting(name?: string): string {
   const hour = new Date().getHours();
   const part = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
   return name ? `Good ${part}, ${name.split(" ")[0]}` : `Good ${part}`;
 }
+
+function getSubtitle(user: User | null): string {
+  if (!user) return "What are you doing this weekend?";
+  if (user.city && user.goes_out_when === "weekends") return `What's on in ${user.city} this weekend?`;
+  if (user.city) return `What's happening in ${user.city}?`;
+  if (user.goes_out_when === "weekdays") return "What's on this week?";
+  return "What are you doing this weekend?";
+}
+
+const CAT_LABELS: Record<string, string> = {
+  music: "Music", nightlife: "Nightlife", arts: "Arts", food: "Food & Drink",
+  tech: "Tech", sports: "Sports", comedy: "Comedy", wellness: "Wellness",
+};
 
 function deriveReason(event: Event, prefs: string[]): string | undefined {
   if (!event.category) return undefined;
@@ -50,6 +63,19 @@ export default function DiscoverPage() {
     queryFn: () => eventsApi.list({ free: true, limit: 10 }, token ?? undefined),
   });
 
+  const { data: inCity } = useQuery({
+    queryKey: ["events", "city", user?.city],
+    queryFn: () => eventsApi.list({ city: user!.city!, limit: 8 }, token ?? undefined),
+    enabled: !!user?.city,
+  });
+
+  const topCatSlug = prefs[0];
+  const { data: byCat } = useQuery({
+    queryKey: ["events", "cat", topCatSlug],
+    queryFn: () => eventsApi.list({ category: topCatSlug, limit: 8 }, token ?? undefined),
+    enabled: !!topCatSlug,
+  });
+
   const heroEvent = featured?.[0];
   const topPicks = forYou?.slice(0, 3) ?? [];
 
@@ -61,7 +87,7 @@ export default function DiscoverPage() {
       <div className="px-4 -mt-2">
         <h1 className="text-2xl font-black text-text">{getGreeting(user ? getDisplayName(user) : undefined)}</h1>
         <p className="text-xs font-bold text-text-muted uppercase tracking-widest mt-1">
-          What are you doing this weekend?
+          {getSubtitle(user)}
         </p>
       </div>
 
@@ -124,6 +150,20 @@ export default function DiscoverPage() {
           </div>
         )}
       </section>
+
+      {user?.city && inCity && inCity.length > 0 && (
+        <EventCarousel
+          title={`In ${user.city} This Weekend`}
+          events={inCity}
+        />
+      )}
+
+      {topCatSlug && byCat && byCat.length > 0 && (
+        <EventCarousel
+          title={`Because You Love ${CAT_LABELS[topCatSlug] ?? topCatSlug}`}
+          events={byCat}
+        />
+      )}
 
       {/* Hero featured event — full bleed */}
       {!loadingFeatured && heroEvent && (

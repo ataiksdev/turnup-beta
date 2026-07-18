@@ -94,12 +94,23 @@ export const authApi = {
   updateMe: (token: string, data: Partial<User>) =>
     request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(data) }, token),
 
-  completeOnboarding: (token: string, categoryPreferences: string[]) =>
-    request<{ onboarding_completed: boolean; category_preferences: string }>(
-      "/auth/onboarding",
-      { method: "POST", body: JSON.stringify({ category_preferences: categoryPreferences }) },
-      token,
-    ),
+  completeOnboarding: (token: string, payload: {
+    category_preferences: string[];
+    city?: string;
+    goes_out_when?: string;
+    price_sensitivity?: string;
+    event_format_pref?: string;
+  }) =>
+    request<User>("/auth/onboarding", { method: "POST", body: JSON.stringify(payload) }, token),
+
+  updatePreferences: (token: string, payload: {
+    category_preferences?: string[];
+    city?: string;
+    goes_out_when?: string;
+    price_sensitivity?: string;
+    event_format_pref?: string;
+  }) =>
+    request<User>("/auth/preferences", { method: "PATCH", body: JSON.stringify(payload) }, token),
 
   getOAuthUrl: (provider: "google" | "instagram") =>
     request<{ url: string }>(`/auth/oauth/${provider}`),

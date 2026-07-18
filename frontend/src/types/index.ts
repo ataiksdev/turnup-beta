@@ -16,6 +16,10 @@ export interface User {
   events_hosted: number;
   events_attended: number;
   category_preferences?: string | null;
+  city?: string | null;
+  price_sensitivity?: string | null;
+  event_format_pref?: string | null;
+  goes_out_when?: string | null;
   onboarding_completed?: boolean;
   created_at?: string;
   is_following?: boolean;

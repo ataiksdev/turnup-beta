@@ -9,6 +9,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Avatar } from "@/components/ui/Avatar";
 import { Lock, User, MapPin, Globe, FileText, Image, Smile } from "lucide-react";
 import Link from "next/link";
+import { parsePreferences } from "@/lib/utils";
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -167,6 +168,40 @@ export default function EditProfilePage() {
               icon={<Image size={16} />}
             />
             <p className="text-[10px] text-text-muted">Paste a direct image URL. Upload support coming soon.</p>
+          </div>
+
+          <div className="border-2 border-border rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black uppercase tracking-wide">Your Preferences</h3>
+              <Link href="/onboarding" className="text-xs text-primary font-bold hover:underline">
+                Update →
+              </Link>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {parsePreferences(user?.category_preferences).map(slug => (
+                <span key={slug} className="text-xs font-bold px-2 py-1 rounded border-2 border-border bg-bg-elevated capitalize">
+                  {slug}
+                </span>
+              ))}
+              {user?.city && (
+                <span className="text-xs font-bold px-2 py-1 rounded border-2 border-primary/30 bg-primary/10 text-primary">
+                  📍 {user.city}
+                </span>
+              )}
+              {user?.price_sensitivity && (
+                <span className="text-xs font-bold px-2 py-1 rounded border-2 border-border bg-bg-elevated">
+                  💰 {({"free":"Free only","budget":"Budget","mid":"Mid-range","any":"No limit"} as Record<string,string>)[user.price_sensitivity] ?? user.price_sensitivity}
+                </span>
+              )}
+              {user?.event_format_pref && (
+                <span className="text-xs font-bold px-2 py-1 rounded border-2 border-border bg-bg-elevated">
+                  {({"physical":"🏟 In-person","virtual":"💻 Online","both":"🌐 Both"} as Record<string,string>)[user.event_format_pref] ?? user.event_format_pref}
+                </span>
+              )}
+              {(!user?.category_preferences && !user?.city) && (
+                <p className="text-xs text-text-muted">No preferences set yet.</p>
+              )}
+            </div>
           </div>
 
           <div className="pt-2 space-y-3">
