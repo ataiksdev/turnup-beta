@@ -47,7 +47,7 @@ export default function EditProfilePage() {
       });
       setUser(updated);
       setSaved(true);
-      setTimeout(() => router.replace(`/profile/${updated.username}`), 800);
+      setTimeout(() => router.back(), 800);
     } catch (err: any) {
       setError(err.message ?? "Failed to save profile");
     } finally {
