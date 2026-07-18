@@ -88,8 +88,9 @@ const TIMEZONES = [
 
 const STEPS = ["Basics", "Time & Place", "Tickets", "Review"];
 
+function uid() { return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2); }
 function newTier(): TierDraft {
-  return { id: crypto.randomUUID(), name: "", description: "", price: "", quantity: "", max_per_order: "10" };
+  return { id: uid(), name: "", description: "", price: "", quantity: "", max_per_order: "10" };
 }
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -253,7 +254,7 @@ function CreateEventPage() {
       tags: typeof d.tags === "string" ? d.tags : f.tags,
       tiers: Array.isArray(d.tiers)
         ? (d.tiers as Record<string, string>[]).map((t) => ({
-            id: crypto.randomUUID(),
+            id: uid(),
             name: t.name ?? "",
             description: t.description ?? "",
             price: t.price ?? "",

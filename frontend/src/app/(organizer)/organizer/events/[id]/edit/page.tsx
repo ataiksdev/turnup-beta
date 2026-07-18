@@ -66,8 +66,9 @@ const EVENT_TYPES: { type: EventType; icon: React.ElementType; label: string; de
 function toLocal(iso: string) {
   try { return new Date(iso).toISOString().slice(0, 16); } catch { return ""; }
 }
+function uid() { return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2); }
 function newTier(): TierDraft {
-  return { id: crypto.randomUUID(), name: "", description: "", price: "", quantity: "", max_per_order: "10" };
+  return { id: uid(), name: "", description: "", price: "", quantity: "", max_per_order: "10" };
 }
 
 // ── Shared UI ─────────────────────────────────────────────────────────────────
