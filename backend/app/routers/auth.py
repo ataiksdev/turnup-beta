@@ -70,6 +70,7 @@ async def _create_session(
     )
     db.add(session)
     await db.flush()
+    await db.commit()
     return Token(access_token=token, token_type="bearer", expires_in=expires_in)
 
 
