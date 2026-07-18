@@ -408,3 +408,83 @@ export const socialApi = {
   feed: (token: string, page = 1) =>
     request<FeedItem[]>(`/social/feed?page=${page}`, {}, token),
 };
+
+// ── Admin ──────────────────────────────────────────────────────────────────────
+
+export interface AdminUserOut {
+  id: string; username: string; full_name: string | null; display_name: string | null;
+  email: string | null; role: string; is_active: boolean; is_verified: boolean;
+  email_verified: boolean; followers_count: number; following_count: number;
+  events_hosted: number; events_attended: number; created_at: string;
+}
+
+export interface AdminEventOut {
+  id: string; title: string; slug: string; status: string;
+  is_featured: boolean; is_trending: boolean; event_type: string;
+  city: string; country: string; start_date: string;
+  attendees_count: number; views_count: number;
+  host_username: string; host_id: string; created_at: string;
+}
+
+export interface AdminCategoryOut {
+  id: string; name: string; slug: string; icon: string; color: string;
+  description: string | null;
+}
+
+export interface AdminOrderOut {
+  id: string; event_id: string; event_title: string; tier_name: string;
+  buyer_username: string; buyer_email: string | null;
+  quantity: number; unit_price: number; total_price: number;
+  currency: string; status: string; created_at: string;
+}
+
+export interface PlatformStats {
+  total_users: number; total_organizers: number; total_events: number;
+  published_events: number; total_orders: number; confirmed_revenue: number;
+  total_attendees: number; new_users_this_week: number; new_events_this_week: number;
+}
+
+export const adminApi = {
+  stats: (token: string) =>
+    request<PlatformStats>("/admin/stats", {}, token),
+
+  users: (token: string, params?: { q?: string; role?: string; skip?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.role) qs.set("role", params.role);
+    if (params?.skip) qs.set("skip", String(params.skip));
+    return request<AdminUserOut[]>(`/admin/users?${qs}`, {}, token);
+  },
+
+  updateUser: (token: string, userId: string, body: { role?: string; is_active?: boolean; is_verified?: boolean }) =>
+    request<AdminUserOut>(`/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) }, token),
+
+  events: (token: string, params?: { q?: string; status?: string; skip?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.skip) qs.set("skip", String(params.skip));
+    return request<AdminEventOut[]>(`/admin/events?${qs}`, {}, token);
+  },
+
+  updateEvent: (token: string, eventId: string, body: { is_featured?: boolean; is_trending?: boolean; status?: string }) =>
+    request<AdminEventOut>(`/admin/events/${eventId}`, { method: "PATCH", body: JSON.stringify(body) }, token),
+
+  categories: (token: string) =>
+    request<AdminCategoryOut[]>("/admin/categories", {}, token),
+
+  createCategory: (token: string, body: { name: string; slug: string; icon: string; color: string; description?: string }) =>
+    request<AdminCategoryOut>("/admin/categories", { method: "POST", body: JSON.stringify(body) }, token),
+
+  updateCategory: (token: string, catId: string, body: Partial<{ name: string; slug: string; icon: string; color: string; description: string }>) =>
+    request<AdminCategoryOut>(`/admin/categories/${catId}`, { method: "PATCH", body: JSON.stringify(body) }, token),
+
+  deleteCategory: (token: string, catId: string) =>
+    request<void>(`/admin/categories/${catId}`, { method: "DELETE" }, token),
+
+  orders: (token: string, params?: { skip?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.skip) qs.set("skip", String(params.skip));
+    return request<AdminOrderOut[]>(`/admin/orders?${qs}`, {}, token);
+  },
+};

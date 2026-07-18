@@ -1,6 +1,6 @@
 "use client";
 import { cn, displayName } from "@/lib/utils";
-import { Bell, ChevronLeft, LayoutDashboard } from "lucide-react";
+import { Bell, ChevronLeft, LayoutDashboard, Shield } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -19,6 +19,7 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
   const router = useRouter();
   const { user } = useAuthStore();
   const isOrganizer = user?.role === "organizer";
+  const isAdmin = user?.role === "admin";
 
   return (
     <header
@@ -54,6 +55,19 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
       {/* Right */}
       <div className="flex items-center gap-1">
         {actions}
+        {/* Admin shortcut */}
+        {!back && isAdmin && (
+          <Link
+            href="/admin"
+            aria-label="Switch to admin panel"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded border-2 border-red-300 bg-red-100 hover:bg-red-200 transition-colors"
+          >
+            <Shield size={13} className="text-red-700" aria-hidden />
+            <span className="text-[10px] font-black text-red-700 uppercase tracking-wider hidden xs:inline">
+              Admin
+            </span>
+          </Link>
+        )}
         {/* Organizer shortcut — visible to organizers in the attendee layout */}
         {!back && isOrganizer && (
           <Link
