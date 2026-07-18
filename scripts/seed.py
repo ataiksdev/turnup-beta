@@ -5,6 +5,7 @@ Turnup seeder — run from the project root:
 """
 import asyncio, os, re, sys, uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -20,8 +21,11 @@ from app.models.user import User
 from app.services.auth import hash_password
 
 
+_WAT = ZoneInfo("Africa/Lagos")
+
+
 def utc(days: int, hour: int = 20) -> datetime:
-    d = datetime.now(timezone.utc) + timedelta(days=days)
+    d = datetime.now(_WAT) + timedelta(days=days)
     return d.replace(hour=hour, minute=0, second=0, microsecond=0)
 
 
