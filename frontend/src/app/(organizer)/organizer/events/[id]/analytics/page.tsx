@@ -5,7 +5,7 @@ import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { formatPrice } from "@/lib/utils";
-import { BarChart2, Eye, Heart, Bookmark, Ticket, TrendingUp, Users, Clock } from "lucide-react";
+import { BarChart2, Eye, Heart, Bookmark, Ticket, TrendingUp, Users, Clock, ScanLine } from "lucide-react";
 import Link from "next/link";
 
 function StatCard({ icon, label, value, sub }: {
@@ -103,6 +103,12 @@ export default function EventAnalyticsPage() {
             className="flex-1 py-2.5 text-center text-[10px] font-black uppercase tracking-widest rounded border-2 border-border bg-bg-card hover:border-primary transition-colors shadow-brutal-sm"
           >
             View Page
+          </Link>
+          <Link
+            href={`/organizer/events/${id}/checkin`}
+            className="flex items-center gap-1 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest rounded border-2 border-primary bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors shadow-brutal-sm"
+          >
+            <ScanLine size={12} /> Scan
           </Link>
         </div>
 

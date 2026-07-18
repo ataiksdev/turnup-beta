@@ -21,10 +21,11 @@ from app.schemas.event import (
     AttendRequest, CategoryOut, EventCreate, EventDetail, EventOut, EventUpdate,
 )
 from app.schemas.organizer import (
-    AnalyticsOut, CoHostInviteRequest, CoHostOut, CoHostRespondRequest,
-    DailyViewOut, PaymentInitOut, PurchaseTicketRequest, ReviewCreate, ReviewOut,
-    TicketOrderOut, TicketTierCreate, TicketTierOut, TicketTierUpdate,
-    VerifyPaymentRequest, WaitlistEntryOut, WaitlistNotifyRequest, WaitlistStatusOut,
+    AnalyticsOut, CheckInRequest, CheckInResult, CoHostInviteRequest, CoHostOut,
+    CoHostRespondRequest, DailyViewOut, PaymentInitOut, PurchaseTicketRequest,
+    ReviewCreate, ReviewOut, TicketOrderOut, TicketTierCreate, TicketTierOut,
+    TicketTierUpdate, VerifyPaymentRequest, WaitlistEntryOut, WaitlistNotifyRequest,
+    WaitlistStatusOut,
 )
 from app.services.paystack import initialize_transaction, verify_transaction
 from app.schemas.user import UserSummary
@@ -1269,6 +1270,67 @@ async def notify_waitlist(
         notified.append(entry.user.username)
     await db.flush()
     return {"notified": notified, "count": len(notified)}
+
+
+# ── Check-in ─────────────────────────────────────────────────────────────────
+
+@router.post("/{event_id}/checkin", response_model=CheckInResult)
+async def check_in_ticket(
+    event_id: str,
+    payload: CheckInRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Validate and mark a ticket as checked in. Only the event host can call this."""
+    event = (await db.execute(
+        select(Event).where(Event.id == event_id)
+    )).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.host_id != user.id:
+        # Also allow co-hosts
+        cohost = (await db.execute(
+            select(EventCoHost).where(
+                EventCoHost.event_id == event_id,
+                EventCoHost.user_id == user.id,
+                EventCoHost.status == "accepted",
+            )
+        )).scalar_one_or_none()
+        if not cohost:
+            raise HTTPException(403, "Only the event host or a co-host can check in attendees")
+
+    order = (await db.execute(
+        select(TicketOrder)
+        .options(selectinload(TicketOrder.tier), selectinload(TicketOrder.user))
+        .where(
+            TicketOrder.ticket_code == payload.ticket_code,
+            TicketOrder.event_id == event_id,
+        )
+    )).scalar_one_or_none()
+
+    if not order:
+        raise HTTPException(404, "Ticket not found for this event")
+    if order.status != "confirmed":
+        raise HTTPException(400, f"Ticket is not confirmed (status: {order.status})")
+    if order.checked_in_at is not None:
+        raise HTTPException(409, "Ticket already checked in")
+
+    order.checked_in_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    attendee_name = (
+        order.user.display_name or order.user.full_name or order.user.username
+        if order.user else "Attendee"
+    )
+
+    return CheckInResult(
+        order_id=order.id,
+        ticket_code=order.ticket_code,
+        attendee_name=attendee_name,
+        tier_name=order.tier.name,
+        quantity=order.quantity,
+        checked_in_at=order.checked_in_at,
+    )
 
 
 # ── Reviews ───────────────────────────────────────────────────────────────────

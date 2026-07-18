@@ -216,6 +216,19 @@ class DashboardOut(BaseModel):
 
 # ── Reviews ───────────────────────────────────────────────────────────────────
 
+class CheckInRequest(BaseModel):
+    ticket_code: str
+
+
+class CheckInResult(BaseModel):
+    order_id: str
+    ticket_code: str
+    attendee_name: str
+    tier_name: str
+    quantity: int
+    checked_in_at: datetime
+
+
 class ReviewCreate(BaseModel):
     rating: int = Field(ge=1, le=5)
     body: str | None = Field(None, max_length=2000)

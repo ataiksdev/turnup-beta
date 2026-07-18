@@ -36,6 +36,15 @@ export interface EventAnalytics {
   daily_views: DailyView[];
 }
 
+export interface CheckInResult {
+  order_id: string;
+  ticket_code: string;
+  attendee_name: string;
+  tier_name: string;
+  quantity: number;
+  checked_in_at: string;
+}
+
 export interface Review {
   id: string; event_id: string; user_id: string; username: string;
   full_name: string; avatar_url: string | null; rating: number;
@@ -211,6 +220,11 @@ export const eventsApi = {
   verifyPayment: (token: string, eventId: string, tierId: string, reference: string) =>
     request<TicketOrder>(`/events/${eventId}/tickets/${tierId}/verify-payment`, {
       method: "POST", body: JSON.stringify({ reference }),
+    }, token),
+
+  checkIn: (token: string, eventId: string, ticketCode: string) =>
+    request<CheckInResult>(`/events/${eventId}/checkin`, {
+      method: "POST", body: JSON.stringify({ ticket_code: ticketCode }),
     }, token),
 
   waitlistJoin: (token: string, eventId: string) =>
