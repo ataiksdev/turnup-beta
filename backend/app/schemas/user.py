@@ -8,10 +8,14 @@ class UserSummary(BaseModel):
     username: str
     full_name: str
     display_name: str | None = None
+    bio: str | None = None
     avatar_url: str | None
     is_verified: bool
     role: str
     followers_count: int
+    events_hosted: int = 0
+    avg_rating: float | None = None
+    review_count: int = 0
     model_config = {"from_attributes": True}
 
 
@@ -30,6 +34,8 @@ class UserPublic(BaseModel):
     following_count: int
     events_hosted: int
     events_attended: int
+    avg_rating: float | None = None
+    review_count: int = 0
     category_preferences: str | None
     created_at: datetime
     is_following: bool = False

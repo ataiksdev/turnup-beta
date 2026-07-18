@@ -15,6 +15,8 @@ export interface User {
   following_count: number;
   events_hosted: number;
   events_attended: number;
+  avg_rating?: number | null;
+  review_count?: number;
   category_preferences?: string | null;
   city?: string | null;
   price_sensitivity?: string | null;
@@ -72,6 +74,8 @@ export interface Event {
   waitlist_count?: number;
   is_waitlisted?: boolean;
   series_id?: string | null;
+  avg_rating?: number | null;
+  review_count?: number;
 }
 
 export interface Comment {

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount, displayName } from "@/lib/utils";
-import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, type LucideIcon } from "lucide-react";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
@@ -118,8 +118,28 @@ export default function ProfilePage() {
       {/* Name + action */}
       <div className="flex items-end justify-between px-4 pt-3 pb-4" style={{ marginTop: "2.5rem" }}>
         <div>
-          <h1 className="text-xl font-black text-text">{displayName(profile)}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-black text-text">{displayName(profile)}</h1>
+            {profile.role === "organizer" && (
+              <span className="px-2 py-0.5 rounded border border-primary/40 bg-primary/10 text-[10px] font-black text-primary uppercase tracking-widest">
+                Organizer
+              </span>
+            )}
+          </div>
           <p className="text-xs text-text-muted font-bold uppercase tracking-widest">@{profile.username}</p>
+          {profile.role === "organizer" && profile.avg_rating && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <div className="flex items-center gap-0.5">
+                {[1,2,3,4,5].map((s) => (
+                  <Star key={s} size={11} className={s <= Math.round(profile.avg_rating!) ? "fill-primary text-primary" : "text-border"} />
+                ))}
+              </div>
+              <span className="text-xs font-bold text-text">{profile.avg_rating.toFixed(1)}</span>
+              {(profile.review_count ?? 0) > 0 && (
+                <span className="text-xs text-text-muted">({profile.review_count} review{profile.review_count !== 1 ? "s" : ""})</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           {isOwnProfile ? (
@@ -172,13 +192,20 @@ export default function ProfilePage() {
       </div>
 
       {/* Stats */}
-      <div className="mx-4 grid grid-cols-4 border-2 border-border rounded shadow-brutal-sm mb-4">
-        {[
-          { label: "Followers", value: formatCount(profile.followers_count), onClick: () => setFollowListModal("followers") },
-          { label: "Following", value: formatCount(profile.following_count), onClick: () => setFollowListModal("following") },
-          { label: "Hosted",    value: profile.events_hosted, onClick: undefined },
-          { label: "Attended",  value: profile.events_attended, onClick: undefined },
-        ].map(({ label, value, onClick }, i, arr) => (
+      <div className={`mx-4 grid border-2 border-border rounded shadow-brutal-sm mb-4 ${profile.role === "organizer" && profile.avg_rating ? "grid-cols-3" : "grid-cols-4"}`}>
+        {(profile.role === "organizer" && profile.avg_rating
+          ? [
+              { label: "Followers", value: formatCount(profile.followers_count), onClick: () => setFollowListModal("followers") },
+              { label: "Following", value: formatCount(profile.following_count), onClick: () => setFollowListModal("following") },
+              { label: "Hosted",    value: profile.events_hosted, onClick: undefined },
+            ]
+          : [
+              { label: "Followers", value: formatCount(profile.followers_count), onClick: () => setFollowListModal("followers") },
+              { label: "Following", value: formatCount(profile.following_count), onClick: () => setFollowListModal("following") },
+              { label: "Hosted",    value: profile.events_hosted, onClick: undefined },
+              { label: "Attended",  value: profile.events_attended, onClick: undefined },
+            ]
+        ).map(({ label, value, onClick }, i, arr) => (
           <div
             key={label}
             role={onClick ? "button" : undefined}

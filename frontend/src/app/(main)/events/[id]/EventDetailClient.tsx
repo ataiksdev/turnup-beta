@@ -426,16 +426,42 @@ export function EventDetailClient({ id }: { id: string }) {
         {/* Host */}
         <Link
           href={`/profile/${event.host.username}`}
-          className="flex items-center gap-3 p-4 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors"
+          className="flex flex-col gap-3 p-4 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors"
           aria-label={`View ${displayName(event.host)}'s profile`}
         >
-          <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="md" verified={event.host.is_verified} />
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-text-muted">Hosted by</p>
-            <p className="text-sm font-semibold text-text">{displayName(event.host)}</p>
-            <p className="text-xs text-text-muted">@{event.host.username}</p>
+          <div className="flex items-center gap-3">
+            <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="md" verified={event.host.is_verified} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-text-muted">Hosted by</p>
+              <p className="text-sm font-semibold text-text">{displayName(event.host)}</p>
+              <p className="text-xs text-text-muted">@{event.host.username}</p>
+            </div>
+            <span className="text-xs text-primary shrink-0" aria-hidden>View profile →</span>
           </div>
-          <span className="text-xs text-primary" aria-hidden>View profile →</span>
+          {/* Organizer stats row */}
+          <div className="flex items-center gap-3 text-xs text-text-muted flex-wrap">
+            {(event.host.events_hosted ?? 0) > 0 && (
+              <span className="flex items-center gap-1">
+                <Ticket size={11} className="text-primary" aria-hidden />
+                {event.host.events_hosted} event{event.host.events_hosted !== 1 ? "s" : ""}
+              </span>
+            )}
+            {event.host.avg_rating && (
+              <span className="flex items-center gap-1">
+                <Star size={11} className="fill-primary text-primary" aria-hidden />
+                {event.host.avg_rating.toFixed(1)}
+                {(event.host.review_count ?? 0) > 0 && (
+                  <span className="text-text-muted">({event.host.review_count})</span>
+                )}
+              </span>
+            )}
+            {event.host.followers_count > 0 && (
+              <span>{event.host.followers_count.toLocaleString()} follower{event.host.followers_count !== 1 ? "s" : ""}</span>
+            )}
+          </div>
+          {event.host.bio && (
+            <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">{event.host.bio}</p>
+          )}
         </Link>
 
         {event.series_id && <SeriesSection seriesId={event.series_id} currentEventId={event.id} />}
@@ -704,10 +730,21 @@ export function EventDetailClient({ id }: { id: string }) {
         {/* Community reviews */}
         {reviews && reviews.length > 0 && (
           <section aria-labelledby="all-reviews-heading">
-            <h2 id="all-reviews-heading" className="text-base font-bold text-text flex items-center gap-2 mb-3">
+            <h2 id="all-reviews-heading" className="text-base font-bold text-text flex items-center gap-2 mb-1">
               <Star size={18} className="text-primary" />
               Reviews <span className="text-text-muted font-normal text-sm">({reviews.length})</span>
             </h2>
+            {event.avg_rating && (
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl font-black text-text">{event.avg_rating.toFixed(1)}</span>
+                <div className="flex items-center gap-0.5">
+                  {[1,2,3,4,5].map((s) => (
+                    <Star key={s} size={14} className={s <= Math.round(event.avg_rating!) ? "fill-primary text-primary" : "text-border"} />
+                  ))}
+                </div>
+                <span className="text-xs text-text-muted">from {event.review_count} review{event.review_count !== 1 ? "s" : ""}</span>
+              </div>
+            )}
             <div className="space-y-3">
               {reviews.map((r) => (
                 <div key={r.id} className="flex gap-2.5">

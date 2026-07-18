@@ -103,6 +103,8 @@ class EventDetail(EventOut):
     meeting_url: str | None
     capacity: int | None
     template_id: str | None
+    avg_rating: float | None = None
+    review_count: int = 0
 
 
 class AttendRequest(BaseModel):

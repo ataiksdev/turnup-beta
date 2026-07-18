@@ -1,13 +1,14 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.middleware.auth import get_current_user, get_optional_user
 from app.models.event import Event, EventAttendee, EventSave
+from app.models.organizer import EventReview
 from app.models.social import Follow
 from app.models.user import User
 from app.schemas.event import EventOut
@@ -57,7 +58,30 @@ async def get_profile(
     following = False
     if me and me.id != user.id:
         following = await _is_following(db, me.id, user.id)
-    return {**user.__dict__, "is_following": following}
+
+    # Compute events_hosted dynamically (stored counter may lag on seed data)
+    hosted_count = (await db.execute(
+        select(func.count(Event.id)).where(
+            Event.host_id == user.id, Event.status == "published"
+        )
+    )).scalar() or 0
+
+    # Compute avg_rating and review_count across all events hosted by this user
+    review_agg = (await db.execute(
+        select(func.avg(EventReview.rating), func.count(EventReview.id))
+        .join(Event, Event.id == EventReview.event_id)
+        .where(Event.host_id == user.id)
+    )).one()
+    avg_rating = round(float(review_agg[0]), 1) if review_agg[0] else None
+    review_count = review_agg[1] or 0
+
+    return {
+        **user.__dict__,
+        "is_following": following,
+        "events_hosted": hosted_count,
+        "avg_rating": avg_rating,
+        "review_count": review_count,
+    }
 
 
 @router.get("/{username}/events", response_model=list[EventOut])

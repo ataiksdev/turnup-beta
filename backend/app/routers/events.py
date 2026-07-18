@@ -398,7 +398,41 @@ async def get_event(
         if not user or event.host_id != user.id:
             raise HTTPException(404, "Event not found")
     saved, att, waitlisted = await _user_state(event.id, user, db)
-    return _serialize(event, saved, att, waitlisted)
+
+    # Per-event avg rating
+    ev_review_agg = (await db.execute(
+        select(func.avg(EventReview.rating), func.count(EventReview.id))
+        .where(EventReview.event_id == event.id)
+    )).one()
+    event_avg_rating = round(float(ev_review_agg[0]), 1) if ev_review_agg[0] else None
+    event_review_count = ev_review_agg[1] or 0
+
+    # Host aggregate stats
+    host_review_agg = (await db.execute(
+        select(func.avg(EventReview.rating), func.count(EventReview.id))
+        .join(Event, Event.id == EventReview.event_id)
+        .where(Event.host_id == event.host_id)
+    )).one()
+    host_avg_rating = round(float(host_review_agg[0]), 1) if host_review_agg[0] else None
+    host_review_count = host_review_agg[1] or 0
+    host_events_hosted = (await db.execute(
+        select(func.count(Event.id))
+        .where(Event.host_id == event.host_id, Event.status == "published")
+    )).scalar() or 0
+
+    data = _serialize(event, saved, att, waitlisted)
+    data["avg_rating"] = event_avg_rating
+    data["review_count"] = event_review_count
+    h = event.host
+    data["host"] = {
+        "id": h.id, "username": h.username, "full_name": h.full_name,
+        "display_name": h.display_name, "bio": h.bio,
+        "avatar_url": h.avatar_url, "is_verified": h.is_verified,
+        "role": h.role, "followers_count": h.followers_count,
+        "events_hosted": host_events_hosted,
+        "avg_rating": host_avg_rating, "review_count": host_review_count,
+    }
+    return data
 
 
 # ── Create / Update ─────────────────────────────────────────────────────────────
