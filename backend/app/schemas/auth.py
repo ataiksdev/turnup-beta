@@ -18,6 +18,10 @@ class LoginRequest(BaseModel):
 
 class OnboardingRequest(BaseModel):
     category_preferences: list[str] = Field(min_length=1, max_length=8)
+    city: str | None = None
+    price_sensitivity: str | None = None
+    event_format_pref: str | None = None
+    goes_out_when: str | None = None
 
 
 class ForgotPasswordRequest(BaseModel):

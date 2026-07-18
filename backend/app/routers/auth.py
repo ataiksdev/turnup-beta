@@ -4,6 +4,8 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from pydantic import BaseModel
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import delete, select
@@ -860,6 +862,42 @@ async def complete_onboarding(
     db: AsyncSession = Depends(get_db),
 ):
     user.category_preferences = ",".join(payload.category_preferences)
+    if payload.city is not None:
+        user.city = payload.city
+    if payload.price_sensitivity is not None:
+        user.price_sensitivity = payload.price_sensitivity
+    if payload.event_format_pref is not None:
+        user.event_format_pref = payload.event_format_pref
+    if payload.goes_out_when is not None:
+        user.goes_out_when = payload.goes_out_when
     user.onboarding_completed = True
+    await db.flush()
+    return user
+
+
+class PreferencesUpdate(BaseModel):
+    category_preferences: list[str] | None = None
+    city: str | None = None
+    price_sensitivity: str | None = None
+    event_format_pref: str | None = None
+    goes_out_when: str | None = None
+
+
+@router.patch("/preferences", response_model=UserMe)
+async def update_preferences(
+    payload: PreferencesUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.category_preferences is not None:
+        user.category_preferences = ",".join(payload.category_preferences)
+    if payload.city is not None:
+        user.city = payload.city
+    if payload.price_sensitivity is not None:
+        user.price_sensitivity = payload.price_sensitivity
+    if payload.event_format_pref is not None:
+        user.event_format_pref = payload.event_format_pref
+    if payload.goes_out_when is not None:
+        user.goes_out_when = payload.goes_out_when
     await db.flush()
     return user

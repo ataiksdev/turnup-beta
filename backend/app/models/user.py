@@ -43,6 +43,10 @@ class User(Base):
 
     # Preferences
     category_preferences: Mapped[str | None] = mapped_column(Text)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    price_sensitivity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    event_format_pref: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    goes_out_when: Mapped[str | None] = mapped_column(String(20), nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -33,6 +33,10 @@ async def _run_migrations(conn):
         ("ticket_orders", "payment_channel", "VARCHAR(30)"),
         ("users", "display_name", "VARCHAR(80)"),
         ("events", "series_id", "VARCHAR(36)"),
+        ("users", "city", "VARCHAR(100)"),
+        ("users", "price_sensitivity", "VARCHAR(20)"),
+        ("users", "event_format_pref", "VARCHAR(20)"),
+        ("users", "goes_out_when", "VARCHAR(20)"),
     ]
     for table, column, definition in new_columns:
         try:
