@@ -7,7 +7,6 @@ import asyncio, os, re, sys, uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Add backend to path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 os.chdir(ROOT / "backend")
@@ -15,7 +14,8 @@ os.makedirs("data", exist_ok=True)
 
 from app.database import AsyncSessionLocal, init_db
 from app.models.event import Category, Event, EventAttendee, EventSave
-from app.models.social import Follow
+from app.models.social import Follow, Notification, Comment
+from app.models.organizer import TicketTier, TicketOrder
 from app.models.user import User
 from app.services.auth import hash_password
 
@@ -30,29 +30,66 @@ def slugify(text: str, uid: str) -> str:
     return re.sub(r"[\s_-]+", "-", s).strip("-") + f"-{uid[:8]}"
 
 
+# ── Users ──────────────────────────────────────────────────────────────────────
 USERS = [
-    {"username": "nova_beats",   "full_name": "Nova Williams",  "email": "nova@turnup.dev",
-     "bio": "DJ & music producer 🎧", "location": "New York, NY", "verified": True,
-     "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=nova",
-     "prefs": "music,nightlife"},
-    {"username": "jxmie",        "full_name": "Jamie Chen",     "email": "jamie@turnup.dev",
-     "bio": "Festival addict. 50+ events this year.",  "location": "Los Angeles, CA", "verified": True,
-     "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=jamie",
-     "prefs": "music,comedy,arts"},
-    {"username": "skyler_vibe",  "full_name": "Skyler Davis",   "email": "skyler@turnup.dev",
-     "bio": "Event curator. Art meets sound.", "location": "Chicago, IL", "verified": False,
-     "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=skyler",
-     "prefs": "arts,food,sports"},
-    {"username": "reina_mx",     "full_name": "Reina Morales",  "email": "reina@turnup.dev",
-     "bio": "Promoter | Dancer | Tacos 🌮",  "location": "Miami, FL", "verified": True,
-     "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=reina",
-     "prefs": "nightlife,food"},
-    {"username": "kobe_events",  "full_name": "Kobe Thompson",  "email": "kobe@turnup.dev",
-     "bio": "Bringing culture to the city.", "location": "Atlanta, GA", "verified": False,
-     "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=kobe",
-     "prefs": "sports,wellness,tech"},
+    {
+        "username": "adaeze_sounds",
+        "full_name": "Adaeze Okonkwo",
+        "email": "adaeze@turnup.ng",
+        "bio": "DJ · Music curator · Lagos nightlife since 2018 🎧 Book me: adaeze@book.ng",
+        "location": "Lagos, Nigeria",
+        "verified": True,
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=adaeze",
+        "prefs": "music,nightlife,arts",
+        "role": "organizer",
+    },
+    {
+        "username": "seun_pg",
+        "full_name": "Seun Adeleke",
+        "email": "seun@turnup.ng",
+        "bio": "Event promoter 🔥 Lagos & Abuja. Bringing the vibes since 2020. @seun_pg everywhere.",
+        "location": "Lagos, Nigeria",
+        "verified": True,
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=seun",
+        "prefs": "nightlife,music,food",
+        "role": "organizer",
+    },
+    {
+        "username": "tunde_vibes",
+        "full_name": "Tunde Badmus",
+        "email": "tunde@turnup.ng",
+        "bio": "Lifestyle curator 🌴 If it's not vibey, I'm not going. Lagos Island mostly.",
+        "location": "Lagos, Nigeria",
+        "verified": False,
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=tunde",
+        "prefs": "food,arts,nightlife",
+        "role": "attendee",
+    },
+    {
+        "username": "chiamaka_lit",
+        "full_name": "Chiamaka Eze",
+        "email": "chiamaka@turnup.ng",
+        "bio": "Foodie 🍲 Festival goer 🎪 Content creator. PH → Lagos. Always at the next thing.",
+        "location": "Lagos, Nigeria",
+        "verified": False,
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=chiamaka",
+        "prefs": "food,wellness,arts",
+        "role": "attendee",
+    },
+    {
+        "username": "dayo_hype",
+        "full_name": "Dayo Adeyemi",
+        "email": "dayo@turnup.ng",
+        "bio": "Stand-up comedian 😂 MC · Host · Abuja-based. Bookings DM me.",
+        "location": "Abuja, Nigeria",
+        "verified": True,
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=dayo",
+        "prefs": "comedy,music,nightlife",
+        "role": "organizer",
+    },
 ]
 
+# ── Categories ─────────────────────────────────────────────────────────────────
 CATEGORIES = [
     ("Music",        "music",     "🎵", "#F97316"),
     ("Arts & Culture","arts",     "🎨", "#A855F7"),
@@ -64,122 +101,261 @@ CATEGORIES = [
     ("Wellness",     "wellness",  "🧘", "#10B981"),
 ]
 
-
+# ── Events ─────────────────────────────────────────────────────────────────────
 def make_events(user_ids: dict, cat_ids: dict) -> list[dict]:
     M, NL, AR, FD, TC, SP, CM, WL = (
         cat_ids["music"], cat_ids["nightlife"], cat_ids["arts"], cat_ids["food"],
         cat_ids["tech"], cat_ids["sports"], cat_ids["comedy"], cat_ids["wellness"],
     )
-    H = list(user_ids.keys())  # host usernames by index
 
     return [
-        dict(title="Bass Collective: Underground Sessions",
-             desc="The city's most immersive underground bass experience. Four rooms, eight DJs, a sound system that will shake your soul.",
-             img="https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=800",
-             venue="Avant Gardner", addr="140 Stewart Ave", city="New York",
-             lat=40.7033, lng=-73.9343, start=utc(3), end=utc(3, 4),
-             free=False, pmin=25, pmax=45, cap=800, going=412, interested=289, saves=156,
-             featured=True, trending=True, tags="bass,electronic,dnb",
-             host=H[0], cat=NL),
-
-        dict(title="Afrobeats & Amapiano Festival",
-             desc="Celebrate African music excellence. Grammy-nominated artists, local legends, and rising stars for a 10-hour celebration.",
-             img="https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800",
-             venue="Citi Field Lot", addr="126-01 Roosevelt Ave", city="New York",
-             lat=40.7571, lng=-73.8458, start=utc(7, 14), end=utc(7, 23),
-             free=False, pmin=55, pmax=120, cap=5000, going=2341, interested=1876, saves=923,
-             featured=True, trending=True, tags="afrobeats,amapiano,festival",
-             host=H[1], cat=M),
-
-        dict(title="Rooftop Sunset Sessions",
-             desc="Watch the city transform under a golden sky while house music fills the air. Monthly rooftop series with resident DJs.",
-             img="https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=800",
-             venue="The Skylark", addr="200 W 39th St", city="New York",
-             lat=40.7536, lng=-73.9932, start=utc(5, 18), end=utc(5, 23),
-             free=False, pmin=20, pmax=35, cap=200, going=178, interested=94, saves=67,
-             featured=True, trending=False, tags="rooftop,house,sunset",
-             host=H[0], cat=NL),
-
-        dict(title="Street Art & Mural Festival",
-             desc="Four-day open-air festival. Watch 30+ artists transform blank walls in real time. Free admission.",
-             img="https://images.unsplash.com/photo-1499781350541-7783f6c6a0c8?w=800",
-             venue="Wynwood Walls", addr="2520 NW 2nd Ave", city="Miami",
-             lat=25.8008, lng=-80.1993, start=utc(10, 11), end=utc(13, 20),
-             free=True, pmin=None, pmax=None, cap=None, going=892, interested=634, saves=211,
-             featured=True, trending=True, tags="art,murals,free,culture",
-             host=H[2], cat=AR),
-
-        dict(title="Late Night Jazz & Cocktails",
-             desc="Intimate speakeasy setting. House quartet performs standards and originals while expert mixologists craft bespoke cocktails.",
-             img="https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=800",
-             venue="The Blue Note", addr="131 W 3rd St", city="New York",
-             lat=40.7300, lng=-74.0007, start=utc(4, 21), end=utc(5, 2),
-             free=False, pmin=30, pmax=30, cap=120, going=98, interested=45, saves=38,
-             featured=False, trending=False, tags="jazz,live-music,cocktails",
-             host=H[0], cat=M),
-
-        dict(title="Tech & Innovation Summit 2026",
-             desc="Southeast's largest tech conference. Founders, engineers, investors for two days of keynotes, workshops, and networking.",
-             img="https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800",
-             venue="Georgia World Congress Center", addr="285 Andrew Young Intl Blvd NW", city="Atlanta",
-             lat=33.7590, lng=-84.3977, start=utc(21, 9), end=utc(22, 18),
-             free=False, pmin=99, pmax=499, cap=3000, going=1456, interested=789, saves=345,
-             featured=True, trending=True, tags="tech,ai,startup,networking",
-             host=H[4], cat=TC),
-
-        dict(title="Morning Yoga in the Park",
-             desc="Free community yoga in Piedmont Park. All levels welcome. Post-session smoothie meetup at the farmer's market.",
-             img="https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800",
-             venue="Piedmont Park", addr="1320 Monroe Dr NE", city="Atlanta",
-             lat=33.7867, lng=-84.3732, start=utc(6, 8), end=utc(6, 10),
-             free=True, pmin=None, pmax=None, cap=150, going=87, interested=134, saves=56,
-             featured=False, trending=False, tags="yoga,wellness,free,outdoor",
-             host=H[4], cat=WL),
-
-        dict(title="Tacos & Tequila Festival",
-             desc="40+ taco vendors, 25 tequila brands, live mariachi, lucha libre, and cooking demos from Michelin-starred chefs.",
-             img="https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800",
-             venue="Bayfront Park", addr="301 Biscayne Blvd", city="Miami",
-             lat=25.7747, lng=-80.1858, start=utc(14, 12), end=utc(16, 22),
-             free=False, pmin=35, pmax=75, cap=2000, going=1123, interested=567, saves=289,
-             featured=True, trending=True, tags="food,tacos,tequila,festival",
-             host=H[3], cat=FD),
-
-        dict(title="Stand-Up Showcase: Next Gen Comics",
-             desc="Five of comedy's hottest rising stars. Two-drink minimum. Doors 7pm.",
-             img="https://images.unsplash.com/photo-1527224857830-43a7acc85260?w=800",
-             venue="The Comedy Store", addr="8433 W Sunset Blvd", city="Los Angeles",
-             lat=34.0903, lng=-118.3875, start=utc(8, 20), end=utc(8, 22),
-             free=False, pmin=20, pmax=20, cap=250, going=201, interested=88, saves=74,
-             featured=False, trending=True, tags="comedy,stand-up,live",
-             host=H[1], cat=CM),
-
-        dict(title="3-on-3 Basketball Tournament",
-             desc="Chicago's most competitive 3-on-3 tournament. $500 winner take all. Dunking competition, skills challenges, live DJ.",
-             img="https://images.unsplash.com/photo-1546519638-68e109498ffc?w=800",
-             venue="Millennium Park", addr="201 E Randolph St", city="Chicago",
-             lat=41.8827, lng=-87.6233, start=utc(12, 9), end=utc(12, 18),
-             free=False, pmin=15, pmax=15, cap=400, going=245, interested=178, saves=92,
-             featured=False, trending=True, tags="basketball,sports,tournament",
-             host=H[2], cat=SP),
-
-        dict(title="Latin Night: Salsa & Bachata",
-             desc="Free dance lessons 8-9pm, open dancing till 2am. Live percussion, world-class DJs. All levels welcome.",
-             img="https://images.unsplash.com/photo-1504609813442-a8924e83f76e?w=800",
-             venue="El Floridita", addr="1253 Vine St", city="Los Angeles",
-             lat=34.0956, lng=-118.3267, start=utc(2, 21), end=utc(3, 2),
-             free=False, pmin=15, pmax=25, cap=300, going=267, interested=143, saves=118,
-             featured=False, trending=True, tags="salsa,bachata,latin,dance",
-             host=H[3], cat=NL),
-
-        dict(title="Pop-Up Food Market: Global Bites",
-             desc="60+ vendors from around the world. West Africa, Southeast Asia, Latin America, the Middle East. Free admission.",
-             img="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800",
-             venue="Logan Square Farmers Market", addr="2755 N Milwaukee Ave", city="Chicago",
-             lat=41.9294, lng=-87.7026, start=utc(9, 10), end=utc(9, 18),
-             free=True, pmin=None, pmax=None, cap=None, going=534, interested=312, saves=167,
-             featured=True, trending=False, tags="food,market,free,global",
-             host=H[2], cat=FD),
+        # ── Upcoming ────────────────────────────────────────────────────────────
+        dict(
+            title="Detty December Kickoff: Pool Party & Afrobeats",
+            desc=(
+                "The biggest pool party in Lagos is BACK. Wizkid's team DJ, Mr Eazi surprise set rumoured, "
+                "bottle service, and a crowd that knows how to turn up. Afrobeats, Amapiano, and Naija classics "
+                "from sunset to sunrise. VIP tables go fast — this is not a drill."
+            ),
+            img="https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800",
+            venue="Hard Rock Hotel Lagos", addr="Plot 1261A Ahmadu Bello Way", city="Lagos",
+            lat=6.4350, lng=3.4259, start=utc(4, 16), end=utc(5, 4),
+            free=False, pmin=15000, pmax=75000, cap=1500,
+            going=1243, interested=892, saves=517,
+            featured=True, trending=True,
+            tags="detty-december,pool-party,afrobeats,lagos",
+            host="seun_pg", cat=NL,
+            tiers=[
+                dict(name="Regular Entry", price=15000, qty=800, max_per=4,
+                     desc="General pool area access from 4pm"),
+                dict(name="Premium", price=35000, qty=500, max_per=4,
+                     desc="Premium section + 1 cocktail on arrival"),
+                dict(name="VIP Table (4 pax)", price=250000, qty=50, max_per=1,
+                     desc="Private table for 4, bottle service included, priority entry"),
+            ],
+        ),
+        dict(
+            title="Flytime Music Festival 2026",
+            desc=(
+                "Nigeria's most anticipated annual music festival returns to Eko Atlantic. Burna Boy, "
+                "Davido, Tiwa Savage, Asake, Rema, and 10 more acts across 2 stages. "
+                "This year's theme: The African Giant Experience. Prepare to be moved."
+            ),
+            img="https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=800",
+            venue="Eko Atlantic City", addr="Victoria Island", city="Lagos",
+            lat=6.4054, lng=3.4108, start=utc(8, 15), end=utc(8, 23),
+            free=False, pmin=25000, pmax=150000, cap=10000,
+            going=7823, interested=4512, saves=2891,
+            featured=True, trending=True,
+            tags="flytime,afrobeats,burna-boy,davido,festival,eko-atlantic",
+            host="adaeze_sounds", cat=M,
+            tiers=[
+                dict(name="General", price=25000, qty=6000, max_per=4),
+                dict(name="Golden Circle", price=75000, qty=2000, max_per=2,
+                     desc="Front-stage zone + meet & greet access ballot"),
+                dict(name="VIP Experience", price=150000, qty=500, max_per=2,
+                     desc="Dedicated bar, lounges, complimentary meal, artist access zone"),
+            ],
+        ),
+        dict(
+            title="New Afrika Shrine: Felabration Pre-Party",
+            desc=(
+                "Every year Lagos remembers Fela. This is the warm-up. Live Afrobeat band plays "
+                "through the original catalogue, palm wine flows, and the Shrine grounds fill with "
+                "everyone from diplomats to street artists. No dress code — just love for the music."
+            ),
+            img="https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=800",
+            venue="New Afrika Shrine", addr="1 Nerdc Rd, Agidingbi", city="Lagos",
+            lat=6.6018, lng=3.3515, start=utc(6, 19), end=utc(7, 2),
+            free=False, pmin=5000, pmax=20000, cap=2000,
+            going=1567, interested=893, saves=421,
+            featured=True, trending=False,
+            tags="fela,afrobeat,shrine,felabration,live-band",
+            host="adaeze_sounds", cat=M,
+            tiers=[
+                dict(name="General", price=5000, qty=1500, max_per=6),
+                dict(name="VIP Lounge", price=20000, qty=200, max_per=2,
+                     desc="Elevated VIP section, table service"),
+            ],
+        ),
+        dict(
+            title="Lagos Comic Con 2026",
+            desc=(
+                "West Africa's biggest pop culture convention. Manga, anime, gaming, cosplay competitions "
+                "with ₦500k prize pool, celebrity voice actors, Nollywood film premiers, and 200+ vendors. "
+                "Cosplay is encouraged — we'll be judging."
+            ),
+            img="https://images.unsplash.com/photo-1608889335941-32ac5f2041b9?w=800",
+            venue="Eko Convention Centre", addr="Plot 1415 Adetokunbo Ademola St", city="Lagos",
+            lat=6.4336, lng=3.4237, start=utc(11, 10), end=utc(12, 18),
+            free=False, pmin=3500, pmax=15000, cap=8000,
+            going=5231, interested=3102, saves=1876,
+            featured=True, trending=True,
+            tags="comic-con,anime,gaming,cosplay,nollywood",
+            host="dayo_hype", cat=AR,
+            tiers=[
+                dict(name="Day Pass", price=3500, qty=5000, max_per=4),
+                dict(name="Weekend Pass", price=7500, qty=2000, max_per=4,
+                     desc="Both days + early entry 9:30am"),
+                dict(name="Creator Pass", price=15000, qty=200, max_per=1,
+                     desc="Both days + exhibitor table + badge + meet-and-greet priority"),
+            ],
+        ),
+        dict(
+            title="Stand Up Lagos: New Money Edition",
+            desc=(
+                "Four of Nigeria's hottest comedians — including Bovi, Kenny Blaq, and two surprise acts — "
+                "talk money, hustle, and the Nigerian experience. AY Promotions production. "
+                "Adults only (18+). You've been warned."
+            ),
+            img="https://images.unsplash.com/photo-1527224857830-43a7acc85260?w=800",
+            venue="Eko Hotel & Suites", addr="Plot 1415 Adetokunbo Ademola St, VI", city="Lagos",
+            lat=6.4343, lng=3.4238, start=utc(9, 19), end=utc(9, 22),
+            free=False, pmin=10000, pmax=50000, cap=3000,
+            going=2234, interested=1102, saves=678,
+            featured=False, trending=True,
+            tags="comedy,stand-up,bovi,kenny-blaq,naija",
+            host="dayo_hype", cat=CM,
+            tiers=[
+                dict(name="Standard", price=10000, qty=1500, max_per=4),
+                dict(name="Premium", price=25000, qty=1000, max_per=4,
+                     desc="Premium seating, closer to the stage"),
+                dict(name="VIP Front Row", price=50000, qty=100, max_per=2,
+                     desc="Front row seats + meet-the-comedians after-show"),
+            ],
+        ),
+        dict(
+            title="Naija Jollof Wars 2026",
+            desc=(
+                "Lagos vs Abuja vs PH — whose jollof reigns supreme? 30 chefs compete live, public votes "
+                "decide the winner. Between rounds: live music, suya station, Chapman bar, "
+                "and the most chaotic food battle you'll ever witness."
+            ),
+            img="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800",
+            venue="Freedom Park Lagos", addr="38 Broad St, Lagos Island", city="Lagos",
+            lat=6.4504, lng=3.3876, start=utc(13, 13), end=utc(13, 20),
+            free=False, pmin=5000, pmax=5000, cap=3000,
+            going=1892, interested=1034, saves=567,
+            featured=True, trending=True,
+            tags="jollof,food,festival,lagos,naija",
+            host="chiamaka_lit", cat=FD,
+            tiers=[
+                dict(name="Tasting Pass", price=5000, qty=3000, max_per=6,
+                     desc="Entry + 5 tasting tokens (each token = 1 full plate)"),
+            ],
+        ),
+        dict(
+            title="Lagos Tech Fest: AI & Startups",
+            desc=(
+                "Co-hosted by CcHub and Google for Startups. Founders, engineers, and investors from "
+                "across the continent. Day 1: Pitch competition (₦5m prize pool). "
+                "Day 2: Deep-dive workshops on AI, fintech, and building for Africa. Free to attend."
+            ),
+            img="https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800",
+            venue="Co-Creation Hub (CcHub)", addr="294 Herbert Macaulay Way, Yaba", city="Lagos",
+            lat=6.5058, lng=3.3798, start=utc(21, 9), end=utc(22, 18),
+            free=True, pmin=None, pmax=None, cap=500,
+            going=387, interested=612, saves=234,
+            featured=False, trending=False,
+            tags="tech,ai,startup,nigeria,cchub,fintech",
+            host="tunde_vibes", cat=TC,
+            tiers=[
+                dict(name="Free Registration", price=0, qty=500, max_per=1),
+            ],
+        ),
+        dict(
+            title="Afrobeats & Asoebi: Terra Kulture Jazz Night",
+            desc=(
+                "Intimate jazz experience at Lagos's most beloved cultural hub. The Terra Kulture "
+                "house quartet performs Fela, Lagbaja, and original compositions. "
+                "Dress code: Agbada, kaftan, asoebi, or 'what your mum would approve of'."
+            ),
+            img="https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=800",
+            venue="Terra Kulture Arena", addr="Plot 1376 Tiamiyu Savage St, VI", city="Lagos",
+            lat=6.4327, lng=3.4219, start=utc(3, 19), end=utc(3, 23),
+            free=False, pmin=8000, pmax=25000, cap=400,
+            going=312, interested=178, saves=134,
+            featured=False, trending=False,
+            tags="jazz,live-music,terra-kulture,afrobeats,lagos",
+            host="adaeze_sounds", cat=M,
+            tiers=[
+                dict(name="Regular", price=8000, qty=250, max_per=4),
+                dict(name="Table of 2", price=25000, qty=40, max_per=1,
+                     desc="Reserved table for 2 with complimentary drinks"),
+            ],
+        ),
+        dict(
+            title="Sunrise Yoga at Bar Beach",
+            desc=(
+                "Meet at Bar Beach for a 90-minute sunrise yoga and meditation session with certified "
+                "instructor Kemi Ade. All levels welcome. Mats available. Post-session: "
+                "fresh coconut water and acai bowls from vendors on site."
+            ),
+            img="https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800",
+            venue="Bar Beach", addr="Ahmadu Bello Way, Victoria Island", city="Lagos",
+            lat=6.4268, lng=3.4241, start=utc(2, 6), end=utc(2, 8),
+            free=True, pmin=None, pmax=None, cap=100,
+            going=67, interested=143, saves=89,
+            featured=False, trending=False,
+            tags="yoga,wellness,beach,free,vi,sunrise",
+            host="chiamaka_lit", cat=WL,
+            tiers=[
+                dict(name="Free RSVP", price=0, qty=100, max_per=1),
+            ],
+        ),
+        dict(
+            title="Abuja Dinner Jazz: Highlife & Wine",
+            desc=(
+                "An evening of vintage highlife, contemporary jazz, and curated Nigerian wines at "
+                "Transcorp Hilton's rooftop. Four-course Nigerian fine dining by Chef Imoteda. "
+                "Dress: Smart casual. FCT's most refined monthly series."
+            ),
+            img="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800",
+            venue="Transcorp Hilton Abuja", addr="1 Aguiyi Ironsi St, Maitama", city="Abuja",
+            lat=9.0802, lng=7.4929, start=utc(16, 19), end=utc(16, 23),
+            free=False, pmin=35000, pmax=35000, cap=150,
+            going=112, interested=67, saves=43,
+            featured=False, trending=False,
+            tags="jazz,highlife,wine,abuja,fine-dining",
+            host="dayo_hype", cat=M,
+            tiers=[
+                dict(name="Dinner Seat", price=35000, qty=150, max_per=2,
+                     desc="4-course dinner + welcome cocktail + live jazz"),
+            ],
+        ),
+        # ── Past events (for attendance history) ────────────────────────────────
+        dict(
+            title="Headies Awards After-Party 2025",
+            desc="Official after-party for the 17th Headies Awards. Exclusive. Invite-only for nominees — but we sold 200 tickets.",
+            img="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800",
+            venue="Balmoral Convention Centre", addr="Federal Palace Hotel, VI", city="Lagos",
+            lat=6.4295, lng=3.4256, start=utc(-30, 22), end=utc(-29, 4),
+            free=False, pmin=20000, pmax=75000, cap=500,
+            going=423, interested=234, saves=189,
+            featured=False, trending=False,
+            tags="headies,awards,afterparty,afrobeats",
+            host="seun_pg", cat=NL,
+            tiers=[
+                dict(name="General", price=20000, qty=300, max_per=2),
+                dict(name="VIP Table", price=150000, qty=20, max_per=1,
+                     desc="Table of 4 with bottle service"),
+            ],
+        ),
+        dict(
+            title="Burna Boy: I Told Them Listening Party",
+            desc="Lagos listening party for Burna Boy's latest album. Exclusive 300-person experience at Eko Hotel.",
+            img="https://images.unsplash.com/photo-1508700929628-666bc8bd84ea?w=800",
+            venue="Eko Hotel & Suites", addr="Plot 1415 Adetokunbo Ademola St, VI", city="Lagos",
+            lat=6.4343, lng=3.4238, start=utc(-14, 20), end=utc(-14, 23),
+            free=False, pmin=30000, pmax=30000, cap=300,
+            going=287, interested=142, saves=98,
+            featured=False, trending=False,
+            tags="burna-boy,listening-party,afrobeats,exclusive",
+            host="adaeze_sounds", cat=M,
+            tiers=[
+                dict(name="Listening Session Pass", price=30000, qty=300, max_per=2),
+            ],
+        ),
     ]
 
 
@@ -187,9 +363,13 @@ async def run():
     await init_db()
 
     async with AsyncSessionLocal() as db:
-        from sqlalchemy import delete
-        # Clear all in correct order
-        for model in (Follow, EventAttendee, EventSave, Event, Category, User):
+        from sqlalchemy import delete, text
+
+        # Clear all data in correct foreign-key order
+        for model in (
+            Notification, Comment, TicketOrder, TicketTier,
+            Follow, EventAttendee, EventSave, Event, Category, User,
+        ):
             await db.execute(delete(model))
         await db.commit()
 
@@ -198,11 +378,18 @@ async def run():
         for u in USERS:
             uid = str(uuid.uuid4())
             db.add(User(
-                id=uid, email=u["email"], username=u["username"],
-                full_name=u["full_name"], hashed_password=hash_password("password123"),
-                bio=u.get("bio"), avatar_url=u.get("avatar"),
-                location=u.get("location"), is_verified=u.get("verified", False),
-                category_preferences=u.get("prefs"), onboarding_completed=True,
+                id=uid,
+                email=u["email"],
+                username=u["username"],
+                full_name=u["full_name"],
+                hashed_password=hash_password("password123"),
+                bio=u.get("bio"),
+                avatar_url=u.get("avatar"),
+                location=u.get("location"),
+                is_verified=u.get("verified", False),
+                category_preferences=u.get("prefs"),
+                onboarding_completed=True,
+                role=u.get("role", "attendee"),
             ))
             user_ids[u["username"]] = uid
         await db.commit()
@@ -217,12 +404,16 @@ async def run():
         await db.commit()
         print(f"✓ {len(CATEGORIES)} categories")
 
-        # ── Events ─────────────────────────────────────────────────────────────
-        events = make_events(user_ids, cat_ids)
-        for ev in events:
+        # ── Events + Tiers ─────────────────────────────────────────────────────
+        events_data = make_events(user_ids, cat_ids)
+        event_ids: dict[str, str] = {}
+        tier_ids: dict[str, dict] = {}   # event_title -> {tier_name -> tier_id}
+
+        for ev in events_data:
             eid = str(uuid.uuid4())
+            slug = slugify(ev["title"], eid)
             db.add(Event(
-                id=eid, slug=slugify(ev["title"], eid),
+                id=eid, slug=slug,
                 title=ev["title"], description=ev["desc"],
                 cover_image=ev.get("img"),
                 host_id=user_ids[ev["host"]],
@@ -239,28 +430,303 @@ async def run():
                 status="published", tags=ev.get("tags"),
                 category_id=ev.get("cat"),
             ))
-        await db.commit()
-        print(f"✓ {len(events)} events")
+            event_ids[ev["title"]] = eid
+            tier_ids[ev["title"]] = {}
 
-        # ── Some follows ────────────────────────────────────────────────────────
-        follow_pairs = [
-            ("jxmie", "nova_beats"), ("skyler_vibe", "nova_beats"),
-            ("reina_mx", "jxmie"), ("kobe_events", "jxmie"),
-            ("nova_beats", "reina_mx"), ("jxmie", "skyler_vibe"),
-        ]
-        for follower, following in follow_pairs:
-            if follower in user_ids and following in user_ids:
-                db.add(Follow(
-                    id=str(uuid.uuid4()),
-                    follower_id=user_ids[follower],
-                    following_id=user_ids[following],
+            for t in ev.get("tiers", []):
+                tid = str(uuid.uuid4())
+                db.add(TicketTier(
+                    id=tid, event_id=eid,
+                    name=t["name"],
+                    description=t.get("desc"),
+                    price=float(t["price"]),
+                    currency="NGN",
+                    quantity=t.get("qty"),
+                    max_per_order=t.get("max_per", 4),
+                    is_active=True,
                 ))
+                tier_ids[ev["title"]][t["name"]] = tid
+
+        await db.commit()
+        print(f"✓ {len(events_data)} events with tiers")
+
+        # ── Follows ────────────────────────────────────────────────────────────
+        # adaeze follows seun, tunde, chiamaka, dayo
+        # seun follows adaeze, dayo
+        # tunde follows adaeze, seun
+        # chiamaka follows adaeze, tunde
+        # dayo follows seun, adaeze
+        follow_pairs = [
+            ("adaeze_sounds", "seun_pg",        utc(-45)),
+            ("adaeze_sounds", "tunde_vibes",     utc(-38)),
+            ("adaeze_sounds", "chiamaka_lit",    utc(-20)),
+            ("adaeze_sounds", "dayo_hype",       utc(-10)),
+            ("seun_pg",       "adaeze_sounds",   utc(-60)),
+            ("seun_pg",       "dayo_hype",       utc(-5)),
+            ("tunde_vibes",   "adaeze_sounds",   utc(-55)),
+            ("tunde_vibes",   "seun_pg",         utc(-3)),
+            ("chiamaka_lit",  "adaeze_sounds",   utc(-30)),
+            ("chiamaka_lit",  "tunde_vibes",     utc(-15)),
+            ("dayo_hype",     "seun_pg",         utc(-7)),
+            ("dayo_hype",     "adaeze_sounds",   utc(-50)),
+        ]
+        follow_obj_ids: dict[tuple, str] = {}
+        for follower, following, created_at in follow_pairs:
+            fid = str(uuid.uuid4())
+            f = Follow(
+                id=fid,
+                follower_id=user_ids[follower],
+                following_id=user_ids[following],
+                created_at=created_at,
+            )
+            db.add(f)
+            follow_obj_ids[(follower, following)] = fid
+
+            # Update follower/following counts on User
+            await db.flush()
+
+        # Update follower/following counts manually
+        counts: dict[str, dict] = {u: {"followers": 0, "following": 0} for u in user_ids}
+        for follower, following, _ in follow_pairs:
+            counts[follower]["following"] += 1
+            counts[following]["followers"] += 1
+
+        for uname, c in counts.items():
+            await db.execute(
+                text("UPDATE users SET followers_count=:f, following_count=:fo WHERE id=:id"),
+                {"f": c["followers"], "fo": c["following"], "id": user_ids[uname]},
+            )
         await db.commit()
         print(f"✓ {len(follow_pairs)} follows")
 
-    print("\n🎉 Seed complete!")
-    print("   Login with any user: nova@turnup.dev / password123")
-    print("   All users share the password: password123")
+        # ── Event Attendance ───────────────────────────────────────────────────
+        # Build realistic attendance records so activity feed has content
+        # adaeze is the "current user" logged in for screenshots
+        attendance = [
+            # adaeze's own past attendance
+            ("adaeze_sounds", "Headies Awards After-Party 2025", "going", utc(-30, 21)),
+            ("adaeze_sounds", "Burna Boy: I Told Them Listening Party", "going", utc(-14, 20)),
+            # seun going to upcoming events (adaeze follows seun → shows in feed)
+            ("seun_pg", "Detty December Kickoff: Pool Party & Afrobeats", "going", utc(-2)),
+            ("seun_pg", "Flytime Music Festival 2026", "going", utc(-1, 10)),
+            ("seun_pg", "Stand Up Lagos: New Money Edition", "interested", utc(-1, 14)),
+            # tunde going (adaeze follows tunde → shows in feed)
+            ("tunde_vibes", "Naija Jollof Wars 2026", "going", utc(-1, 8)),
+            ("tunde_vibes", "Lagos Comic Con 2026", "interested", utc(-3, 12)),
+            # chiamaka going (adaeze follows chiamaka → shows in feed)
+            ("chiamaka_lit", "Naija Jollof Wars 2026", "going", utc(-1, 9)),
+            ("chiamaka_lit", "Sunrise Yoga at Bar Beach", "going", utc(-1, 16)),
+            # dayo going (adaeze follows dayo)
+            ("dayo_hype", "Stand Up Lagos: New Money Edition", "going", utc(-2, 18)),
+            ("dayo_hype", "Abuja Dinner Jazz: Highlife & Wine", "going", utc(-4, 11)),
+        ]
+        att_count = 0
+        for username, event_title, status, created_at in attendance:
+            if username not in user_ids or event_title not in event_ids:
+                print(f"  skip attendance: {username} / {event_title}")
+                continue
+            db.add(EventAttendee(
+                id=str(uuid.uuid4()),
+                user_id=user_ids[username],
+                event_id=event_ids[event_title],
+                status=status,
+                created_at=created_at,
+            ))
+            att_count += 1
+        await db.commit()
+        print(f"✓ {att_count} attendance records")
+
+        # ── Ticket Orders for adaeze (My Tickets page) ────────────────────────
+        def ref():
+            return f"TUP-{str(uuid.uuid4())[:8].upper()}"
+
+        ticket_orders = [
+            # Past — confirmed
+            dict(
+                event="Headies Awards After-Party 2025",
+                tier="General",
+                qty=2, unit_price=20000, status="confirmed",
+                ref=ref(), channel="card",
+                created_at=utc(-31, 14),
+            ),
+            dict(
+                event="Burna Boy: I Told Them Listening Party",
+                tier="Listening Session Pass",
+                qty=1, unit_price=30000, status="confirmed",
+                ref=ref(), channel="bank_transfer",
+                created_at=utc(-15, 11),
+            ),
+            # Upcoming — confirmed
+            dict(
+                event="Detty December Kickoff: Pool Party & Afrobeats",
+                tier="Premium",
+                qty=2, unit_price=35000, status="confirmed",
+                ref=ref(), channel="card",
+                created_at=utc(-3, 16),
+            ),
+            dict(
+                event="Flytime Music Festival 2026",
+                tier="Golden Circle",
+                qty=1, unit_price=75000, status="confirmed",
+                ref=ref(), channel="card",
+                created_at=utc(-2, 10),
+            ),
+            dict(
+                event="New Afrika Shrine: Felabration Pre-Party",
+                tier="General",
+                qty=3, unit_price=5000, status="confirmed",
+                ref=ref(), channel="ussd",
+                created_at=utc(-1, 20),
+            ),
+        ]
+
+        order_count = 0
+        for o in ticket_orders:
+            et = o["event"]
+            tn = o["tier"]
+            if et not in event_ids or tn not in tier_ids.get(et, {}):
+                print(f"  skip order: {et} / {tn}")
+                continue
+            db.add(TicketOrder(
+                id=str(uuid.uuid4()),
+                user_id=user_ids["adaeze_sounds"],
+                event_id=event_ids[et],
+                tier_id=tier_ids[et][tn],
+                quantity=o["qty"],
+                unit_price=float(o["unit_price"]),
+                total_price=float(o["unit_price"] * o["qty"]),
+                status=o["status"],
+                payment_reference=o["ref"],
+                payment_channel=o.get("channel"),
+                created_at=o["created_at"],
+            ))
+            order_count += 1
+        await db.commit()
+        print(f"✓ {order_count} ticket orders for adaeze_sounds")
+
+        # ── Notifications for adaeze ───────────────────────────────────────────
+        detty_id = event_ids["Detty December Kickoff: Pool Party & Afrobeats"]
+        flytime_id = event_ids["Flytime Music Festival 2026"]
+        seun_id = user_ids["seun_pg"]
+        tunde_id = user_ids["tunde_vibes"]
+        dayo_id = user_ids["dayo_hype"]
+        adaeze_id = user_ids["adaeze_sounds"]
+
+        notifications = [
+            Notification(
+                id=str(uuid.uuid4()),
+                user_id=adaeze_id,
+                type="follow",
+                title="seun_pg started following you",
+                body=None,
+                reference_id=user_ids["seun_pg"],
+                reference_type="user",
+                actor_id=seun_id,
+                is_read=True,
+                created_at=utc(-60),
+            ),
+            Notification(
+                id=str(uuid.uuid4()),
+                user_id=adaeze_id,
+                type="follow",
+                title="tunde_vibes started following you",
+                body=None,
+                reference_id=tunde_id,
+                reference_type="user",
+                actor_id=tunde_id,
+                is_read=True,
+                created_at=utc(-55),
+            ),
+            Notification(
+                id=str(uuid.uuid4()),
+                user_id=adaeze_id,
+                type="going",
+                title="seun_pg is going to Flytime Music Festival 2026",
+                body="seun_pg and 2 others you follow are attending this event.",
+                reference_id=flytime_id,
+                reference_type="event",
+                actor_id=seun_id,
+                is_read=True,
+                created_at=utc(-1, 10),
+            ),
+            Notification(
+                id=str(uuid.uuid4()),
+                user_id=adaeze_id,
+                type="event_reminder",
+                title="Reminder: Detty December Kickoff in 4 days",
+                body="Don't forget — Detty December Kickoff: Pool Party & Afrobeats is on Saturday at Hard Rock Hotel Lagos.",
+                reference_id=detty_id,
+                reference_type="event",
+                actor_id=None,
+                is_read=False,
+                created_at=utc(-1, 8),
+            ),
+            Notification(
+                id=str(uuid.uuid4()),
+                user_id=adaeze_id,
+                type="going",
+                title="dayo_hype is going to Stand Up Lagos: New Money Edition",
+                body=None,
+                reference_id=event_ids["Stand Up Lagos: New Money Edition"],
+                reference_type="event",
+                actor_id=dayo_id,
+                is_read=False,
+                created_at=utc(-2, 18),
+            ),
+            Notification(
+                id=str(uuid.uuid4()),
+                user_id=adaeze_id,
+                type="follow",
+                title="dayo_hype started following you",
+                body=None,
+                reference_id=dayo_id,
+                reference_type="user",
+                actor_id=dayo_id,
+                is_read=False,
+                created_at=utc(-10),
+            ),
+            Notification(
+                id=str(uuid.uuid4()),
+                user_id=adaeze_id,
+                type="event_invite",
+                title="seun_pg invited you to co-host Naija Jollof Wars 2026",
+                body="You've been invited to co-host this event. Accept to be listed as an organiser.",
+                reference_id=event_ids["Naija Jollof Wars 2026"],
+                reference_type="event",
+                actor_id=seun_id,
+                is_read=False,
+                created_at=utc(-1, 12),
+            ),
+        ]
+        for n in notifications:
+            db.add(n)
+        await db.commit()
+        print(f"✓ {len(notifications)} notifications for adaeze_sounds")
+
+        # ── Event saves for adaeze ─────────────────────────────────────────────
+        saves = [
+            "Flytime Music Festival 2026",
+            "Lagos Comic Con 2026",
+            "Naija Jollof Wars 2026",
+        ]
+        for title in saves:
+            if title in event_ids:
+                db.add(EventSave(
+                    id=str(uuid.uuid4()),
+                    user_id=adaeze_id,
+                    event_id=event_ids[title],
+                ))
+        await db.commit()
+        print(f"✓ {len(saves)} saves for adaeze_sounds")
+
+    print()
+    print("🎉  Seed complete!")
+    print("   Login: adaeze@turnup.ng / password123")
+    print("   All users share password: password123")
+    print()
+    print("   Users:")
+    for u in USERS:
+        print(f"   • {u['email']}  ({u['username']}, {u['role']})")
 
 
 if __name__ == "__main__":
