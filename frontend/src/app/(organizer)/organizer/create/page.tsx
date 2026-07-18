@@ -1,15 +1,16 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { eventsApi } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { eventsApi, organizerApi, type EventTemplate } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { TopBar } from "@/components/layout/TopBar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import {
-  AlignLeft, Calendar, DollarSign, Image, MapPin,
+  AlignLeft, Calendar, CheckCircle2, ChevronDown, DollarSign, FileText, Image, MapPin,
   Plus, Tag, Ticket, Trash2, ToggleLeft, ToggleRight,
   Users, Globe, ChevronRight, ChevronLeft, Monitor, Video, Blend,
 } from "lucide-react";
@@ -167,6 +168,14 @@ export default function CreateEventPage() {
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const searchParams = useSearchParams();
+  const templateParam = searchParams.get("template");
+  const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+  const [templateApplied, setTemplateApplied] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
 
   const [form, setForm] = useState<FormState>({
     title: "", category_id: "", description: "",
@@ -183,6 +192,12 @@ export default function CreateEventPage() {
     queryFn: () => eventsApi.categories(),
   });
 
+  const { data: templates, isFetching: templatesFetching } = useQuery({
+    queryKey: ["organizer-templates"],
+    queryFn: () => organizerApi.listTemplates(token!),
+    enabled: !!token && (showTemplatePanel || !!templateParam),
+  });
+
   const set = (field: keyof FormState) => (value: string | boolean) =>
     setForm((f) => ({ ...f, [field]: value }));
 
@@ -195,6 +210,86 @@ export default function CreateEventPage() {
   }
   function removeTier(id: string) {
     setForm((f) => ({ ...f, tiers: f.tiers.filter((t) => t.id !== id) }));
+  }
+
+  function applyTemplate(tpl: EventTemplate) {
+    const d = tpl.template_data as Record<string, unknown>;
+    setForm((f) => ({
+      ...f,
+      category_id: typeof d.category_id === "string" ? d.category_id : f.category_id,
+      description: typeof d.description === "string" ? d.description : f.description,
+      cover_image: typeof d.cover_image === "string" ? d.cover_image : f.cover_image,
+      event_type: (d.event_type as EventType | undefined) ?? f.event_type,
+      venue_name: typeof d.venue_name === "string" ? d.venue_name : f.venue_name,
+      address: typeof d.address === "string" ? d.address : f.address,
+      city: typeof d.city === "string" ? d.city : f.city,
+      country: typeof d.country === "string" ? d.country : f.country,
+      meeting_url: typeof d.meeting_url === "string" ? d.meeting_url : f.meeting_url,
+      timezone: typeof d.timezone === "string" ? d.timezone : f.timezone,
+      capacity: typeof d.capacity === "string" ? d.capacity : f.capacity,
+      waitlist_enabled: typeof d.waitlist_enabled === "boolean" ? d.waitlist_enabled : f.waitlist_enabled,
+      is_free: typeof d.is_free === "boolean" ? d.is_free : f.is_free,
+      tags: typeof d.tags === "string" ? d.tags : f.tags,
+      tiers: Array.isArray(d.tiers)
+        ? (d.tiers as Record<string, string>[]).map((t) => ({
+            id: crypto.randomUUID(),
+            name: t.name ?? "",
+            description: t.description ?? "",
+            price: t.price ?? "",
+            quantity: t.quantity ?? "",
+            max_per_order: t.max_per_order ?? "10",
+          }))
+        : f.tiers,
+    }));
+  }
+
+  useEffect(() => {
+    if (!templateParam || !templates?.length || templateApplied) return;
+    const tpl = templates.find((t) => t.id === templateParam);
+    if (!tpl) return;
+    setTemplateApplied(true);
+    applyTemplate(tpl);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateParam, templates, templateApplied]);
+
+  async function saveAsTemplate() {
+    if (!token || !saveTemplateName.trim()) return;
+    setTemplateSaving(true);
+    try {
+      await organizerApi.createTemplate(token, {
+        name: saveTemplateName.trim(),
+        template_data: {
+          category_id: form.category_id,
+          description: form.description,
+          cover_image: form.cover_image,
+          event_type: form.event_type,
+          venue_name: form.venue_name,
+          address: form.address,
+          city: form.city,
+          country: form.country,
+          meeting_url: form.meeting_url,
+          timezone: form.timezone,
+          capacity: form.capacity,
+          waitlist_enabled: form.waitlist_enabled,
+          is_free: form.is_free,
+          tags: form.tags,
+          tiers: form.tiers.map((t) => ({
+            name: t.name,
+            description: t.description,
+            price: t.price,
+            quantity: t.quantity,
+            max_per_order: t.max_per_order,
+          })),
+        },
+      });
+      setTemplateSaved(true);
+      setShowSaveTemplate(false);
+      setSaveTemplateName("");
+      setTimeout(() => setTemplateSaved(false), 3000);
+    } catch {
+    } finally {
+      setTemplateSaving(false);
+    }
   }
 
   // Validation per step
@@ -300,6 +395,52 @@ export default function CreateEventPage() {
 
   const step0 = (
     <div className="space-y-5">
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowTemplatePanel((v) => !v)}
+          className="flex items-center gap-2 text-[11px] font-black text-text-muted uppercase tracking-widest hover:text-primary transition-colors"
+        >
+          <FileText size={12} />
+          Load from Template
+          <ChevronDown
+            size={12}
+            className={cn("transition-transform duration-150", showTemplatePanel && "rotate-180")}
+          />
+        </button>
+        {showTemplatePanel && (
+          <div className="mt-2 rounded border-2 border-border bg-bg-card shadow-brutal-sm overflow-hidden">
+            {templatesFetching ? (
+              <div className="p-4 space-y-2">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ) : !templates?.length ? (
+              <p className="p-4 text-xs text-text-muted text-center">No templates saved yet</p>
+            ) : (
+              <div className="divide-y-2 divide-border">
+                {templates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => {
+                      applyTemplate(tpl);
+                      setShowTemplatePanel(false);
+                    }}
+                    className="w-full flex flex-col gap-0.5 px-4 py-3 text-left hover:bg-bg-elevated transition-colors"
+                  >
+                    <span className="text-sm font-black text-text">{tpl.name}</span>
+                    {tpl.description && (
+                      <span className="text-xs text-text-muted line-clamp-1">{tpl.description}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <FieldWrap>
         <Label>Event Title *</Label>
         <Input
@@ -719,6 +860,55 @@ export default function CreateEventPage() {
         <Button variant="secondary" fullWidth size="lg" disabled={submitting} onClick={() => submit("draft")}>
           Save as Draft
         </Button>
+      </div>
+
+      <div className="pt-2 border-t-2 border-border">
+        {templateSaved ? (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded border-2 border-success/40 bg-success/10">
+            <CheckCircle2 size={14} className="text-success" />
+            <span className="text-xs font-black text-success uppercase tracking-widest">Template saved!</span>
+          </div>
+        ) : showSaveTemplate ? (
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Save as Template</p>
+            <Input
+              value={saveTemplateName}
+              onChange={(e) => setSaveTemplateName(e.target.value)}
+              placeholder="Template name"
+              maxLength={100}
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={!saveTemplateName.trim()}
+                loading={templateSaving}
+                onClick={saveAsTemplate}
+              >
+                Save
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setShowSaveTemplate(false);
+                  setSaveTemplateName("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowSaveTemplate(true)}
+            className="flex items-center gap-2 py-1 text-[11px] font-black text-text-muted uppercase tracking-widest hover:text-primary transition-colors"
+          >
+            <FileText size={12} />
+            Save as Template
+          </button>
+        )}
       </div>
     </div>
   );
