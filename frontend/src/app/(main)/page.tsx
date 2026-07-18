@@ -160,7 +160,7 @@ export default function DiscoverPage() {
             )}
           </div>
           <Link
-            href="/search"
+            href="/for-you"
             className="text-[10px] font-black text-primary uppercase tracking-widest hover:opacity-80 transition-opacity"
           >
             See all →
