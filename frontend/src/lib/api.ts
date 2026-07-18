@@ -264,6 +264,25 @@ export interface CoHostInvite {
   invited_at: string;
 }
 
+export interface OrganizerOrder {
+  id: string; event_id: string; tier_id: string; tier_name: string;
+  buyer_username: string; buyer_email: string;
+  quantity: number; unit_price: number; total_price: number;
+  status: string; created_at: string;
+}
+
+export interface EventTemplate {
+  id: string; organizer_id: string; name: string;
+  description: string | null; template_data: Record<string, unknown>;
+  created_at: string; updated_at: string;
+}
+
+export interface CoHost {
+  id: string; user_id: string; username: string; full_name: string;
+  avatar_url: string | null; status: string;
+  invited_at: string; responded_at: string | null;
+}
+
 export const organizerApi = {
   become: (token: string, data: { organization_name?: string; organizer_bio?: string; website?: string }) =>
     request<User>("/organizer/become", { method: "POST", body: JSON.stringify(data) }, token),
@@ -284,6 +303,37 @@ export const organizerApi = {
     request<{ status: string }>(`/events/${eventId}/cohosts/respond`, {
       method: "POST", body: JSON.stringify({ accept }),
     }, token),
+
+  orders: (token: string, eventId?: string, page = 1) => {
+    const params = new URLSearchParams({ page: String(page), limit: "50" });
+    if (eventId) params.set("event_id", eventId);
+    return request<OrganizerOrder[]>(`/organizer/orders?${params}`, {}, token);
+  },
+
+  // Templates
+  listTemplates: (token: string) =>
+    request<EventTemplate[]>("/organizer/templates", {}, token),
+
+  createTemplate: (token: string, data: { name: string; description?: string; template_data: Record<string, unknown> }) =>
+    request<EventTemplate>("/organizer/templates", { method: "POST", body: JSON.stringify(data) }, token),
+
+  updateTemplate: (token: string, id: string, data: { name?: string; description?: string; template_data?: Record<string, unknown> }) =>
+    request<EventTemplate>(`/organizer/templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+
+  deleteTemplate: (token: string, id: string) =>
+    request<void>(`/organizer/templates/${id}`, { method: "DELETE" }, token),
+
+  // Co-hosts
+  listCohosts: (eventId: string) =>
+    request<CoHost[]>(`/events/${eventId}/cohosts`),
+
+  inviteCohost: (token: string, eventId: string, username: string) =>
+    request<CoHost>(`/events/${eventId}/cohosts`, {
+      method: "POST", body: JSON.stringify({ username }),
+    }, token),
+
+  removeCohost: (token: string, eventId: string, cohostUserId: string) =>
+    request<void>(`/events/${eventId}/cohosts/${cohostUserId}`, { method: "DELETE" }, token),
 };
 
 // ── Social ─────────────────────────────────────────────────────────────────────
