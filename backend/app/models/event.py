@@ -10,6 +10,23 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class EventSeries(Base):
+    __tablename__ = "event_series"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    recurrence_rule: Mapped[str] = mapped_column(String(20), nullable=False)
+    # "weekly" | "bi-weekly" | "monthly" | "bi-monthly"
+    organizer_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    total_occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    next_occurrence_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    events = relationship("Event", back_populates="series", order_by="Event.start_date")
+    organizer = relationship("User")
+
+
 class Category(Base):
     __tablename__ = "categories"
 
@@ -71,6 +88,9 @@ class Event(Base):
     # Template reference (no FK, just a reference ID for UI)
     template_id: Mapped[str | None] = mapped_column(String(36))
 
+    # Recurring series reference
+    series_id: Mapped[str | None] = mapped_column(ForeignKey("event_series.id"), nullable=True, index=True)
+
     status: Mapped[str] = mapped_column(
         Enum("draft", "published", "cancelled", "completed", name="event_status"),
         default="published",
@@ -87,6 +107,7 @@ class Event(Base):
     # Core relationships
     host = relationship("User", back_populates="events", foreign_keys=[host_id])
     category = relationship("Category", back_populates="events")
+    series = relationship("EventSeries", back_populates="events", foreign_keys=[series_id])
     attendees = relationship("EventAttendee", back_populates="event", cascade="all, delete-orphan")
     saves = relationship("EventSave", back_populates="event", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="event", cascade="all, delete-orphan")
