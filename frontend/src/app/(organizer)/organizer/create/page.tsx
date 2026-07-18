@@ -1,4 +1,5 @@
 "use client";
+import { Suspense } from "react";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { eventsApi, organizerApi, seriesApi, type EventTemplate } from "@/lib/api";
@@ -178,7 +179,7 @@ function Toggle({ value, onChange, label, description }: {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function CreateEventPage() {
+function CreateEventPage() {
   const router = useRouter();
   const { token } = useAuthStore();
   const [step, setStep] = useState(0);
@@ -1099,5 +1100,13 @@ export default function CreateEventPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CreateEventPageWrapper() {
+  return (
+    <Suspense>
+      <CreateEventPage />
+    </Suspense>
   );
 }
