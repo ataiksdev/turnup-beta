@@ -83,12 +83,16 @@ class TicketOrderOut(BaseModel):
     total_price: float
     status: str
     payment_reference: str | None = None
+    ticket_code: str | None = None
+    checked_in_at: datetime | None = None
     # enriched fields returned by my-tickets endpoint
     event_title: str | None = None
     event_slug: str | None = None
     event_cover: str | None = None
     event_date: datetime | None = None
     event_city: str | None = None
+    event_address: str | None = None
+    event_venue: str | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
 

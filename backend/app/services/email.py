@@ -46,6 +46,39 @@ def _magic_html(url: str) -> str:
 <p style="margin-top:16px">Link expires in 15 minutes and can only be used once.</p>""")
 
 
+def _ticket_html(
+    event_title: str,
+    event_date: str,
+    event_venue: str,
+    event_address: str,
+    tier_name: str,
+    quantity: int,
+    total_price: float,
+    ticket_code: str,
+    ticket_url: str,
+) -> str:
+    price_line = "Free" if total_price == 0 else f"₦{total_price:,.0f}"
+    return _base(f"Your ticket: {event_title}", f"""
+<p>You're going! Here are your ticket details.</p>
+<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Event</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{event_title}</td></tr>
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Date</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{event_date}</td></tr>
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Venue</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{event_venue}</td></tr>
+  {"" if not event_address else f'<tr><td style="padding:6px 0;color:#71717A;font-size:13px">Address</td><td style="padding:6px 0;font-size:13px">{event_address}</td></tr>'}
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Ticket</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{tier_name} × {quantity}</td></tr>
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Total</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{price_line}</td></tr>
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Order ID</td>
+      <td style="padding:6px 0;font-family:monospace;font-size:12px;color:#A1A1AA">{ticket_code[:8].upper()}</td></tr>
+</table>
+<a class="btn" href="{ticket_url}">View Ticket &amp; QR Code</a>
+<p style="margin-top:20px;font-size:12px">Show the QR code at the door for entry.</p>""")
+
+
 # ── Send logic ────────────────────────────────────────────────────────────────
 
 async def _send(to: str, subject: str, html: str) -> None:
@@ -103,3 +136,42 @@ async def send_password_reset_email(to: str, token: str) -> None:
 async def send_magic_link_email(to: str, token: str) -> None:
     url = f"{settings.frontend_url}/auth/magic?token={token}"
     await _send(to, "Your Turnup magic link", _magic_html(url))
+
+
+async def send_ticket_email(
+    to: str,
+    order_id: str,
+    ticket_code: str,
+    event_title: str,
+    event_date,
+    event_venue: str | None,
+    event_address: str | None,
+    tier_name: str,
+    quantity: int,
+    total_price: float,
+) -> None:
+    if not to:
+        return
+    from datetime import datetime
+    date_str = ""
+    if event_date:
+        try:
+            if isinstance(event_date, str):
+                event_date = datetime.fromisoformat(event_date.replace("Z", "+00:00"))
+            date_str = event_date.strftime("%a, %b %-d · %-I:%M %p")
+        except Exception:
+            date_str = str(event_date)
+
+    ticket_url = f"{settings.frontend_url}/tickets/{order_id}"
+    html = _ticket_html(
+        event_title=event_title or "Event",
+        event_date=date_str,
+        event_venue=event_venue or "See event page",
+        event_address=event_address or "",
+        tier_name=tier_name,
+        quantity=quantity,
+        total_price=total_price,
+        ticket_code=ticket_code,
+        ticket_url=ticket_url,
+    )
+    await _send(to, f"Your ticket for {event_title}", html)

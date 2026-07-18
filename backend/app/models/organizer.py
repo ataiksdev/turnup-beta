@@ -73,6 +73,8 @@ class TicketOrder(Base):
     status: Mapped[str] = mapped_column(String(20), default="confirmed")
     payment_reference: Mapped[str | None] = mapped_column(String(100), index=True)
     payment_channel: Mapped[str | None] = mapped_column(String(30))
+    ticket_code: Mapped[str | None] = mapped_column(String(36), unique=True, index=True)
+    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="ticket_orders")

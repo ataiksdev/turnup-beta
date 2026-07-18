@@ -218,15 +218,53 @@ async def my_ticket_orders(
             tier_name=o.tier.name, quantity=o.quantity,
             unit_price=o.unit_price, total_price=o.total_price,
             status=o.status, payment_reference=o.payment_reference,
+            ticket_code=o.ticket_code,
+            checked_in_at=o.checked_in_at,
             event_title=o.event.title if o.event else None,
             event_slug=o.event.slug if o.event else None,
             event_cover=o.event.cover_image if o.event else None,
             event_date=o.event.start_date if o.event else None,
             event_city=o.event.city if o.event else None,
+            event_address=o.event.address if o.event else None,
+            event_venue=o.event.venue_name if o.event else None,
             created_at=o.created_at,
         )
         for o in orders
     ]
+
+
+# ── Single ticket order detail ────────────────────────────────────────────────
+
+@router.get("/tickets/{order_id}", response_model=TicketOrderOut)
+async def get_ticket_order(
+    order_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(TicketOrder)
+        .options(selectinload(TicketOrder.tier), selectinload(TicketOrder.event))
+        .where(TicketOrder.id == order_id, TicketOrder.user_id == user.id)
+    )
+    o = result.scalar_one_or_none()
+    if not o:
+        raise HTTPException(404, "Ticket not found")
+    return TicketOrderOut(
+        id=o.id, event_id=o.event_id, tier_id=o.tier_id,
+        tier_name=o.tier.name, quantity=o.quantity,
+        unit_price=o.unit_price, total_price=o.total_price,
+        status=o.status, payment_reference=o.payment_reference,
+        ticket_code=o.ticket_code,
+        checked_in_at=o.checked_in_at,
+        event_title=o.event.title if o.event else None,
+        event_slug=o.event.slug if o.event else None,
+        event_cover=o.event.cover_image if o.event else None,
+        event_date=o.event.start_date if o.event else None,
+        event_city=o.event.city if o.event else None,
+        event_address=o.event.address if o.event else None,
+        event_venue=o.event.venue_name if o.event else None,
+        created_at=o.created_at,
+    )
 
 
 # ── All orders for organizer's events ─────────────────────────────────────────

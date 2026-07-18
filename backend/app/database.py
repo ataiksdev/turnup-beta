@@ -37,6 +37,8 @@ async def _run_migrations(conn):
         ("users", "price_sensitivity", "VARCHAR(20)"),
         ("users", "event_format_pref", "VARCHAR(20)"),
         ("users", "goes_out_when", "VARCHAR(20)"),
+        ("ticket_orders", "ticket_code", "VARCHAR(36) UNIQUE"),
+        ("ticket_orders", "checked_in_at", "DATETIME"),
     ]
     for table, column, definition in new_columns:
         try:

@@ -14,8 +14,9 @@ export interface TicketOrder {
   id: string; event_id: string; tier_id: string; tier_name: string;
   quantity: number; unit_price: number; total_price: number;
   status: string; payment_reference?: string; created_at: string;
+  ticket_code?: string; checked_in_at?: string;
   event_title?: string; event_slug?: string; event_cover?: string;
-  event_date?: string; event_city?: string;
+  event_date?: string; event_city?: string; event_address?: string; event_venue?: string;
 }
 
 export interface PaymentInit {
@@ -306,6 +307,9 @@ export const organizerApi = {
 
   myTickets: (token: string) =>
     request<TicketOrder[]>("/organizer/my-tickets", {}, token),
+
+  getTicket: (token: string, orderId: string) =>
+    request<TicketOrder>(`/organizer/tickets/${orderId}`, {}, token),
 
   cohostInvites: (token: string) =>
     request<CoHostInvite[]>("/organizer/cohost-invites", {}, token),

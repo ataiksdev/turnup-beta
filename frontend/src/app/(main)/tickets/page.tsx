@@ -60,7 +60,7 @@ export default function TicketsPage() {
               : null;
 
             return (
-              <div key={t.id} className="bg-bg-card border-2 border-border rounded shadow-brutal-sm overflow-hidden">
+              <Link key={t.id} href={`/tickets/${t.id}`} className="bg-bg-card border-2 border-border rounded shadow-brutal-sm overflow-hidden hover:border-primary transition-colors block">
                 {/* Cover strip */}
                 {t.event_cover && (
                   <div className="h-20 w-full overflow-hidden">
@@ -106,7 +106,7 @@ export default function TicketsPage() {
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
             );
           })
         ) : (

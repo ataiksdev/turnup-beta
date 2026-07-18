@@ -879,10 +879,29 @@ async def purchase_tickets(
     if t.price == 0:
         # Free ticket — confirm immediately
         order.status = "confirmed"
+        order.ticket_code = str(uuid.uuid4())
         if t.quantity is not None:
             t.quantity_sold += payload.quantity
         await _auto_rsvp(event, user, db)
         await db.flush()
+        # Send confirmation email in the background (non-blocking)
+        try:
+            from app.services.email import send_ticket_email
+            import asyncio
+            asyncio.ensure_future(send_ticket_email(
+                to=user.email or "",
+                order_id=order.id,
+                ticket_code=order.ticket_code,
+                event_title=event.title,
+                event_date=event.start_date,
+                event_venue=event.venue_name,
+                event_address=event.address,
+                tier_name=t.name,
+                quantity=payload.quantity,
+                total_price=0.0,
+            ))
+        except Exception:
+            pass
         return PaymentInitOut(
             order_id=order.id,
             payment_reference=reference,
@@ -961,15 +980,36 @@ async def verify_payment(
 
     order.status = "confirmed"
     order.payment_channel = ps_data.get("channel")
+    order.ticket_code = str(uuid.uuid4())
     if t.quantity is not None:
         t.quantity_sold += order.quantity
     await _auto_rsvp(event, user, db)
     await db.flush()
 
+    # Send confirmation email in the background (non-blocking)
+    try:
+        from app.services.email import send_ticket_email
+        import asyncio
+        asyncio.ensure_future(send_ticket_email(
+            to=user.email or "",
+            order_id=order.id,
+            ticket_code=order.ticket_code,
+            event_title=event.title,
+            event_date=event.start_date,
+            event_venue=event.venue_name,
+            event_address=event.address,
+            tier_name=t.name,
+            quantity=order.quantity,
+            total_price=order.total_price,
+        ))
+    except Exception:
+        pass
+
     return TicketOrderOut(
         id=order.id, event_id=event_id, tier_id=order.tier_id, tier_name=t.name,
         quantity=order.quantity, unit_price=order.unit_price, total_price=order.total_price,
         status="confirmed", payment_reference=order.payment_reference,
+        ticket_code=order.ticket_code,
         created_at=order.created_at,
     )
 
