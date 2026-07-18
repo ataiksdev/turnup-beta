@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { usersApi, socialApi } from "@/lib/api";
+import { usersApi, socialApi, communitiesApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount, displayName } from "@/lib/utils";
-import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, type LucideIcon } from "lucide-react";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
@@ -29,6 +29,12 @@ export default function ProfilePage() {
   const { data: profile, isLoading } = useQuery({
     queryKey: ["user", username],
     queryFn: () => usersApi.get(username, token ?? undefined),
+  });
+
+  const communitiesQuery = useQuery({
+    queryKey: ["communities-my"],
+    queryFn: () => communitiesApi.my(token!),
+    enabled: !!token && me?.username === username,
   });
 
   const eventsQuery = useQuery({
@@ -233,6 +239,44 @@ export default function ProfilePage() {
               <Badge key={p} variant="primary">{p}</Badge>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Communities (own profile) */}
+      {isOwnProfile && communitiesQuery.data && communitiesQuery.data.length > 0 && (
+        <div className="px-4 space-y-2 pb-4">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Communities</p>
+            <Link href="/communities" className="text-[10px] font-black text-primary uppercase tracking-widest">See all →</Link>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {communitiesQuery.data.slice(0, 5).map((c) => (
+              <Link
+                key={c.id}
+                href={`/communities/${c.slug}`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
+              >
+                {c.icon && <span className="text-sm">{c.icon}</span>}
+                <span className="text-xs font-bold text-text">{c.name}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tickets quick-link (own profile) */}
+      {isOwnProfile && (
+        <div className="px-4 pb-4">
+          <Link
+            href="/tickets"
+            className="flex items-center justify-between p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Ticket size={16} className="text-primary" />
+              <span className="text-sm font-bold text-text">My Tickets</span>
+            </div>
+            <span className="text-xs text-primary">View →</span>
+          </Link>
         </div>
       )}
 

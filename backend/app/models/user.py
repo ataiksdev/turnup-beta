@@ -72,3 +72,7 @@ class User(Base):
     cohost_invites = relationship("EventCoHost", back_populates="user", cascade="all, delete-orphan")
     waitlist_entries = relationship("EventWaitlist", back_populates="user", cascade="all, delete-orphan")
     reviews = relationship("EventReview", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationships — communities
+    communities_created = relationship("Community", back_populates="creator", foreign_keys="Community.creator_id")
+    community_memberships = relationship("CommunityMember", back_populates="user", cascade="all, delete-orphan")

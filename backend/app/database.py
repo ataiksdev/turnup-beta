@@ -48,7 +48,7 @@ async def _run_migrations(conn):
 
 
 async def init_db():
-    from app.models import user, event, social, auth_tokens, organizer  # noqa: F401
+    from app.models import user, event, social, auth_tokens, organizer, community  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _run_migrations(conn)

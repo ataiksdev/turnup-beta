@@ -499,3 +499,139 @@ export const adminApi = {
     return request<AdminOrderOut[]>(`/admin/orders?${qs}`, {}, token);
   },
 };
+
+// ── Community types ───────────────────────────────────────────────────────────
+
+export interface SocialLinks {
+  whatsapp?: string | null;
+  instagram?: string | null;
+  discord?: string | null;
+  telegram?: string | null;
+  twitter?: string | null;
+  facebook?: string | null;
+  tiktok?: string | null;
+  youtube?: string | null;
+  website?: string | null;
+}
+
+export interface CommunityCreator {
+  id: string;
+  username: string;
+  full_name: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  is_verified: boolean;
+  role: string;
+}
+
+export interface CommunityCategory {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string;
+  color: string;
+}
+
+export interface Community {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  cover_image?: string | null;
+  icon?: string | null;
+  city?: string | null;
+  is_private: boolean;
+  social_links: SocialLinks;
+  member_count: number;
+  event_count: number;
+  creator: CommunityCreator;
+  category?: CommunityCategory | null;
+  created_at: string;
+  is_member: boolean;
+  member_role?: string | null;
+  is_verified_community: boolean;
+  invite_token?: string | null;
+}
+
+export interface CommunityMember {
+  user_id: string;
+  username: string;
+  full_name: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  is_verified: boolean;
+  role: string;
+  joined_at: string;
+}
+
+export interface CommunityCreatePayload {
+  name: string;
+  description?: string | null;
+  cover_image?: string | null;
+  icon?: string | null;
+  category_id?: string | null;
+  city?: string | null;
+  is_private?: boolean;
+  social_links?: SocialLinks;
+}
+
+export interface CommunityUpdatePayload extends Partial<CommunityCreatePayload> {}
+
+// ── Communities API ───────────────────────────────────────────────────────────
+
+export const communitiesApi = {
+  list: (params?: { q?: string; category?: string; city?: string; page?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.category) qs.set("category", params.category);
+    if (params?.city) qs.set("city", params.city);
+    if (params?.page) qs.set("page", String(params.page));
+    return request<Community[]>(`/communities?${qs}`);
+  },
+
+  my: (token: string) => request<Community[]>("/communities/my", {}, token),
+
+  get: (slug: string, token?: string) =>
+    request<Community>(`/communities/${slug}`, {}, token),
+
+  create: (token: string, payload: CommunityCreatePayload) =>
+    request<Community>("/communities", { method: "POST", body: JSON.stringify(payload) }, token),
+
+  update: (token: string, slug: string, payload: CommunityUpdatePayload) =>
+    request<Community>(`/communities/${slug}`, { method: "PATCH", body: JSON.stringify(payload) }, token),
+
+  delete: (token: string, slug: string) =>
+    request<void>(`/communities/${slug}`, { method: "DELETE" }, token),
+
+  join: (token: string, slug: string) =>
+    request<Community>(`/communities/${slug}/join`, { method: "POST" }, token),
+
+  leave: (token: string, slug: string) =>
+    request<void>(`/communities/${slug}/leave`, { method: "DELETE" }, token),
+
+  members: (slug: string, page?: number) => {
+    const qs = new URLSearchParams();
+    if (page) qs.set("page", String(page));
+    return request<CommunityMember[]>(`/communities/${slug}/members?${qs}`);
+  },
+
+  events: (slug: string, page?: number) => {
+    const qs = new URLSearchParams();
+    if (page) qs.set("page", String(page));
+    return request<any[]>(`/communities/${slug}/events?${qs}`);
+  },
+
+  shareEvent: (token: string, slug: string, event_id: string) =>
+    request<{ ok: boolean }>(`/communities/${slug}/events`, {
+      method: "POST", body: JSON.stringify({ event_id }),
+    }, token),
+
+  removeEvent: (token: string, slug: string, event_id: string) =>
+    request<void>(`/communities/${slug}/events/${event_id}`, { method: "DELETE" }, token),
+
+  joinViaInvite: (token: string, invite_token: string) =>
+    request<Community>(`/communities/join-invite/${invite_token}`, { method: "POST" }, token),
+
+  regenerateInvite: (token: string, slug: string) =>
+    request<Community>(`/communities/${slug}/regenerate-invite`, { method: "POST" }, token),
+};

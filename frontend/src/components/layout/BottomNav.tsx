@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { Compass, Heart, Home, Search, Ticket, User } from "lucide-react";
+import { Compass, Home, Search, Users, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -8,11 +8,11 @@ import { useQuery } from "@tanstack/react-query";
 import { socialApi } from "@/lib/api";
 
 const navItems = [
-  { href: "/",         icon: Home,    label: "Home" },
-  { href: "/search",   icon: Search,  label: "Search" },
-  { href: "/activity", icon: Compass, label: "Activity" },
-  { href: "/tickets",  icon: Ticket,  label: "Tickets" },
-  { href: "/profile",  icon: User,    label: "Profile" },
+  { href: "/",             icon: Home,    label: "Home" },
+  { href: "/search",       icon: Search,  label: "Search" },
+  { href: "/communities",  icon: Users,   label: "Communities" },
+  { href: "/activity",     icon: Compass, label: "Activity" },
+  { href: "/profile",      icon: User,    label: "Profile" },
 ];
 
 export function BottomNav() {
@@ -40,7 +40,7 @@ export function BottomNav() {
             : href;
           const isActive =
             pathname === resolvedHref ||
-            (href !== "/" && pathname.startsWith(href));
+            (href !== "/" && pathname.startsWith(href) && href !== "/profile");
           const showBadge = href === "/activity" && unreadCount > 0;
 
           return (

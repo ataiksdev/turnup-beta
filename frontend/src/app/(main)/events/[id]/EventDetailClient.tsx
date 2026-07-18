@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { eventsApi, socialApi, seriesApi } from "@/lib/api";
+import { eventsApi, socialApi, seriesApi, communitiesApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +13,7 @@ import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
   Star, Ticket, Minus, Plus, Flame, Monitor, AlertCircle,
-  Clock, Images, RefreshCw,
+  Clock, Images, RefreshCw, Share2, X as XIcon,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -114,6 +114,10 @@ export function EventDetailClient({ id }: { id: string }) {
   const [reviewRating, setReviewRating] = useState(myReview?.rating ?? 0);
   const [reviewBody, setReviewBody]     = useState(myReview?.body ?? "");
   const [hoverStar, setHoverStar]       = useState(0);
+
+  // Share to community state
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharedTo, setSharedTo] = useState<string[]>([]);
 
   function flashError(msg: string) {
     setActionError(msg);
@@ -252,6 +256,18 @@ export function EventDetailClient({ id }: { id: string }) {
       qc.invalidateQueries({ queryKey: ["my-review", eid] });
     },
     onError: () => flashError("Could not delete review. Please try again."),
+  });
+
+  const { data: myCommunities } = useQuery({
+    queryKey: ["communities-my"],
+    queryFn: () => communitiesApi.my(token!),
+    enabled: !!token && showShareModal,
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: (slug: string) => communitiesApi.shareEvent(token!, slug, eid),
+    onSuccess: (_, slug) => setSharedTo((prev) => [...prev, slug]),
+    onError: () => flashError("Could not share event. Try again."),
   });
 
   if (isLoading) return <EventDetailSkeleton />;
@@ -421,6 +437,16 @@ export function EventDetailClient({ id }: { id: string }) {
               <p className="text-xs text-error text-center">{actionError}</p>
             )}
           </div>
+        )}
+
+        {/* Share to Community */}
+        {user && (
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded border-2 border-dashed border-border hover:border-primary hover:text-primary text-text-muted text-xs font-bold uppercase tracking-widest transition-colors"
+          >
+            <Share2 size={13} /> Share to a Community
+          </button>
         )}
 
         {/* Host */}
@@ -821,6 +847,67 @@ export function EventDetailClient({ id }: { id: string }) {
           </ol>
         </section>
       </div>
+
+      {/* Share to Community bottom sheet */}
+      {showShareModal && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50"
+          onClick={() => setShowShareModal(false)}
+        >
+          <div
+            className="bg-bg rounded-t-2xl border-t-2 border-border max-h-[70vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b-2 border-border">
+              <p className="font-black text-text uppercase tracking-widest text-xs">Share to Community</p>
+              <button onClick={() => setShowShareModal(false)} className="p-1 rounded hover:bg-bg-elevated transition-colors">
+                <XIcon size={16} className="text-text-muted" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 divide-y divide-border">
+              {!myCommunities ? (
+                <div className="flex justify-center py-10">
+                  <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                </div>
+              ) : myCommunities.length === 0 ? (
+                <div className="py-14 text-center space-y-2">
+                  <Users size={28} className="text-border-strong mx-auto" />
+                  <p className="text-sm text-text-muted">You haven't joined any communities yet.</p>
+                  <Link href="/communities" onClick={() => setShowShareModal(false)} className="text-primary text-xs font-bold">Explore Communities →</Link>
+                </div>
+              ) : (
+                myCommunities.map((c: any) => {
+                  const shared = sharedTo.includes(c.slug);
+                  return (
+                    <button
+                      key={c.id}
+                      disabled={shared || shareMutation.isPending}
+                      onClick={() => !shared && shareMutation.mutate(c.slug)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated transition-colors text-left",
+                        shared && "opacity-60",
+                      )}
+                    >
+                      <div className="w-9 h-9 rounded-full bg-bg-elevated flex items-center justify-center shrink-0 overflow-hidden">
+                        {c.icon ? <span className="text-lg">{c.icon}</span> : <Users size={16} className="text-text-muted" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-text truncate">{c.name}</p>
+                        <p className="text-xs text-text-muted">{c.member_count} members</p>
+                      </div>
+                      {shared ? (
+                        <CheckCircle2 size={16} className="text-success shrink-0" />
+                      ) : (
+                        <Share2 size={14} className="text-text-muted shrink-0" />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

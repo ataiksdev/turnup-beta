@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { eventsApi } from "@/lib/api";
+import { eventsApi, communitiesApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { HeroEvent } from "@/components/events/HeroEvent";
@@ -10,6 +10,7 @@ import { parsePreferences, displayName as getDisplayName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Users, Lock, CheckCircle2 } from "lucide-react";
 import type { Event, User } from "@/types";
 
 function getGreeting(name?: string): string {
@@ -76,6 +77,12 @@ export default function DiscoverPage() {
     enabled: !!topCatSlug,
   });
 
+  const { data: myCommunities } = useQuery({
+    queryKey: ["communities-my"],
+    queryFn: () => communitiesApi.my(token!),
+    enabled: !!token,
+  });
+
   const heroEvent = featured?.[0];
   const topPicks = forYou?.slice(0, 3) ?? [];
 
@@ -90,6 +97,54 @@ export default function DiscoverPage() {
           {getSubtitle(user)}
         </p>
       </div>
+
+      {/* ── Your Communities ── */}
+      {myCommunities && myCommunities.length > 0 && (
+        <section className="space-y-3">
+          <div className="px-4 flex items-center justify-between">
+            <h2 className="text-xs font-black text-text uppercase tracking-widest">Your Communities</h2>
+            <Link href="/communities" className="text-[10px] font-black text-primary uppercase tracking-widest hover:opacity-80 transition-opacity">
+              See all →
+            </Link>
+          </div>
+          <div className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory no-scrollbar">
+            {myCommunities.slice(0, 10).map((c: any) => (
+              <Link
+                key={c.id}
+                href={`/communities/${c.slug}`}
+                className="snap-start shrink-0 w-32 flex flex-col items-center gap-2 p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors text-center"
+              >
+                <div className="w-12 h-12 rounded-full bg-bg-elevated flex items-center justify-center overflow-hidden relative">
+                  {c.cover_image ? (
+                    <img src={c.cover_image} alt="" className="w-full h-full object-cover" />
+                  ) : c.icon ? (
+                    <span className="text-2xl">{c.icon}</span>
+                  ) : (
+                    <Users size={20} className="text-text-muted" />
+                  )}
+                  {c.is_verified_community && (
+                    <CheckCircle2 size={12} className="absolute bottom-0 right-0 text-primary fill-bg-card" />
+                  )}
+                </div>
+                <div className="min-w-0 w-full">
+                  <p className="text-[11px] font-bold text-text line-clamp-2 leading-tight">{c.name}</p>
+                  <p className="text-[10px] text-text-muted mt-0.5 flex items-center justify-center gap-0.5">
+                    {c.is_private && <Lock size={8} />}
+                    {c.member_count.toLocaleString()} members
+                  </p>
+                </div>
+              </Link>
+            ))}
+            <Link
+              href="/communities"
+              className="snap-start shrink-0 w-20 flex flex-col items-center justify-center gap-1.5 p-3 rounded border-2 border-dashed border-border hover:border-primary transition-colors text-center"
+            >
+              <Users size={18} className="text-text-muted" />
+              <p className="text-[10px] font-bold text-text-muted">Explore</p>
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* ── Top Picks / For You — main hero section ── */}
       <section className="px-4 space-y-3">

@@ -13,6 +13,7 @@ from app.routers import auth, events, social, users
 from app.routers import organizer
 from app.routers import series
 from app.routers import admin
+from app.routers import communities
 
 os.makedirs("data", exist_ok=True)
 
@@ -52,6 +53,7 @@ app.include_router(social.router)
 app.include_router(organizer.router)
 app.include_router(series.router)
 app.include_router(admin.router)
+app.include_router(communities.router)
 
 
 @app.get("/api/health")
