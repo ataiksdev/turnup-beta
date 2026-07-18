@@ -10,8 +10,8 @@ import { socialApi } from "@/lib/api";
 const navItems = [
   { href: "/",             icon: Home,    label: "Home" },
   { href: "/search",       icon: Search,  label: "Search" },
+  { href: "/explore",      icon: Compass, label: "Explore" },
   { href: "/communities",  icon: Users,   label: "Communities" },
-  { href: "/activity",     icon: Compass, label: "Activity" },
   { href: "/profile",      icon: User,    label: "Profile" },
 ];
 
