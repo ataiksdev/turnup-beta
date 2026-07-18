@@ -24,7 +24,7 @@ class EventCreate(BaseModel):
     longitude: float | None = None
     start_date: datetime
     end_date: datetime
-    timezone: str = "America/New_York"
+    timezone: str = "Africa/Lagos"
     is_free: bool = True
     price_min: float | None = None
     price_max: float | None = None

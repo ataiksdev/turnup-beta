@@ -49,9 +49,10 @@ interface FormState {
 }
 
 const TIMEZONES = [
+  "Africa/Lagos","Africa/Nairobi",
   "America/New_York","America/Chicago","America/Denver","America/Los_Angeles",
   "America/Toronto","Europe/London","Europe/Paris","Europe/Berlin",
-  "Africa/Lagos","Africa/Nairobi","Asia/Dubai","Asia/Kolkata","Asia/Tokyo","Australia/Sydney",
+  "Asia/Dubai","Asia/Kolkata","Asia/Tokyo","Australia/Sydney",
 ];
 
 const STEPS = ["Basics", "Time & Place", "Tickets", "Review"];
@@ -146,7 +147,7 @@ export default function EditEventPage() {
   const [form, setForm] = useState<FormState>({
     title: "", category_id: "", description: "", cover_image: "",
     event_type: "physical", venue_name: "", address: "", city: "", country: "US", meeting_url: "",
-    start_date: "", end_date: "", timezone: "America/New_York",
+    start_date: "", end_date: "", timezone: "Africa/Lagos",
     capacity: "", waitlist_enabled: false,
     is_free: true, tags: "", status: "published",
     newTiers: [],
@@ -185,7 +186,7 @@ export default function EditEventPage() {
       meeting_url: event.meeting_url ?? "",
       start_date: toLocal(event.start_date),
       end_date: toLocal(event.end_date),
-      timezone: event.timezone ?? "America/New_York",
+      timezone: event.timezone ?? "Africa/Lagos",
       capacity: event.capacity ? String(event.capacity) : "",
       waitlist_enabled: event.waitlist_enabled ?? false,
       is_free: event.is_free ?? true,

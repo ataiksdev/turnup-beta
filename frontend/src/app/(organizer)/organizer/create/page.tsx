@@ -69,6 +69,8 @@ interface FormState {
 }
 
 const TIMEZONES = [
+  "Africa/Lagos",
+  "Africa/Nairobi",
   "America/New_York",
   "America/Chicago",
   "America/Denver",
@@ -77,8 +79,6 @@ const TIMEZONES = [
   "Europe/London",
   "Europe/Paris",
   "Europe/Berlin",
-  "Africa/Lagos",
-  "Africa/Nairobi",
   "Asia/Dubai",
   "Asia/Kolkata",
   "Asia/Tokyo",
@@ -201,7 +201,7 @@ export default function CreateEventPage() {
     title: "", category_id: "", description: "",
     event_type: "physical",
     venue_name: "", address: "", city: "", country: "US", meeting_url: "",
-    start_date: "", end_date: "", timezone: "America/New_York",
+    start_date: "", end_date: "", timezone: "Africa/Lagos",
     capacity: "", waitlist_enabled: false,
     is_free: true, cover_image: "", tags: "",
     tiers: [newTier()],

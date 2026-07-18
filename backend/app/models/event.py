@@ -59,7 +59,7 @@ class Event(Base):
 
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    timezone: Mapped[str] = mapped_column(String(50), default="America/New_York")
+    timezone: Mapped[str] = mapped_column(String(50), default="Africa/Lagos")
 
     is_free: Mapped[bool] = mapped_column(Boolean, default=True)
     price_min: Mapped[float | None] = mapped_column(Float)
