@@ -67,6 +67,7 @@ export interface Event {
   waitlist_enabled?: boolean;
   waitlist_count?: number;
   is_waitlisted?: boolean;
+  series_id?: string | null;
 }
 
 export interface Comment {

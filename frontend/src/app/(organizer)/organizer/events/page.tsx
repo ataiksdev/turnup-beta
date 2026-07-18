@@ -42,13 +42,24 @@ function EventRow({ event }: { event: Event }) {
           </div>
         </div>
 
-        {/* Status badge */}
-        <span className={cn(
-          "shrink-0 px-2 py-1 rounded border text-[10px] font-black uppercase tracking-widest",
-          STATUS_STYLES[event.status] ?? STATUS_STYLES.draft,
-        )}>
-          {event.status}
-        </span>
+        {/* Status + Series badges */}
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className={cn(
+            "px-2 py-1 rounded border text-[10px] font-black uppercase tracking-widest",
+            STATUS_STYLES[event.status] ?? STATUS_STYLES.draft,
+          )}>
+            {event.status}
+          </span>
+          {event.series_id && (
+            <Link
+              href={`/organizer/series/${event.series_id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="px-1.5 py-0.5 rounded border border-primary/40 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-colors"
+            >
+              Series
+            </Link>
+          )}
+        </div>
       </Link>
 
       {/* Action bar */}

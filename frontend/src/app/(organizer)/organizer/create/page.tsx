@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { eventsApi, organizerApi, type EventTemplate } from "@/lib/api";
+import { eventsApi, organizerApi, seriesApi, type EventTemplate } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/Input";
@@ -12,8 +12,24 @@ import { cn } from "@/lib/utils";
 import {
   AlignLeft, Calendar, CheckCircle2, ChevronDown, DollarSign, FileText, Image, MapPin,
   Plus, Tag, Ticket, Trash2, ToggleLeft, ToggleRight,
-  Users, Globe, ChevronRight, ChevronLeft, Monitor, Video, Blend,
+  Users, Globe, ChevronRight, ChevronLeft, Monitor, Video, Blend, Clock,
 } from "lucide-react";
+import { format, addWeeks, addMonths } from "date-fns";
+
+// ── Recurrence helper ─────────────────────────────────────────────────────────
+
+function computeOccurrenceDates(startDateStr: string, rule: string, count: number): Date[] {
+  const dates: Date[] = [];
+  let current = new Date(startDateStr);
+  for (let i = 0; i < count; i++) {
+    dates.push(new Date(current));
+    if (rule === "weekly") current = addWeeks(current, 1);
+    else if (rule === "bi-weekly") current = addWeeks(current, 2);
+    else if (rule === "monthly") current = addMonths(current, 1);
+    else if (rule === "bi-monthly") current = addMonths(current, 2);
+  }
+  return dates;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -176,6 +192,10 @@ export default function CreateEventPage() {
   const [saveTemplateName, setSaveTemplateName] = useState("");
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateSaved, setTemplateSaved] = useState(false);
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceRule, setRecurrenceRule] = useState<"weekly" | "bi-weekly" | "monthly" | "bi-monthly">("weekly");
+  const [occurrences, setOccurrences] = useState(4);
 
   const [form, setForm] = useState<FormState>({
     title: "", category_id: "", description: "",
@@ -664,6 +684,94 @@ export default function CreateEventPage() {
         label="Enable waitlist"
         description="Let people join a waitlist when capacity is full"
       />
+
+      {/* Recurring Event */}
+      <Toggle
+        value={isRecurring}
+        onChange={setIsRecurring}
+        label="Recurring Event"
+        description="Generate multiple occurrences (weekly, bi-weekly, monthly, etc.)"
+      />
+
+      {isRecurring && (
+        <div className="space-y-3 pl-4 border-l-4 border-primary">
+          <FieldWrap>
+            <Label>Recurrence</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["weekly", "bi-weekly", "monthly", "bi-monthly"] as const).map((rule) => (
+                <button
+                  key={rule}
+                  type="button"
+                  onClick={() => setRecurrenceRule(rule)}
+                  className={cn(
+                    "py-2.5 rounded border-2 text-xs font-black uppercase tracking-wider transition-all",
+                    recurrenceRule === rule
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-bg-card text-text-muted hover:border-border-strong"
+                  )}
+                >
+                  {rule}
+                </button>
+              ))}
+            </div>
+          </FieldWrap>
+
+          <FieldWrap>
+            <Label>Number of occurrences</Label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={2}
+                max={52}
+                value={occurrences}
+                onChange={(e) => setOccurrences(Number(e.target.value))}
+                className="flex-1 accent-primary"
+              />
+              <span className="text-sm font-black text-text w-8 text-right">{occurrences}</span>
+            </div>
+          </FieldWrap>
+
+          {/* Date preview */}
+          {form.start_date && (
+            <FieldWrap>
+              <Label>Scheduled dates</Label>
+              {(() => {
+                const cutoff = new Date(Date.now() + 92 * 86400 * 1000);
+                const dates = computeOccurrenceDates(form.start_date, recurrenceRule, occurrences);
+                const immediateCount = dates.filter((d) => d <= cutoff).length;
+                return (
+                  <>
+                    {immediateCount < occurrences && (
+                      <p className="text-[10px] text-text-muted mb-1.5">
+                        {immediateCount} created immediately · {occurrences - immediateCount} auto-generated as the window advances
+                      </p>
+                    )}
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                      {dates.map((d, i) => {
+                        const isImmediate = d <= cutoff;
+                        return (
+                          <div key={i} className={cn(
+                            "flex items-center gap-2 text-xs",
+                            isImmediate ? "text-text-secondary" : "text-text-muted opacity-70",
+                          )}>
+                            <span className="w-5 h-5 rounded bg-bg-elevated border border-border flex items-center justify-center text-[10px] font-black text-text-muted shrink-0">{i + 1}</span>
+                            <span className="flex-1">{format(d, "EEE, MMM d yyyy · h:mm a")}</span>
+                            {!isImmediate && (
+                              <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-widest text-text-muted italic shrink-0">
+                                <Clock size={9} /> Scheduled
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </FieldWrap>
+          )}
+        </div>
+      )}
     </div>
   );
 

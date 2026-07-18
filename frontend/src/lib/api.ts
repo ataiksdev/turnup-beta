@@ -336,6 +336,45 @@ export const organizerApi = {
     request<void>(`/events/${eventId}/cohosts/${cohostUserId}`, { method: "DELETE" }, token),
 };
 
+// ── Series ─────────────────────────────────────────────────────────────────────
+
+export interface EventSeries {
+  id: string;
+  title: string;
+  description: string | null;
+  recurrence_rule: "weekly" | "bi-weekly" | "monthly" | "bi-monthly";
+  organizer_id: string;
+  created_at: string;
+  events: Array<{
+    id: string; title: string; slug: string;
+    start_date: string; end_date: string;
+    status: string; attendees_count: number;
+  }>;
+}
+
+export const seriesApi = {
+  create: (token: string, data: {
+    title: string; description?: string;
+    recurrence_rule: string; occurrences: number;
+    event_title: string; event_description: string;
+    cover_image?: string; event_type?: string;
+    meeting_url?: string; venue_name: string;
+    address: string; city: string; country?: string;
+    timezone?: string; capacity?: number;
+    waitlist_enabled?: boolean; is_free?: boolean;
+    price_min?: number; price_max?: number; currency?: string;
+    tags?: string; category_id?: string;
+    start_date: string; end_date: string; status?: string;
+  }) =>
+    request<EventSeries>("/series", { method: "POST", body: JSON.stringify(data) }, token),
+
+  get: (id: string) =>
+    request<EventSeries>(`/series/${id}`),
+
+  delete: (token: string, id: string) =>
+    request<void>(`/series/${id}`, { method: "DELETE" }, token),
+};
+
 // ── Social ─────────────────────────────────────────────────────────────────────
 export const socialApi = {
   follow: (token: string, username: string) =>
