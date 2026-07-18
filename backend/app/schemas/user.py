@@ -57,6 +57,10 @@ class UserMe(BaseModel):
     events_hosted: int
     events_attended: int
     category_preferences: str | None
+    city: str | None = None
+    price_sensitivity: str | None = None
+    event_format_pref: str | None = None
+    goes_out_when: str | None = None
     onboarding_completed: bool
     created_at: datetime
     organizer_profile: OrganizerProfileOut | None = None

@@ -186,14 +186,12 @@ async def for_you_events(
     user: User | None = Depends(get_optional_user),
 ):
     """
-    Personalised recommendation feed. Scores every upcoming published event
-    against six signals: category taste, location, budget history, social
-    graph activity, tag overlap, and platform flags (trending/featured).
-    Anonymous callers receive a trending-weighted fallback.
+    Personalised recommendation feed. Scores upcoming events across eight
+    signals. For organizers, preferences are inferred from their hosted events
+    rather than asked during onboarding.
     """
     now = datetime.now(timezone.utc)
 
-    # Candidate pool: upcoming published events (capped for scoring performance)
     candidates = (await db.execute(
         select(Event).options(*_load())
         .where(Event.status == "published", Event.start_date > now)
@@ -205,19 +203,51 @@ async def for_you_events(
         candidates.sort(key=lambda e: (e.is_trending, e.is_featured, e.attendees_count), reverse=True)
         return [_serialize(e) for e in candidates[:limit]]
 
-    # ── Gather user signals ────────────────────────────────────────────────────
+    # ── Build preference profile ────────────────────────────────────────────────
 
-    # 1. Category preferences → category IDs
-    raw_prefs = [p.strip() for p in (user.category_preferences or "").split(",") if p.strip()]
-    pref_category_ids: set[str] = set()
-    if raw_prefs:
-        cats = (await db.execute(select(Category).where(Category.slug.in_(raw_prefs)))).scalars().all()
-        pref_category_ids = {c.id for c in cats}
+    if user.role == "organizer":
+        hosted = (await db.execute(
+            select(Event.category_id, Event.city, Event.event_type)
+            .where(Event.host_id == user.id, Event.status == "published")
+        )).all()
+        pref_category_ids = {row[0] for row in hosted if row[0]}
+        from collections import Counter
+        city_counts = Counter(row[1].strip() for row in hosted if row[1])
+        user_city = city_counts.most_common(1)[0][0].lower() if city_counts else (user.city or "").lower()
+        format_counts = Counter(row[2] for row in hosted if row[2])
+        inferred_format = format_counts.most_common(1)[0][0] if format_counts else None
+        price_sensitivity = user.price_sensitivity
+        goes_out_when = user.goes_out_when
+    else:
+        raw_prefs = [p.strip() for p in (user.category_preferences or "").split(",") if p.strip()]
+        pref_category_ids: set[str] = set()
+        if raw_prefs:
+            cats = (await db.execute(select(Category).where(Category.slug.in_(raw_prefs)))).scalars().all()
+            pref_category_ids = {c.id for c in cats}
 
-    # 2. User city from profile location field (first token before comma)
-    user_city = (user.location or "").split(",")[0].strip().lower()
+        saved_ids_all = {
+            r[0] for r in (await db.execute(
+                select(EventSave.event_id).where(EventSave.user_id == user.id)
+            )).all()
+        }
+        if saved_ids_all:
+            saved_cat_ids = {
+                r[0] for r in (await db.execute(
+                    select(Event.category_id).where(
+                        Event.id.in_(saved_ids_all), Event.category_id.isnot(None)
+                    )
+                )).all()
+                if r[0]
+            }
+            pref_category_ids = pref_category_ids | saved_cat_ids
 
-    # 3. Events user already saved or attending → exclude from results
+        user_city = (user.city or (user.location or "").split(",")[0]).strip().lower()
+        inferred_format = user.event_format_pref
+        price_sensitivity = user.price_sensitivity
+        goes_out_when = user.goes_out_when
+
+    # ── Signals shared by both roles ────────────────────────────────────────────
+
     attended_ids = {
         r[0] for r in (await db.execute(
             select(EventAttendee.event_id).where(EventAttendee.user_id == user.id)
@@ -230,7 +260,6 @@ async def for_you_events(
     }
     excluded_ids = attended_ids | saved_ids
 
-    # 4. Taste tag profile: tags from events the user has attended
     history_tags_rows = (await db.execute(
         select(Event.tags).where(Event.id.in_(attended_ids), Event.tags.isnot(None))
     )).scalars().all()
@@ -238,7 +267,13 @@ async def for_you_events(
     for row in history_tags_rows:
         user_tags.update(t.strip().lower() for t in row.split(",") if t.strip())
 
-    # 5. Social signal: event IDs attended by people the user follows
+    if saved_ids:
+        saved_tags_rows = (await db.execute(
+            select(Event.tags).where(Event.id.in_(saved_ids), Event.tags.isnot(None))
+        )).scalars().all()
+        for row in saved_tags_rows:
+            user_tags.update(t.strip().lower() for t in row.split(",") if t.strip())
+
     followed_ids = {
         r[0] for r in (await db.execute(
             select(Follow.following_id).where(Follow.follower_id == user.id)
@@ -255,18 +290,22 @@ async def for_you_events(
             )).all()
         }
 
-    # 6. Budget signal: infer max comfortable spend from confirmed orders
-    paid_prices = (await db.execute(
-        select(TicketOrder.unit_price).where(
-            TicketOrder.user_id == user.id,
-            TicketOrder.status == "confirmed",
-            TicketOrder.unit_price > 0,
-        )
-    )).scalars().all()
-    max_spend = max(paid_prices, default=0.0)
-    prefers_free = max_spend == 0 and user.events_attended < 3
+    if not price_sensitivity:
+        paid_prices = (await db.execute(
+            select(TicketOrder.unit_price).where(
+                TicketOrder.user_id == user.id,
+                TicketOrder.status == "confirmed",
+                TicketOrder.unit_price > 0,
+            )
+        )).scalars().all()
+        max_spend = max(paid_prices, default=0.0)
+        prefers_free = max_spend == 0 and user.events_attended < 3
+    else:
+        paid_prices = []
+        max_spend = {"free": 0, "budget": 5000, "mid": 20000, "any": 9999999}.get(price_sensitivity, 0)
+        prefers_free = price_sensitivity == "free"
 
-    # ── Score candidates ───────────────────────────────────────────────────────
+    # ── Score candidates ────────────────────────────────────────────────────────
 
     scored: list[tuple[float, Event]] = []
     for e in candidates:
@@ -274,57 +313,64 @@ async def for_you_events(
             continue
         score = 0.0
 
-        # Category preference match (strongest signal)
         if e.category_id and e.category_id in pref_category_ids:
             score += 3.0
 
-        # Location proximity
-        if user_city and e.city.lower().startswith(user_city):
-            score += 2.0
+        if user_city:
+            e_city = e.city.lower()
+            if user_city in e_city or e_city in user_city:
+                score += 2.0
 
-        # Budget fit
         if e.is_free:
             score += 1.5 if prefers_free else 0.5
+        elif price_sensitivity == "any":
+            score += 1.0
         elif max_spend > 0 and e.price_min is not None and e.price_min <= max_spend * 1.3:
             score += 1.5
 
-        # Social proof from followed accounts
+        if inferred_format and inferred_format != "both":
+            if e.event_type == inferred_format:
+                score += 1.5
+            elif e.event_type != "hybrid":
+                score -= 0.5
+
+        if goes_out_when and goes_out_when != "any":
+            event_dow = e.start_date.weekday()
+            is_weekend = event_dow >= 4
+            if goes_out_when == "weekends" and is_weekend:
+                score += 1.0
+            elif goes_out_when == "weekdays" and not is_weekend:
+                score += 1.0
+
         if e.id in social_event_ids:
             score += 2.0
 
-        # Tag taste overlap (each matching tag = 0.8)
         if e.tags and user_tags:
             e_tags = {t.strip().lower() for t in e.tags.split(",") if t.strip()}
             score += len(e_tags & user_tags) * 0.8
 
-        # Platform quality signals
         if e.is_trending:
             score += 0.8
         if e.is_featured:
             score += 0.5
 
-        # Popularity (soft cap at 1.0)
         score += min(e.attendees_count / 50.0, 1.0)
 
-        # Freshness: events within the next 7 days get a boost
         days_away = max((e.start_date.replace(tzinfo=timezone.utc) - now).days, 0)
         if days_away <= 7:
             score += 0.5
 
-        # Add a tiny noise term so equal-scored events vary between users
         score += (hash(f"{user.id}:{e.id}") % 100) / 1000.0
 
         scored.append((score, e))
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # Resolve user-state for top N and build response
     result = []
     for _, e in scored[:limit]:
         sv, at, wl = await _user_state(e.id, user, db)
         result.append(_serialize(e, sv, at, wl))
 
-    # Pad with trending events if personalised pool is thin
     if len(result) < limit:
         seen = {r["id"] for r in result} | excluded_ids
         fallback = [e for e in candidates if e.id not in seen]
