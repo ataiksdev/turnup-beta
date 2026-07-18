@@ -359,9 +359,7 @@ export default function CreateEventPage() {
     setError("");
     try {
       const isVirtual = form.event_type === "virtual";
-      const payload = {
-        title: form.title.trim(),
-        description: form.description.trim(),
+      const basePayload = {
         cover_image: form.cover_image.trim() || undefined,
         event_type: form.event_type,
         meeting_url: form.meeting_url.trim() || undefined,
@@ -386,21 +384,56 @@ export default function CreateEventPage() {
         status,
       };
 
-      const event = await eventsApi.create(token, payload);
+      if (isRecurring) {
+        const series = await seriesApi.create(token, {
+          title: form.title.trim(),
+          description: form.description.trim() || undefined,
+          recurrence_rule: recurrenceRule,
+          occurrences,
+          event_title: form.title.trim(),
+          event_description: form.description.trim(),
+          ...basePayload,
+        });
 
-      // Create ticket tiers for paid events
-      if (!form.is_free && form.tiers.length > 0) {
-        await Promise.all(
-          form.tiers.map((t) =>
-            eventsApi.createTier(token, event.id, {
-              name: t.name.trim(),
-              description: t.description.trim() || undefined,
-              price: Number(t.price),
-              quantity: t.quantity ? Number(t.quantity) : null,
-              max_per_order: t.max_per_order ? Number(t.max_per_order) : 10,
-            }),
-          ),
-        );
+        // Create ticket tiers for each event in the series
+        if (!form.is_free && form.tiers.length > 0 && series.events.length > 0) {
+          await Promise.all(
+            series.events.flatMap((ev) =>
+              form.tiers.map((t) =>
+                eventsApi.createTier(token, ev.id, {
+                  name: t.name.trim(),
+                  description: t.description.trim() || undefined,
+                  price: Number(t.price),
+                  quantity: t.quantity ? Number(t.quantity) : null,
+                  max_per_order: t.max_per_order ? Number(t.max_per_order) : 10,
+                }),
+              ),
+            ),
+          );
+        }
+      } else {
+        const payload = {
+          title: form.title.trim(),
+          description: form.description.trim(),
+          ...basePayload,
+        };
+
+        const event = await eventsApi.create(token, payload);
+
+        // Create ticket tiers for paid events
+        if (!form.is_free && form.tiers.length > 0) {
+          await Promise.all(
+            form.tiers.map((t) =>
+              eventsApi.createTier(token, event.id, {
+                name: t.name.trim(),
+                description: t.description.trim() || undefined,
+                price: Number(t.price),
+                quantity: t.quantity ? Number(t.quantity) : null,
+                max_per_order: t.max_per_order ? Number(t.max_per_order) : 10,
+              }),
+            ),
+          );
+        }
       }
 
       router.replace(`/organizer/events`);

@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { eventsApi, socialApi } from "@/lib/api";
+import { eventsApi, socialApi, seriesApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -13,12 +13,49 @@ import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
   Star, Ticket, Minus, Plus, Flame, Monitor, AlertCircle,
-  Clock, Images,
+  Clock, Images, RefreshCw,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+
+function SeriesSection({ seriesId, currentEventId }: { seriesId: string; currentEventId: string }) {
+  const { data: series } = useQuery({
+    queryKey: ["series", seriesId],
+    queryFn: () => seriesApi.get(seriesId),
+  });
+  if (!series || series.events.length <= 1) return null;
+  const others = series.events.filter((e) => e.id !== currentEventId);
+  return (
+    <section>
+      <h2 className="text-base font-bold text-text mb-2 flex items-center gap-2">
+        <RefreshCw size={16} className="text-primary" aria-hidden />
+        Part of &quot;{series.title}&quot;
+      </h2>
+      <div className="space-y-2">
+        {others.slice(0, 5).map((e) => (
+          <Link key={e.id} href={`/events/${e.slug}`}
+            className="flex items-center gap-3 p-3 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors">
+            <span className="w-6 h-6 rounded bg-primary/10 border border-primary/30 flex items-center justify-center text-[10px] font-black text-primary shrink-0">
+              {series.events.findIndex((ev) => ev.id === e.id) + 1}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-text truncate">{format(new Date(e.start_date), "EEE, MMM d · h:mm a")}</p>
+            </div>
+            <span className={cn("px-2 py-0.5 rounded border text-[10px] font-black uppercase",
+              e.status === "published" ? "bg-success/10 text-success border-success/30" : "bg-bg-elevated text-text-muted border-border"
+            )}>{e.status}</span>
+          </Link>
+        ))}
+        {others.length > 5 && (
+          <p className="text-xs text-text-muted text-center">+{others.length - 5} more occurrences</p>
+        )}
+      </div>
+    </section>
+  );
+}
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -400,6 +437,8 @@ export function EventDetailClient({ id }: { id: string }) {
           </div>
           <span className="text-xs text-primary" aria-hidden>View profile →</span>
         </Link>
+
+        {event.series_id && <SeriesSection seriesId={event.series_id} currentEventId={event.id} />}
 
         {/* Description */}
         <section aria-labelledby="about-heading">
