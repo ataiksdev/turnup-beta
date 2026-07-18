@@ -8,6 +8,9 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 os.chdir(ROOT / "backend")
