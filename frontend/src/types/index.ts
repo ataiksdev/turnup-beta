@@ -133,4 +133,7 @@ export interface EventFilters extends PaginatedParams {
   featured?: boolean;
   trending?: boolean;
   free?: boolean;
+  date_from?: string;
+  date_to?: string;
+  sort?: "date" | "popular" | "price_asc" | "price_desc" | "newest";
 }

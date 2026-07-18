@@ -118,20 +118,32 @@ async def list_events(
     featured: bool | None = None,
     trending: bool | None = None,
     free: bool | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort: str = "date",
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
+    # Determine order
+    _sort_map = {
+        "popular":    Event.attendees_count.desc(),
+        "price_asc":  Event.price_min.asc(),
+        "price_desc": Event.price_min.desc(),
+        "newest":     Event.created_at.desc(),
+    }
+    order_clause = _sort_map.get(sort, Event.start_date.asc())
+
     stmt = (select(Event).options(*_load())
             .where(Event.status == "published")
-            .order_by(Event.start_date.asc()))
+            .order_by(order_clause))
 
     if q:
         stmt = stmt.where(or_(Event.title.ilike(f"%{q}%"), Event.city.ilike(f"%{q}%"),
-                              Event.tags.ilike(f"%{q}%"), Event.venue_name.ilike(f"%{q}%")))
+                              Event.tags.ilike(f"%{q}%"), Event.venue_name.ilike(f"%{q}%"),
+                              Event.description.ilike(f"%{q}%")))
     if tag:
-        # match comma-separated tag list exactly or as substring
         stmt = stmt.where(Event.tags.ilike(f"%{tag}%"))
     if city:
         stmt = stmt.where(Event.city.ilike(f"%{city}%"))
@@ -147,6 +159,18 @@ async def list_events(
         stmt = stmt.where(Event.is_trending == trending)
     if free is not None:
         stmt = stmt.where(Event.is_free == free)
+    if date_from:
+        try:
+            from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00"))
+            stmt = stmt.where(Event.start_date >= from_dt)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00"))
+            stmt = stmt.where(Event.start_date <= to_dt)
+        except ValueError:
+            pass
 
     events = (await db.execute(stmt.offset((page - 1) * limit).limit(limit))).scalars().all()
     result = []
