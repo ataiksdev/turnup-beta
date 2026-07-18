@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
 // ── Platform brand icons ───────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ export default function CommunityDetailPage() {
   function copyInviteLink() {
     if (!community?.invite_token) return;
     const url = `${window.location.origin}/communities/join/${community.invite_token}`;
-    navigator.clipboard.writeText(url);
+    copyToClipboard(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }

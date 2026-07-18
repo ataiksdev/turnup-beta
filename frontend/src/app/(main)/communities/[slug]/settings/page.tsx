@@ -8,7 +8,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Globe, Lock, ChevronDown, ChevronUp, RefreshCw, Trash2, Copy, Check } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
 const PLATFORM_META: { key: keyof SocialLinks; label: string; placeholder: string; color: string }[] = [
   { key: "whatsapp",  label: "WhatsApp",  placeholder: "https://chat.whatsapp.com/...", color: "#25D366" },
@@ -80,7 +80,7 @@ export default function CommunitySettingsPage() {
 
   function copyInviteLink() {
     if (!community?.invite_token) return;
-    navigator.clipboard.writeText(`${window.location.origin}/communities/join/${community.invite_token}`);
+    copyToClipboard(`${window.location.origin}/communities/join/${community.invite_token}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }

@@ -1,7 +1,7 @@
 "use client";
 import { Check, Copy, Share2 } from "lucide-react";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 
 interface ShareButtonProps {
   title: string;
@@ -25,14 +25,10 @@ export function ShareButton({ title, text, url, className, iconClassName, size =
       }
       return;
     }
-    // Clipboard fallback for desktop
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard not available
-    }
+    // Clipboard fallback for desktop / plain-HTTP origins
+    copyToClipboard(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (

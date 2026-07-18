@@ -6,6 +6,26 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function copyToClipboard(text: string): void {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => _fallbackCopy(text));
+  } else {
+    _fallbackCopy(text);
+  }
+}
+
+function _fallbackCopy(text: string): void {
+  const el = document.createElement("textarea");
+  el.value = text;
+  el.setAttribute("readonly", "");
+  el.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0";
+  document.body.appendChild(el);
+  el.select();
+  el.setSelectionRange(0, el.value.length);
+  document.execCommand("copy");
+  document.body.removeChild(el);
+}
+
 export function formatEventDate(dateStr: string): string {
   const date = new Date(dateStr);
   if (isToday(date)) return `Today · ${format(date, "h:mm a")}`;
