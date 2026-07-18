@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
-import { BarChart2, CalendarPlus, Edit2, Users, Eye, Ticket } from "lucide-react";
+import { BarChart2, CalendarPlus, Edit2, Users, Eye, Ticket, Users2 } from "lucide-react";
 import Link from "next/link";
 import { cn, formatEventDateShort, formatPrice } from "@/lib/utils";
 import type { Event } from "@/types";
@@ -70,6 +70,12 @@ function EventRow({ event }: { event: Event }) {
           className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
         >
           <Eye size={11} /> View
+        </Link>
+        <Link
+          href={`/organizer/events/${event.id}/cohosts`}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
+        >
+          <Users2 size={11} /> Hosts
         </Link>
       </div>
     </div>
