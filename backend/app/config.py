@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     twilio_phone_number: str = ""
     otp_expiry_minutes: int = 10
 
+    # Payments — Paystack
+    paystack_secret_key: str = ""
+    paystack_public_key: str = ""
+
     # Rate limiting
     rate_limit_login: str = "5/minute"
     rate_limit_register: str = "3/minute"

@@ -13,7 +13,18 @@ export interface TicketTierDetail {
 export interface TicketOrder {
   id: string; event_id: string; tier_id: string; tier_name: string;
   quantity: number; unit_price: number; total_price: number;
-  status: string; created_at: string;
+  status: string; payment_reference?: string; created_at: string;
+  event_title?: string; event_slug?: string; event_cover?: string;
+  event_date?: string; event_city?: string;
+}
+
+export interface PaymentInit {
+  order_id: string;
+  payment_reference: string;
+  paystack_public_key: string;
+  amount_kobo: number;
+  email: string;
+  is_free: boolean;
 }
 
 export interface DailyView { date: string; views: number; }
@@ -180,10 +191,22 @@ export const eventsApi = {
   analytics: (token: string, eventId: string) =>
     request<EventAnalytics>(`/events/${eventId}/analytics`, {}, token),
 
-  purchase: (token: string, eventId: string, tierId: string, quantity: number) =>
-    request<TicketOrder>(`/events/${eventId}/tickets/${tierId}/purchase`, {
+  initPayment: (token: string, eventId: string, tierId: string, quantity: number) =>
+    request<PaymentInit>(`/events/${eventId}/tickets/${tierId}/purchase`, {
       method: "POST", body: JSON.stringify({ quantity }),
     }, token),
+
+  verifyPayment: (token: string, eventId: string, tierId: string, reference: string) =>
+    request<TicketOrder>(`/events/${eventId}/tickets/${tierId}/verify-payment`, {
+      method: "POST", body: JSON.stringify({ reference }),
+    }, token),
+
+  waitlistJoin: (token: string, eventId: string) =>
+    request<{ status: string; position: number; waitlist_count: number }>(
+      `/events/${eventId}/waitlist`, { method: "POST" }, token),
+
+  waitlistLeave: (token: string, eventId: string) =>
+    request<void>(`/events/${eventId}/waitlist`, { method: "DELETE" }, token),
 
   reviews: (eventId: string) =>
     request<Review[]>(`/events/${eventId}/reviews`),
@@ -232,6 +255,15 @@ export interface OrganizerDashboard {
   pending_cohost_invites: number;
 }
 
+export interface CoHostInvite {
+  id: string;
+  event_id: string;
+  event_title: string;
+  event_start: string | null;
+  status: string;
+  invited_at: string;
+}
+
 export const organizerApi = {
   become: (token: string, data: { organization_name?: string; organizer_bio?: string; website?: string }) =>
     request<User>("/organizer/become", { method: "POST", body: JSON.stringify(data) }, token),
@@ -241,6 +273,17 @@ export const organizerApi = {
 
   myEvents: (token: string) =>
     request<Event[]>("/organizer/events?limit=50", {}, token),
+
+  myTickets: (token: string) =>
+    request<TicketOrder[]>("/organizer/my-tickets", {}, token),
+
+  cohostInvites: (token: string) =>
+    request<CoHostInvite[]>("/organizer/cohost-invites", {}, token),
+
+  respondCohost: (token: string, eventId: string, accept: boolean) =>
+    request<{ status: string }>(`/events/${eventId}/cohosts/respond`, {
+      method: "POST", body: JSON.stringify({ accept }),
+    }, token),
 };
 
 // ── Social ─────────────────────────────────────────────────────────────────────

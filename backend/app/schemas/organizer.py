@@ -82,8 +82,28 @@ class TicketOrderOut(BaseModel):
     unit_price: float
     total_price: float
     status: str
+    payment_reference: str | None = None
+    # enriched fields returned by my-tickets endpoint
+    event_title: str | None = None
+    event_slug: str | None = None
+    event_cover: str | None = None
+    event_date: datetime | None = None
+    event_city: str | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+class PaymentInitOut(BaseModel):
+    order_id: str
+    payment_reference: str
+    paystack_public_key: str
+    amount_kobo: int
+    email: str
+    is_free: bool = False
+
+
+class VerifyPaymentRequest(BaseModel):
+    reference: str
 
 
 # ── Event templates ───────────────────────────────────────────────────────────

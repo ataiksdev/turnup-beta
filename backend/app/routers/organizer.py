@@ -207,7 +207,7 @@ async def my_ticket_orders(
 ):
     result = await db.execute(
         select(TicketOrder)
-        .options(selectinload(TicketOrder.tier))
+        .options(selectinload(TicketOrder.tier), selectinload(TicketOrder.event))
         .where(TicketOrder.user_id == user.id, TicketOrder.status != "cancelled")
         .order_by(TicketOrder.created_at.desc())
     )
@@ -217,7 +217,13 @@ async def my_ticket_orders(
             id=o.id, event_id=o.event_id, tier_id=o.tier_id,
             tier_name=o.tier.name, quantity=o.quantity,
             unit_price=o.unit_price, total_price=o.total_price,
-            status=o.status, created_at=o.created_at,
+            status=o.status, payment_reference=o.payment_reference,
+            event_title=o.event.title if o.event else None,
+            event_slug=o.event.slug if o.event else None,
+            event_cover=o.event.cover_image if o.event else None,
+            event_date=o.event.start_date if o.event else None,
+            event_city=o.event.city if o.event else None,
+            created_at=o.created_at,
         )
         for o in orders
     ]

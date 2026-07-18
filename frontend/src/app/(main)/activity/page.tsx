@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { socialApi } from "@/lib/api";
+import { socialApi, organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Avatar } from "@/components/ui/Avatar";
@@ -38,6 +38,12 @@ export default function ActivityPage() {
 
   const markOneMutation = useMutation({
     mutationFn: (id: string) => token ? socialApi.markRead(token, id) : Promise.reject(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const respondCohostMutation = useMutation({
+    mutationFn: ({ eventId, accept }: { eventId: string; accept: boolean }) =>
+      token ? organizerApi.respondCohost(token, eventId, accept) : Promise.reject(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
@@ -166,11 +172,15 @@ export default function ActivityPage() {
                   n.reference_type === "user"  ? `/profile/${n.actor?.username}` :
                   null;
 
+                const isCoHostInvite = n.type === "event_invite" && n.reference_id;
+                const coHostPending = respondCohostMutation.isPending &&
+                  (respondCohostMutation.variables as any)?.eventId === n.reference_id;
+
                 const inner = (
                   <div className={cn(
                     "flex items-start gap-3 px-4 py-3.5 w-full transition-colors",
                     !n.is_read && "bg-primary/5",
-                    href && "hover:bg-bg-elevated cursor-pointer",
+                    href && !isCoHostInvite && "hover:bg-bg-elevated cursor-pointer",
                   )}>
                     <div className={cn(
                       "w-9 h-9 rounded-full border flex items-center justify-center shrink-0",
@@ -187,6 +197,35 @@ export default function ActivityPage() {
                       <p className="text-sm text-text leading-snug">{n.title}</p>
                       {n.body && <p className="text-xs text-text-muted mt-0.5 line-clamp-2">{n.body}</p>}
                       <p className="text-[11px] text-text-muted mt-1">{timeAgo(n.created_at)}</p>
+                      {isCoHostInvite && (
+                        <div className="flex gap-2 mt-2" onClick={(e) => e.preventDefault()}>
+                          <Button
+                            size="sm"
+                            loading={coHostPending}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              respondCohostMutation.mutate({ eventId: n.reference_id!, accept: true });
+                              if (!n.is_read) markOneMutation.mutate(n.id);
+                            }}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={coHostPending}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              respondCohostMutation.mutate({ eventId: n.reference_id!, accept: false });
+                              if (!n.is_read) markOneMutation.mutate(n.id);
+                            }}
+                          >
+                            Decline
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     {!n.is_read && (
                       <button
@@ -198,7 +237,7 @@ export default function ActivityPage() {
                   </div>
                 );
 
-                return href ? (
+                return href && !isCoHostInvite ? (
                   <Link key={n.id} href={href} onClick={() => { if (!n.is_read) markOneMutation.mutate(n.id); }}>
                     {inner}
                   </Link>

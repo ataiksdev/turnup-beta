@@ -178,29 +178,56 @@ async def activity_feed(
         select(Follow.following_id).where(Follow.follower_id == me.id))
     following_ids = [r[0] for r in following_ids_q.fetchall()] + [me.id]
 
-    stmt = (select(EventAttendee)
-            .options(selectinload(EventAttendee.user),
-                     selectinload(EventAttendee.event).selectinload(Event.host))
-            .where(EventAttendee.user_id.in_(following_ids))
-            .order_by(EventAttendee.created_at.desc())
-            .offset((page - 1) * limit).limit(limit))
-    rows = (await db.execute(stmt)).scalars().all()
+    # Attendance events
+    att_stmt = (select(EventAttendee)
+                .options(selectinload(EventAttendee.user),
+                         selectinload(EventAttendee.event).selectinload(Event.host))
+                .where(EventAttendee.user_id.in_(following_ids))
+                .order_by(EventAttendee.created_at.desc())
+                .limit(limit * 2))
+    att_rows = (await db.execute(att_stmt)).scalars().all()
 
-    return [
-        {
+    # Follow events — people in my network followed someone
+    follow_stmt = (select(Follow)
+                   .options(selectinload(Follow.follower), selectinload(Follow.following))
+                   .where(Follow.follower_id.in_(following_ids))
+                   .order_by(Follow.created_at.desc())
+                   .limit(limit * 2))
+    follow_rows = (await db.execute(follow_stmt)).scalars().all()
+
+    items = []
+    for r in att_rows:
+        items.append({
             "type": "attendance",
             "actor": {
                 "id": r.user.id, "username": r.user.username,
                 "full_name": r.user.full_name, "avatar_url": r.user.avatar_url,
-                "is_verified": r.user.is_verified, "followers_count": r.user.followers_count,
+                "is_verified": r.user.is_verified,
             },
             "status": r.status,
             "event": {
                 "id": r.event.id, "title": r.event.title,
                 "slug": r.event.slug, "cover_image": r.event.cover_image,
-                "city": r.event.city, "start_date": r.event.start_date,
+                "city": r.event.city, "start_date": str(r.event.start_date),
             },
             "created_at": r.created_at,
-        }
-        for r in rows
-    ]
+        })
+    for r in follow_rows:
+        items.append({
+            "type": "follow",
+            "actor": {
+                "id": r.follower.id, "username": r.follower.username,
+                "full_name": r.follower.full_name, "avatar_url": r.follower.avatar_url,
+                "is_verified": r.follower.is_verified,
+            },
+            "target_user": {
+                "id": r.following.id, "username": r.following.username,
+                "full_name": r.following.full_name, "avatar_url": r.following.avatar_url,
+            },
+            "created_at": r.created_at,
+        })
+
+    # Sort combined list by created_at desc, paginate
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    offset = (page - 1) * limit
+    return items[offset: offset + limit]

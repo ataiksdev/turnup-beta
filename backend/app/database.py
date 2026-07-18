@@ -29,6 +29,8 @@ async def _run_migrations(conn):
     new_columns = [
         ("events", "event_type", "VARCHAR(20) NOT NULL DEFAULT 'physical'"),
         ("events", "meeting_url", "VARCHAR(500)"),
+        ("ticket_orders", "payment_reference", "VARCHAR(100)"),
+        ("ticket_orders", "payment_channel", "VARCHAR(30)"),
     ]
     for table, column, definition in new_columns:
         try:

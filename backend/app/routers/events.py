@@ -22,10 +22,11 @@ from app.schemas.event import (
 )
 from app.schemas.organizer import (
     AnalyticsOut, CoHostInviteRequest, CoHostOut, CoHostRespondRequest,
-    DailyViewOut, PurchaseTicketRequest, ReviewCreate, ReviewOut,
+    DailyViewOut, PaymentInitOut, PurchaseTicketRequest, ReviewCreate, ReviewOut,
     TicketOrderOut, TicketTierCreate, TicketTierOut, TicketTierUpdate,
-    WaitlistEntryOut, WaitlistNotifyRequest, WaitlistStatusOut,
+    VerifyPaymentRequest, WaitlistEntryOut, WaitlistNotifyRequest, WaitlistStatusOut,
 )
+from app.services.paystack import initialize_transaction, verify_transaction
 from app.schemas.user import UserSummary
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -747,7 +748,7 @@ async def delete_ticket_tier(
     await db.delete(t)
 
 
-@router.post("/{event_id}/tickets/{tier_id}/purchase", response_model=TicketOrderOut)
+@router.post("/{event_id}/tickets/{tier_id}/purchase", response_model=PaymentInitOut)
 async def purchase_tickets(
     event_id: str,
     tier_id: str,
@@ -755,6 +756,10 @@ async def purchase_tickets(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """
+    For paid tickets: creates a pending order and returns Paystack init data.
+    For free tickets: confirms immediately and returns is_free=True.
+    """
     event = (await db.execute(select(Event).where(
         Event.id == event_id, Event.status == "published"))).scalar_one_or_none()
     if not event:
@@ -775,6 +780,8 @@ async def purchase_tickets(
         raise HTTPException(400, f"Maximum {t.max_per_order} tickets per order")
 
     total = t.price * payload.quantity
+    reference = f"turnup-{uuid.uuid4().hex[:16]}"
+
     order = TicketOrder(
         id=str(uuid.uuid4()),
         user_id=user.id,
@@ -783,24 +790,107 @@ async def purchase_tickets(
         quantity=payload.quantity,
         unit_price=t.price,
         total_price=total,
-        status="confirmed",
+        status="pending",
+        payment_reference=reference,
     )
     db.add(order)
-    if t.quantity is not None:
-        t.quantity_sold += payload.quantity
-    # Auto RSVP as "going" after purchase
-    existing_rsvp = (await db.execute(select(EventAttendee).where(
-        EventAttendee.event_id == event_id, EventAttendee.user_id == user.id))).scalar_one_or_none()
-    if not existing_rsvp:
-        db.add(EventAttendee(id=str(uuid.uuid4()), user_id=user.id,
-                             event_id=event_id, status="going"))
+    await db.flush()
+
+    if t.price == 0:
+        # Free ticket — confirm immediately
+        order.status = "confirmed"
+        if t.quantity is not None:
+            t.quantity_sold += payload.quantity
+        await _auto_rsvp(event, user, db)
+        await db.flush()
+        return PaymentInitOut(
+            order_id=order.id,
+            payment_reference=reference,
+            paystack_public_key="",
+            amount_kobo=0,
+            email=user.email or "",
+            is_free=True,
+        )
+
+    # Paid — init Paystack transaction (amount in kobo)
+    amount_kobo = int(total * 100)
+    email = user.email or f"{user.username}@turnup.app"
+    try:
+        ps_resp = await initialize_transaction(
+            email=email,
+            amount_kobo=amount_kobo,
+            reference=reference,
+            metadata={"order_id": order.id, "event_id": event_id, "tier_id": tier_id},
+        )
+    except Exception:
+        raise HTTPException(502, "Payment gateway unavailable. Please try again.")
+
+    from app.config import settings as _s
+    return PaymentInitOut(
+        order_id=order.id,
+        payment_reference=reference,
+        paystack_public_key=_s.paystack_public_key,
+        amount_kobo=amount_kobo,
+        email=email,
+    )
+
+
+async def _auto_rsvp(event: Event, user: User, db: AsyncSession) -> None:
+    existing = (await db.execute(select(EventAttendee).where(
+        EventAttendee.event_id == event.id,
+        EventAttendee.user_id == user.id,
+    ))).scalar_one_or_none()
+    if not existing:
+        db.add(EventAttendee(
+            id=str(uuid.uuid4()), user_id=user.id,
+            event_id=event.id, status="going",
+        ))
         event.attendees_count += 1
 
+
+@router.post("/{event_id}/tickets/{tier_id}/verify-payment", response_model=TicketOrderOut)
+async def verify_payment(
+    event_id: str,
+    tier_id: str,
+    payload: VerifyPaymentRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Verify Paystack payment and confirm the pending order."""
+    order = (await db.execute(select(TicketOrder).where(
+        TicketOrder.payment_reference == payload.reference,
+        TicketOrder.user_id == user.id,
+        TicketOrder.status == "pending",
+    ))).scalar_one_or_none()
+    if not order:
+        raise HTTPException(404, "Order not found or already processed")
+
+    t = await _get_tier(order.tier_id, event_id, db)
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+
+    try:
+        ps_resp = await verify_transaction(payload.reference)
+    except Exception:
+        raise HTTPException(502, "Could not verify payment. Please contact support.")
+
+    ps_data = ps_resp.get("data", {})
+    if ps_data.get("status") != "success":
+        raise HTTPException(402, "Payment not completed")
+
+    order.status = "confirmed"
+    order.payment_channel = ps_data.get("channel")
+    if t.quantity is not None:
+        t.quantity_sold += order.quantity
+    await _auto_rsvp(event, user, db)
     await db.flush()
+
     return TicketOrderOut(
-        id=order.id, event_id=event_id, tier_id=tier_id, tier_name=t.name,
-        quantity=payload.quantity, unit_price=t.price, total_price=total,
-        status="confirmed", created_at=order.created_at,
+        id=order.id, event_id=event_id, tier_id=order.tier_id, tier_name=t.name,
+        quantity=order.quantity, unit_price=order.unit_price, total_price=order.total_price,
+        status="confirmed", payment_reference=order.payment_reference,
+        created_at=order.created_at,
     )
 
 

@@ -34,7 +34,7 @@ export interface Event {
   slug: string;
   description?: string;
   cover_image?: string | null;
-  gallery?: string | null;
+  gallery?: string | string[] | null;
   venue_name: string;
   address: string;
   city: string;
@@ -63,6 +63,9 @@ export interface Event {
   created_at: string;
   is_saved: boolean;
   attendance_status?: "going" | "interested" | null;
+  waitlist_enabled?: boolean;
+  waitlist_count?: number;
+  is_waitlisted?: boolean;
 }
 
 export interface Comment {

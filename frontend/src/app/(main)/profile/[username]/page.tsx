@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount } from "@/lib/utils";
-import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, type LucideIcon } from "lucide-react";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
@@ -24,6 +24,7 @@ export default function ProfilePage() {
   const [tab, setTab] = useState<Tab>("events");
   const [showPast, setShowPast] = useState(false);
   const [followError, setFollowError] = useState("");
+  const [followListModal, setFollowListModal] = useState<null | "followers" | "following">(null);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["user", username],
@@ -46,6 +47,15 @@ export default function ProfilePage() {
     queryKey: ["user-saved", username],
     queryFn: () => token ? usersApi.saved(username, token) : Promise.resolve([]),
     enabled: tab === "saved" && !!token && me?.username === username,
+  });
+
+  const followListQuery = useQuery({
+    queryKey: ["follow-list", username, followListModal],
+    queryFn: () =>
+      followListModal === "followers"
+        ? usersApi.followers(username)
+        : usersApi.following(username),
+    enabled: !!followListModal,
   });
 
   const followMutation = useMutation({
@@ -164,16 +174,21 @@ export default function ProfilePage() {
       {/* Stats */}
       <div className="mx-4 grid grid-cols-4 border-2 border-border rounded shadow-brutal-sm mb-4">
         {[
-          { label: "Followers", value: formatCount(profile.followers_count) },
-          { label: "Following", value: formatCount(profile.following_count) },
-          { label: "Hosted",    value: profile.events_hosted },
-          { label: "Attended",  value: profile.events_attended },
-        ].map(({ label, value }, i, arr) => (
+          { label: "Followers", value: formatCount(profile.followers_count), onClick: () => setFollowListModal("followers") },
+          { label: "Following", value: formatCount(profile.following_count), onClick: () => setFollowListModal("following") },
+          { label: "Hosted",    value: profile.events_hosted, onClick: undefined },
+          { label: "Attended",  value: profile.events_attended, onClick: undefined },
+        ].map(({ label, value, onClick }, i, arr) => (
           <div
             key={label}
+            role={onClick ? "button" : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onClick={onClick}
+            onKeyDown={onClick ? (e) => e.key === "Enter" && onClick() : undefined}
             className={cn(
               "flex flex-col items-center py-3 gap-0.5",
               i < arr.length - 1 && "border-r-2 border-border",
+              onClick && "cursor-pointer hover:bg-bg-elevated active:bg-bg-elevated transition-colors",
             )}
           >
             <span className="text-lg font-black text-text">{value}</span>
@@ -268,6 +283,60 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Followers / Following bottom-sheet modal */}
+      {followListModal && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50"
+          onClick={() => setFollowListModal(null)}
+        >
+          <div
+            className="bg-bg rounded-t-2xl border-t-2 border-border max-h-[70vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b-2 border-border">
+              <p className="font-black text-text uppercase tracking-widest text-xs">
+                {followListModal === "followers" ? "Followers" : "Following"}
+              </p>
+              <button
+                onClick={() => setFollowListModal(null)}
+                aria-label="Close"
+                className="p-1 rounded hover:bg-bg-elevated transition-colors"
+              >
+                <X size={16} className="text-text-muted" aria-hidden />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 divide-y divide-border">
+              {followListQuery.isLoading ? (
+                <div className="flex justify-center py-10">
+                  <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                </div>
+              ) : followListQuery.data && followListQuery.data.length > 0 ? (
+                followListQuery.data.map((u) => (
+                  <Link
+                    key={u.id}
+                    href={`/profile/${u.username}`}
+                    onClick={() => setFollowListModal(null)}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated transition-colors"
+                  >
+                    <Avatar src={u.avatar_url} name={u.full_name} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-text leading-none">{u.full_name}</p>
+                      <p className="text-xs text-text-muted mt-0.5">@{u.username}</p>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <div className="py-14 text-center">
+                  <p className="text-sm text-text-muted">
+                    {followListModal === "followers" ? "No followers yet" : "Not following anyone yet"}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

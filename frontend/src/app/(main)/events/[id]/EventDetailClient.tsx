@@ -13,10 +13,11 @@ import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
   Star, Ticket, Minus, Plus, Flame, Monitor, AlertCircle,
+  Clock, Images,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -66,6 +67,11 @@ export function EventDetailClient({ id }: { id: string }) {
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
+  const [paymentPending, setPaymentPending] = useState(false);
+
+  // Waitlist state
+  const [waitlisted, setWaitlisted] = useState(event?.is_waitlisted ?? false);
+  const [waitlistPos, setWaitlistPos] = useState<number | null>(null);
 
   // Review state
   const [reviewRating, setReviewRating] = useState(myReview?.rating ?? 0);
@@ -114,17 +120,79 @@ export function EventDetailClient({ id }: { id: string }) {
     onError: () => flashError("Could not post comment. Please try again."),
   });
 
+  const openPaystack = useCallback((pubKey: string, email: string, amountKobo: number, reference: string, tierId: string) => {
+    const PaystackPop = (window as any).PaystackPop;
+    if (!PaystackPop) return;
+    const handler = PaystackPop.setup({
+      key: pubKey,
+      email,
+      amount: amountKobo,
+      ref: reference,
+      currency: "NGN",
+      channels: ["card", "bank", "ussd", "qr", "bank_transfer", "mobile_money"],
+      onClose: () => setPaymentPending(false),
+      callback: async () => {
+        try {
+          await eventsApi.verifyPayment(token!, eid, tierId, reference);
+          setPurchaseSuccess(true);
+          setSelectedTier(null);
+          qc.invalidateQueries({ queryKey: ["tiers", eid] });
+          qc.invalidateQueries({ queryKey: ["event", id] });
+          qc.invalidateQueries({ queryKey: ["my-tickets"] });
+        } catch {
+          flashError("Payment received but verification failed. Check My Tickets.");
+        } finally {
+          setPaymentPending(false);
+        }
+      },
+    });
+    handler.openIframe();
+  }, [token, eid, id, qc]);
+
   const purchaseMutation = useMutation({
     mutationFn: () =>
       token && selectedTier
-        ? eventsApi.purchase(token, eid, selectedTier, qty)
+        ? eventsApi.initPayment(token, eid, selectedTier, qty)
         : Promise.reject(),
-    onSuccess: () => {
-      setPurchaseSuccess(true);
-      setSelectedTier(null);
-      qc.invalidateQueries({ queryKey: ["tiers", eid] });
-      qc.invalidateQueries({ queryKey: ["event", id] });
+    onSuccess: (data) => {
+      if (data.is_free) {
+        setPurchaseSuccess(true);
+        setSelectedTier(null);
+        qc.invalidateQueries({ queryKey: ["tiers", eid] });
+        qc.invalidateQueries({ queryKey: ["event", id] });
+        qc.invalidateQueries({ queryKey: ["my-tickets"] });
+      } else {
+        setPaymentPending(true);
+        // Load Paystack script if not already present
+        if (!(window as any).PaystackPop) {
+          const script = document.createElement("script");
+          script.src = "https://js.paystack.co/v1/inline.js";
+          script.onload = () => openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference, selectedTier!);
+          document.body.appendChild(script);
+        } else {
+          openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference, selectedTier!);
+        }
+      }
     },
+    onError: () => flashError("Could not initiate payment. Please try again."),
+  });
+
+  const waitlistJoinMutation = useMutation({
+    mutationFn: () => token ? eventsApi.waitlistJoin(token, eid) : Promise.reject(),
+    onSuccess: (data) => {
+      setWaitlisted(true);
+      setWaitlistPos(data.position);
+    },
+    onError: () => flashError("Could not join waitlist. Please try again."),
+  });
+
+  const waitlistLeaveMutation = useMutation({
+    mutationFn: () => token ? eventsApi.waitlistLeave(token, eid) : Promise.reject(),
+    onSuccess: () => {
+      setWaitlisted(false);
+      setWaitlistPos(null);
+    },
+    onError: () => flashError("Could not leave waitlist. Please try again."),
   });
 
   const reviewMutation = useMutation({
@@ -350,6 +418,22 @@ export function EventDetailClient({ id }: { id: string }) {
           </div>
         )}
 
+        {/* Photo gallery */}
+        {event.gallery && Array.isArray(event.gallery) && event.gallery.length > 0 && (
+          <section aria-labelledby="gallery-heading">
+            <h2 id="gallery-heading" className="text-sm font-black text-text flex items-center gap-2 mb-2">
+              <Images size={15} className="text-primary" aria-hidden /> Photos
+            </h2>
+            <div className="grid grid-cols-3 gap-1">
+              {(event.gallery as string[]).map((url, i) => (
+                <div key={i} className="aspect-square rounded overflow-hidden border border-border bg-bg-elevated">
+                  <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Map placeholder */}
         {event.latitude && event.longitude && (
           <div className="rounded border-2 border-border overflow-hidden h-40 bg-bg-card flex items-center justify-center"
@@ -436,10 +520,14 @@ export function EventDetailClient({ id }: { id: string }) {
                         </div>
                         <Button
                           fullWidth
-                          loading={purchaseMutation.isPending}
+                          loading={purchaseMutation.isPending || paymentPending}
                           onClick={() => purchaseMutation.mutate()}
                         >
-                          {tier.price === 0 ? "Claim Free Ticket" : `Pay ${tier.currency} ${(tier.price * qty).toFixed(2)}`}
+                          {tier.price === 0
+                            ? "Claim Free Ticket"
+                            : paymentPending
+                              ? "Opening payment…"
+                              : `Pay ₦${(tier.price * qty).toLocaleString()}`}
                         </Button>
                         {purchaseMutation.isError && (
                           <p className="text-xs text-error text-center">
@@ -460,6 +548,42 @@ export function EventDetailClient({ id }: { id: string }) {
                 );
               })}
             </div>
+          </section>
+        )}
+
+        {/* Waitlist */}
+        {event?.waitlist_enabled && user && !purchaseSuccess && (tiers?.every(t => (t.available !== null && t.available <= 0)) || !tiers?.length) && (
+          <section className="bg-bg-card border-2 border-border rounded p-4 shadow-brutal-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock size={16} className="text-primary" />
+              <p className="text-sm font-black text-text uppercase tracking-wide">Waitlist</p>
+            </div>
+            {waitlisted ? (
+              <>
+                <p className="text-sm text-text-secondary">
+                  You're on the waitlist{waitlistPos ? ` at position #${waitlistPos}` : ""}. We'll notify you if a spot opens up.
+                </p>
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  loading={waitlistLeaveMutation.isPending}
+                  onClick={() => waitlistLeaveMutation.mutate()}
+                >
+                  Leave Waitlist
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-text-secondary">This event is sold out. Join the waitlist to be notified if spots open up.</p>
+                <Button
+                  fullWidth
+                  loading={waitlistJoinMutation.isPending}
+                  onClick={() => waitlistJoinMutation.mutate()}
+                >
+                  Join Waitlist
+                </Button>
+              </>
+            )}
           </section>
         )}
 

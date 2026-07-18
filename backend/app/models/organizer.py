@@ -71,6 +71,8 @@ class TicketOrder(Base):
     total_price: Mapped[float] = mapped_column(Float, nullable=False)
     # pending | confirmed | cancelled | refunded
     status: Mapped[str] = mapped_column(String(20), default="confirmed")
+    payment_reference: Mapped[str | None] = mapped_column(String(100), index=True)
+    payment_channel: Mapped[str | None] = mapped_column(String(30))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="ticket_orders")
