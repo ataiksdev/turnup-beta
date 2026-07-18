@@ -51,8 +51,8 @@ export default function LoginPage() {
   );
   const [phoneStep, setPhoneStep] = useState<PhoneStep>("number");
 
-  // Email fields
-  const [email, setEmail] = useState("");
+  // Email / username fields
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
   // Phone fields
@@ -67,7 +67,7 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const token = await authApi.login(email, password);
+      const token = await authApi.login(identifier, password);
       const user = await authApi.me(token.access_token);
       setAuth(token.access_token, user);
       router.replace(user.role === "organizer" ? "/organizer/dashboard" : "/");
@@ -165,11 +165,11 @@ export default function LoginPage() {
         {tab === "email" && (
           <form onSubmit={handleEmailLogin} className="space-y-3">
             <Input
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              label="Email or username"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="name@example.com or @username"
               icon={<Mail size={16} />}
               required
             />

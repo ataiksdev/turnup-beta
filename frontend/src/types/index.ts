@@ -2,6 +2,7 @@ export interface User {
   id: string;
   username: string;
   full_name: string;
+  display_name?: string | null;
   email?: string;
   role?: "attendee" | "organizer";
   bio?: string | null;

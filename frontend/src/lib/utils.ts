@@ -43,6 +43,11 @@ export function timeAgo(dateStr: string): string {
   return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
 }
 
+/** Returns the display name for a user — display_name takes priority over full_name. */
+export function displayName(user: { display_name?: string | null; full_name?: string | null; username?: string }): string {
+  return user.display_name?.trim() || user.full_name?.trim() || user.username || "";
+}
+
 export function getInitials(name: string): string {
   return name
     .split(" ")

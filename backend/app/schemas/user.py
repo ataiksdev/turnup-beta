@@ -7,6 +7,7 @@ class UserSummary(BaseModel):
     id: str
     username: str
     full_name: str
+    display_name: str | None = None
     avatar_url: str | None
     is_verified: bool
     role: str
@@ -18,6 +19,7 @@ class UserPublic(BaseModel):
     id: str
     username: str
     full_name: str
+    display_name: str | None = None
     bio: str | None
     avatar_url: str | None
     location: str | None
@@ -40,6 +42,7 @@ class UserMe(BaseModel):
     email: EmailStr
     username: str
     full_name: str
+    display_name: str | None = None
     bio: str | None
     avatar_url: str | None
     location: str | None
@@ -62,6 +65,7 @@ class UserMe(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: str | None = Field(None, min_length=2, max_length=120)
+    display_name: str | None = Field(None, max_length=80)
     bio: str | None = Field(None, max_length=500)
     location: str | None = Field(None, max_length=120)
     website: str | None = Field(None, max_length=255)

@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { timeAgo } from "@/lib/utils";
+import { timeAgo, displayName } from "@/lib/utils";
 import Link from "next/link";
 import { Bell, Check, UserPlus, PartyPopper, MessageCircle, Clock, Megaphone, Mail, Eye, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -99,7 +99,7 @@ export default function ActivityPage() {
             feed.map((item, i) => (
               <div key={i} className="flex items-start gap-3 px-4 py-3.5">
                 <Link href={`/profile/${item.actor.username}`}>
-                  <Avatar src={item.actor.avatar_url} name={item.actor.full_name} size="md" />
+                  <Avatar src={item.actor.avatar_url} name={displayName(item.actor)} size="md" />
                 </Link>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-text-secondary leading-snug">

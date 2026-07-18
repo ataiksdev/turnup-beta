@@ -76,6 +76,18 @@ async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def _get_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
+    """Resolve email OR @username to a User row."""
+    clean = identifier.lstrip("@").strip()
+    # Try email first (contains @), then fall back to username lookup
+    if "@" in clean:
+        user = await _get_user_by_email(db, clean)
+        if user:
+            return user
+    result = await db.execute(select(User).where(User.username == clean.lower()))
+    return result.scalar_one_or_none()
+
+
 # ── Register & Login ──────────────────────────────────────────────────────────
 
 @router.post("/register", response_model=Token, status_code=201)
@@ -115,9 +127,9 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
 @router.post("/login")
 @limiter.limit(settings.rate_limit_login)
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    user = await _get_user_by_email(db, payload.email)
+    user = await _get_user_by_identifier(db, payload.identifier)
     if not user or not user.hashed_password or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(401, "Incorrect email or password")
+        raise HTTPException(401, "Incorrect email/username or password")
     if not user.is_active or user.is_deleted:
         raise HTTPException(403, "Account disabled")
 

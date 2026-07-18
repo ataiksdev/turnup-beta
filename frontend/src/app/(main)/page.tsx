@@ -6,7 +6,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { HeroEvent } from "@/components/events/HeroEvent";
 import { EventCarousel } from "@/components/events/EventCarousel";
 import { ForYouCard } from "@/components/events/ForYouCard";
-import { parsePreferences } from "@/lib/utils";
+import { parsePreferences, displayName as getDisplayName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -59,7 +59,7 @@ export default function DiscoverPage() {
 
       {/* Greeting */}
       <div className="px-4 -mt-2">
-        <h1 className="text-2xl font-black text-text">{getGreeting(user?.full_name)}</h1>
+        <h1 className="text-2xl font-black text-text">{getGreeting(user ? getDisplayName(user) : undefined)}</h1>
         <p className="text-xs font-bold text-text-muted uppercase tracking-widest mt-1">
           What are you doing this weekend?
         </p>

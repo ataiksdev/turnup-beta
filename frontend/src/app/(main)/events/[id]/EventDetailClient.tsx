@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ShareButton } from "@/components/ui/ShareButton";
 import { EventDetailSkeleton } from "@/components/ui/Skeleton";
-import { formatEventDate, formatPrice, parseTags, timeAgo } from "@/lib/utils";
+import { formatEventDate, formatPrice, parseTags, timeAgo, displayName } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
@@ -390,12 +390,12 @@ export function EventDetailClient({ id }: { id: string }) {
         <Link
           href={`/profile/${event.host.username}`}
           className="flex items-center gap-3 p-4 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors"
-          aria-label={`View ${event.host.full_name}'s profile`}
+          aria-label={`View ${displayName(event.host)}'s profile`}
         >
-          <Avatar src={event.host.avatar_url} name={event.host.full_name} size="md" verified={event.host.is_verified} />
+          <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="md" verified={event.host.is_verified} />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-text-muted">Hosted by</p>
-            <p className="text-sm font-semibold text-text">{event.host.full_name}</p>
+            <p className="text-sm font-semibold text-text">{displayName(event.host)}</p>
             <p className="text-xs text-text-muted">@{event.host.username}</p>
           </div>
           <span className="text-xs text-primary" aria-hidden>View profile →</span>
@@ -672,7 +672,7 @@ export function EventDetailClient({ id }: { id: string }) {
             <div className="space-y-3">
               {reviews.map((r) => (
                 <div key={r.id} className="flex gap-2.5">
-                  <Avatar src={r.avatar_url} name={r.full_name} size="sm" />
+                  <Avatar src={r.avatar_url} name={r.full_name ?? r.username} size="sm" />
                   <div className="flex-1 bg-bg-card border-2 border-border rounded px-3 py-2">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-semibold text-text">@{r.username}</span>
@@ -703,7 +703,7 @@ export function EventDetailClient({ id }: { id: string }) {
               onSubmit={(e) => { e.preventDefault(); commentMutation.mutate(); }}
               aria-label="Add a comment"
             >
-              <Avatar src={user.avatar_url} name={user.full_name} size="sm" />
+              <Avatar src={user.avatar_url} name={displayName(user)} size="sm" />
               <div className="flex-1 flex flex-col gap-1">
                 <div className="flex gap-2">
                   <label htmlFor="comment-input" className="sr-only">Comment</label>
@@ -730,7 +730,7 @@ export function EventDetailClient({ id }: { id: string }) {
           <ol aria-label="Comments" className="space-y-3">
             {comments?.map((c) => (
               <li key={c.id} className="flex gap-2.5">
-                <Avatar src={c.user.avatar_url} name={c.user.full_name} size="sm" />
+                <Avatar src={c.user.avatar_url} name={displayName(c.user)} size="sm" />
                 <div className="flex-1 bg-bg-card border-2 border-border rounded px-3 py-2">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold text-text">@{c.user.username}</span>

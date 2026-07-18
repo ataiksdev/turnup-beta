@@ -1,5 +1,5 @@
 "use client";
-import { cn } from "@/lib/utils";
+import { cn, displayName } from "@/lib/utils";
 import { Bell, ChevronLeft, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -69,8 +69,8 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
         )}
         <ThemeToggle />
         {!back && user && (
-          <Link href={`/profile/${user.username}`} aria-label={`${user.full_name}'s profile`}>
-            <Avatar src={user.avatar_url} name={user.full_name} size="sm" verified={user.is_verified} />
+          <Link href={`/profile/${user.username}`} aria-label={`${displayName(user)}'s profile`}>
+            <Avatar src={user.avatar_url} name={displayName(user)} size="sm" verified={user.is_verified} />
           </Link>
         )}
         {!back && (

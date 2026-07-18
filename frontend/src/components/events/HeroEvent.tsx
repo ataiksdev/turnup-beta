@@ -1,5 +1,5 @@
 "use client";
-import { formatEventDate, formatPrice } from "@/lib/utils";
+import { formatEventDate, formatPrice, displayName } from "@/lib/utils";
 import type { Event } from "@/types";
 import { Calendar, MapPin, Users, Flame } from "lucide-react";
 import Image from "next/image";
@@ -61,7 +61,7 @@ export function HeroEvent({ event }: { event: Event }) {
 
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-2">
-            <Avatar src={event.host.avatar_url} name={event.host.full_name} size="sm" />
+            <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="sm" />
             <div className="flex flex-col">
               <span className="text-[11px] text-white/60 uppercase tracking-wide">Hosted by</span>
               <span className="text-xs text-white font-bold">@{event.host.username}</span>

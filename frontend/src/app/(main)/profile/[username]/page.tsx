@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
-import { parsePreferences, formatCount } from "@/lib/utils";
+import { parsePreferences, formatCount, displayName } from "@/lib/utils";
 import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -110,7 +110,7 @@ export default function ProfilePage() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute -bottom-10 left-4">
           <div className="border-4 border-bg rounded-full shadow-brutal">
-            <Avatar src={profile.avatar_url} name={profile.full_name} size="xl" verified={profile.is_verified} />
+            <Avatar src={profile.avatar_url} name={displayName(profile)} size="xl" verified={profile.is_verified} />
           </div>
         </div>
       </div>
@@ -118,7 +118,7 @@ export default function ProfilePage() {
       {/* Name + action */}
       <div className="flex items-end justify-between px-4 pt-3 pb-4" style={{ marginTop: "2.5rem" }}>
         <div>
-          <h1 className="text-xl font-black text-text">{profile.full_name}</h1>
+          <h1 className="text-xl font-black text-text">{displayName(profile)}</h1>
           <p className="text-xs text-text-muted font-bold uppercase tracking-widest">@{profile.username}</p>
         </div>
         <div className="flex gap-2">
@@ -319,9 +319,9 @@ export default function ProfilePage() {
                     onClick={() => setFollowListModal(null)}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated transition-colors"
                   >
-                    <Avatar src={u.avatar_url} name={u.full_name} size="sm" />
+                    <Avatar src={u.avatar_url} name={displayName(u)} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-text leading-none">{u.full_name}</p>
+                      <p className="text-sm font-semibold text-text leading-none">{displayName(u)}</p>
                       <p className="text-xs text-text-muted mt-0.5">@{u.username}</p>
                     </div>
                   </Link>

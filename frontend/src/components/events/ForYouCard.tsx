@@ -1,5 +1,5 @@
 "use client";
-import { cn, formatEventDate, formatPrice, parseTags } from "@/lib/utils";
+import { cn, formatEventDate, formatPrice, parseTags, displayName } from "@/lib/utils";
 import type { Event } from "@/types";
 import { AlertCircle, Calendar, MapPin, Users, Bookmark, BookmarkCheck, Tag } from "lucide-react";
 import Image from "next/image";
@@ -131,7 +131,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
 
         <div className="flex items-center justify-between pt-0.5">
           <div className="flex items-center gap-2">
-            <Avatar src={event.host.avatar_url} name={event.host.full_name} size="xs" />
+            <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="xs" />
             <span className="text-[10px] text-text-muted truncate max-w-[100px]">
               @{event.host.username}
             </span>

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { TopBar } from "@/components/layout/TopBar";
 import { Avatar } from "@/components/ui/Avatar";
-import { Lock, User, MapPin, Globe, FileText, Image } from "lucide-react";
+import { Lock, User, MapPin, Globe, FileText, Image, Smile } from "lucide-react";
 import Link from "next/link";
 
 export default function EditProfilePage() {
@@ -15,11 +15,12 @@ export default function EditProfilePage() {
   const { token, user, setUser } = useAuthStore();
 
   const [form, setForm] = useState({
-    full_name:  user?.full_name  ?? "",
-    bio:        user?.bio        ?? "",
-    location:   user?.location   ?? "",
-    website:    user?.website    ?? "",
-    avatar_url: user?.avatar_url ?? "",
+    full_name:    user?.full_name    ?? "",
+    display_name: user?.display_name ?? "",
+    bio:          user?.bio          ?? "",
+    location:     user?.location     ?? "",
+    website:      user?.website      ?? "",
+    avatar_url:   user?.avatar_url   ?? "",
   });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
@@ -36,11 +37,12 @@ export default function EditProfilePage() {
     setSaved(false);
     try {
       const updated = await authApi.updateMe(token, {
-        full_name:  form.full_name.trim()  || undefined,
-        bio:        form.bio.trim()        || undefined,
-        location:   form.location.trim()   || undefined,
-        website:    form.website.trim()    || undefined,
-        avatar_url: form.avatar_url.trim() || undefined,
+        full_name:    form.full_name.trim()    || undefined,
+        display_name: form.display_name.trim() || null,
+        bio:          form.bio.trim()          || undefined,
+        location:     form.location.trim()     || undefined,
+        website:      form.website.trim()      || undefined,
+        avatar_url:   form.avatar_url.trim()   || undefined,
       });
       setUser(updated);
       setSaved(true);
@@ -72,7 +74,7 @@ export default function EditProfilePage() {
           <div className="border-4 border-border rounded-full shadow-brutal">
             <Avatar
               src={form.avatar_url || user.avatar_url}
-              name={form.full_name || user.full_name}
+              name={form.display_name || form.full_name || user.display_name || user.full_name}
               size="xl"
               verified={user.is_verified}
             />
@@ -104,6 +106,21 @@ export default function EditProfilePage() {
             icon={<User size={16} />}
             maxLength={120}
           />
+
+          <div className="space-y-1">
+            <Input
+              label="Display Name"
+              type="text"
+              value={form.display_name}
+              onChange={set("display_name")}
+              placeholder="Nickname or pseudonym (optional)"
+              icon={<Smile size={16} />}
+              maxLength={80}
+            />
+            <p className="text-[10px] text-text-muted">
+              Shown instead of your full name across the app. Leave blank to use your full name.
+            </p>
+          </div>
 
           {/* Bio — textarea */}
           <div className="space-y-1">

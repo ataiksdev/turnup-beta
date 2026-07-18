@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { CalendarPlus, TrendingUp, Users, DollarSign, FileText, Ticket } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, displayName } from "@/lib/utils";
 
 function StatCard({
   icon: Icon,
@@ -59,7 +59,7 @@ export default function OrganizerDashboardPage() {
       <div className="px-4 py-4 space-y-1">
         <span className="text-xs font-black text-primary uppercase tracking-widest">Organizer Dashboard</span>
         <h1 className="text-2xl font-black text-text">
-          {user?.full_name?.split(" ")[0] ?? "Hey"}
+          {user ? displayName(user).split(" ")[0] : "Hey"}
         </h1>
         <p className="text-xs font-bold text-text-muted uppercase tracking-widest">
           Here's how your events are doing

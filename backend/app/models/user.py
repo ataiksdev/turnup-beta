@@ -17,6 +17,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str | None] = mapped_column(String(255))  # nullable for OAuth/phone-only users
     full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(20), unique=True, index=True, nullable=True)
     bio: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str | None] = mapped_column(String(500))
