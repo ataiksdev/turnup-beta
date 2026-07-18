@@ -37,6 +37,17 @@ def slugify(text: str, uid: str) -> str:
 # ── Users ──────────────────────────────────────────────────────────────────────
 USERS = [
     {
+        "username": "turnup_admin",
+        "full_name": "Turnup Admin",
+        "email": "admin@turnup.ng",
+        "bio": "Platform administrator",
+        "location": "Lagos, Nigeria",
+        "verified": True,
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=admin",
+        "prefs": "",
+        "role": "admin",
+    },
+    {
         "username": "adaeze_sounds",
         "full_name": "Adaeze Okonkwo",
         "email": "adaeze@turnup.ng",

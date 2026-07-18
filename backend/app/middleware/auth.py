@@ -65,3 +65,10 @@ async def get_current_organizer(user: User = Depends(get_current_user)) -> User:
     if user.role != "organizer":
         raise HTTPException(403, "Organizer account required. Use POST /api/organizer/become to upgrade.")
     return user
+
+
+async def get_current_admin(user: User = Depends(get_current_user)) -> User:
+    """Requires the authenticated user to have the admin role."""
+    if user.role != "admin":
+        raise HTTPException(403, "Admin access required.")
+    return user

@@ -70,7 +70,10 @@ export default function LoginPage() {
       const token = await authApi.login(identifier, password);
       const user = await authApi.me(token.access_token);
       setAuth(token.access_token, user);
-      router.replace(user.role === "organizer" ? "/organizer/dashboard" : "/");
+      router.replace(
+        user.role === "admin" ? "/admin" :
+        user.role === "organizer" ? "/organizer/dashboard" : "/"
+      );
     } catch (err: any) {
       setError(err.message ?? "Login failed");
     } finally {
@@ -100,7 +103,10 @@ export default function LoginPage() {
       const token = await authApi.phoneVerify(phone, otp);
       const user = await authApi.me(token.access_token);
       setAuth(token.access_token, user);
-      router.replace(user.role === "organizer" ? "/organizer/dashboard" : "/");
+      router.replace(
+        user.role === "admin" ? "/admin" :
+        user.role === "organizer" ? "/organizer/dashboard" : "/"
+      );
     } catch (err: any) {
       setError(err.message ?? "Invalid OTP");
     } finally {

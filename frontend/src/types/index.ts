@@ -4,7 +4,7 @@ export interface User {
   full_name: string;
   display_name?: string | null;
   email?: string;
-  role?: "attendee" | "organizer";
+  role?: "attendee" | "organizer" | "admin";
   bio?: string | null;
   avatar_url?: string | null;
   location?: string | null;
