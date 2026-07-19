@@ -4,6 +4,11 @@ import { CommunityDetailClient } from "./CommunityDetailClient";
 const API  = process.env.NEXT_PUBLIC_API_URL  ?? "http://localhost:8000";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
+export const revalidate = 0;
+export function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata(
   { params }: { params: { slug: string } },
 ): Promise<Metadata> {
