@@ -306,22 +306,31 @@ function SearchContent() {
           ))}
         </div>
 
-        {/* Category chips */}
-        <div className="snap-scroll gap-2">
-          {[{ label: "All", slug: "" }, ...CATEGORIES].map(({ label, slug }) => (
-            <button
-              key={slug}
-              onClick={() => { setActiveCategory(slug); pushParams({ category: slug || undefined }); }}
-              className={cn(
-                "shrink-0 px-4 py-2 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
-                activeCategory === slug
-                  ? "bg-primary text-white border-primary shadow-brutal-sm"
-                  : "bg-bg-card text-text-secondary border-border hover:border-primary hover:text-primary",
-              )}
-            >
-              {label}
-            </button>
-          ))}
+        {/* Category filter */}
+        <div className="relative">
+          <select
+            value={activeCategory}
+            onChange={(e) => { setActiveCategory(e.target.value); pushParams({ category: e.target.value || undefined }); }}
+            className={cn(
+              "w-full appearance-none pl-3 pr-9 py-2 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
+              activeCategory
+                ? "bg-primary text-white border-primary shadow-brutal-sm"
+                : "bg-bg-card text-text-secondary border-border",
+            )}
+          >
+            <option value="">All categories</option>
+            {CATEGORIES.map(({ label, slug }) => (
+              <option key={slug} value={slug}>{label}</option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            className={cn(
+              "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2",
+              activeCategory ? "text-white" : "text-text-secondary",
+            )}
+            aria-hidden
+          />
         </div>
 
         {/* Type + Free chips */}

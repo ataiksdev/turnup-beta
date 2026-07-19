@@ -1,6 +1,13 @@
+// The regular web deploy (Docker/docker-compose) needs a real server: dynamic routes like
+// /events/[id], /profile/[username], /tickets/[id] etc. are unbounded and render on demand.
+// "output: export" (fully static, zero server) only works for the Capacitor mobile bundle,
+// which pre-strips /admin and doesn't need those dynamic pages to be independently linkable —
+// see scripts/strip-admin.js and the build:capacitor script.
+const isCapacitorBuild = process.env.CAPACITOR_BUILD === "true";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "export",
+  output: isCapacitorBuild ? "export" : "standalone",
   images: {
     unoptimized: true,
     dangerouslyAllowSVG: true,
