@@ -5,8 +5,7 @@ const config: CapacitorConfig = {
   appName: 'turnup',
   webDir: 'out',
   server: {
-    url: 'http://10.175.121.187:9000',
-    cleartext: true
+    androidScheme: 'https'
   }
 };
 
