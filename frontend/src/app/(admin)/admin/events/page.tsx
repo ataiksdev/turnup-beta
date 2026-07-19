@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Search, Users, Eye } from "lucide-react";
+import { Search, Users, Eye, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function StatusBadge({ status }: { status: string }) {
@@ -23,6 +23,24 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function ReviewBadge({ reviewStatus }: { reviewStatus: string }) {
+  const colors: Record<string, string> = {
+    pending: "border-yellow-400 text-yellow-700 bg-yellow-50",
+    approved: "border-green-400 text-green-700 bg-green-50",
+    rejected: "border-red-400 text-red-700 bg-red-50",
+  };
+  const labels: Record<string, string> = {
+    pending: "awaiting review",
+    approved: "approved",
+    rejected: "rejected",
+  };
+  return (
+    <span className={cn("text-xs font-bold px-2 py-0.5 rounded border-2", colors[reviewStatus] ?? colors.pending)}>
+      {labels[reviewStatus] ?? reviewStatus}
+    </span>
+  );
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-NG", { day: "2-digit", month: "short", year: "numeric" });
@@ -31,12 +49,30 @@ function formatDate(dateStr: string) {
 function EventRow({ ev }: { ev: AdminEventOut }) {
   const { token } = useAuthStore();
   const qc = useQueryClient();
+  const [rejecting, setRejecting] = useState(false);
+  const [note, setNote] = useState("");
 
   const mutation = useMutation({
     mutationFn: (body: { is_featured?: boolean; is_trending?: boolean; status?: string }) =>
       adminApi.updateEvent(token!, ev.id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-events"] }),
   });
+
+  const approveMutation = useMutation({
+    mutationFn: () => adminApi.approveEvent(token!, ev.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-events"] }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (n: string) => adminApi.rejectEvent(token!, ev.id, n),
+    onSuccess: () => {
+      setRejecting(false);
+      setNote("");
+      qc.invalidateQueries({ queryKey: ["admin-events"] });
+    },
+  });
+
+  const isPending = ev.review_status === "pending";
 
   return (
     <div className="border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-3">
@@ -47,6 +83,12 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
 
       <div className="flex flex-wrap gap-1.5 items-center">
         <StatusBadge status={ev.status} />
+        <ReviewBadge reviewStatus={ev.review_status} />
+        {ev.created_via === "ai_agent" && (
+          <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded border-2 border-purple-400 text-purple-700 bg-purple-50">
+            <Sparkles size={11} /> AI-drafted
+          </span>
+        )}
         {ev.is_featured && (
           <span className="text-xs font-bold px-2 py-0.5 rounded border-2 border-yellow-400 text-yellow-700 bg-yellow-50">featured</span>
         )}
@@ -55,11 +97,70 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
         )}
       </div>
 
+      {ev.review_status === "rejected" && ev.review_note && (
+        <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1.5">
+          <span className="font-bold">Rejection note:</span> {ev.review_note}
+        </p>
+      )}
+      {ev.reviewed_by_username && (
+        <p className="text-[11px] text-text-muted">
+          Reviewed by @{ev.reviewed_by_username}
+          {ev.reviewed_at && ` on ${formatDate(ev.reviewed_at)}`}
+        </p>
+      )}
+
       <div className="flex items-center gap-4 text-xs text-text-muted">
         <span className="flex items-center gap-1"><Users size={12} />{ev.attendees_count.toLocaleString("en-NG")}</span>
         <span className="flex items-center gap-1"><Eye size={12} />{ev.views_count.toLocaleString("en-NG")}</span>
         <span>{formatDate(ev.start_date)}</span>
       </div>
+
+      {isPending && (
+        <div className="flex flex-wrap gap-2 items-center pt-1 border-t border-border/60">
+          <Button
+            size="sm"
+            variant="primary"
+            loading={approveMutation.isPending}
+            onClick={() => approveMutation.mutate()}
+          >
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={approveMutation.isPending}
+            onClick={() => setRejecting((v) => !v)}
+          >
+            Reject
+          </Button>
+        </div>
+      )}
+
+      {rejecting && (
+        <div className="space-y-2 pt-1">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Explain what needs to change before this can be approved..."
+            rows={3}
+            className="w-full text-sm border-2 border-border bg-bg-surface rounded px-3 py-2 text-text-primary placeholder:text-text-muted"
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={note.trim().length < 3}
+              loading={rejectMutation.isPending}
+              onClick={() => rejectMutation.mutate(note.trim())}
+            >
+              Confirm Reject
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setRejecting(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 items-center">
         <Button
@@ -99,6 +200,7 @@ export default function AdminEventsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [reviewStatusFilter, setReviewStatusFilter] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -108,13 +210,16 @@ export default function AdminEventsPage() {
   }, [search]);
 
   const { data: events, isLoading, error } = useQuery({
-    queryKey: ["admin-events", debouncedSearch, statusFilter],
+    queryKey: ["admin-events", debouncedSearch, statusFilter, reviewStatusFilter],
     queryFn: () => adminApi.events(token!, {
       q: debouncedSearch || undefined,
       status: statusFilter || undefined,
+      review_status: reviewStatusFilter || undefined,
     }),
     enabled: !!token,
   });
+
+  const pendingCount = events?.filter((e) => e.review_status === "pending").length ?? 0;
 
   return (
     <div className="flex flex-col pb-4">
@@ -135,12 +240,34 @@ export default function AdminEventsPage() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="text-xs font-bold border-2 border-border bg-bg-surface rounded px-3 py-2 text-text-primary shrink-0"
           >
-            <option value="">All</option>
+            <option value="">All statuses</option>
             <option value="published">Published</option>
             <option value="draft">Draft</option>
             <option value="cancelled">Cancelled</option>
             <option value="completed">Completed</option>
           </select>
+        </div>
+
+        <div className="flex gap-2">
+          {[
+            { value: "", label: "All" },
+            { value: "pending", label: `Pending${pendingCount ? ` (${pendingCount})` : ""}` },
+            { value: "approved", label: "Approved" },
+            { value: "rejected", label: "Rejected" },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setReviewStatusFilter(opt.value)}
+              className={cn(
+                "text-xs font-bold px-3 py-1.5 rounded border-2 transition-colors",
+                reviewStatusFilter === opt.value
+                  ? "border-primary bg-primary text-white"
+                  : "border-border bg-bg-surface text-text-muted",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
 
         {error && (

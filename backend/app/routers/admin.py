@@ -1,21 +1,24 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.middleware.auth import get_current_admin
+from app.middleware.auth import get_current_admin, get_current_moderator
 from app.models.event import Category, Event
 from app.models.organizer import TicketOrder, TicketTier
+from app.models.social import Notification
 from app.models.user import User
 from app.schemas.admin import (
     AdminCategoryCreate, AdminCategoryOut, AdminCategoryUpdate,
-    AdminEventOut, AdminEventUpdate,
+    AdminEventOut, AdminEventReject, AdminEventUpdate,
     AdminOrderOut,
     AdminUserOut, AdminUserUpdate,
+    AIEventDraft,
     PlatformStats,
 )
+from app.services.ai_agent import AIAgentError, draft_event
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -105,44 +108,53 @@ async def update_user(
     return user
 
 
+def _admin_event_out(ev: Event) -> AdminEventOut:
+    return AdminEventOut(
+        id=ev.id,
+        title=ev.title,
+        slug=ev.slug,
+        status=ev.status,
+        is_featured=ev.is_featured,
+        is_trending=ev.is_trending,
+        event_type=ev.event_type,
+        city=ev.city,
+        country=ev.country,
+        start_date=ev.start_date,
+        attendees_count=ev.attendees_count,
+        views_count=ev.views_count,
+        host_username=ev.host.username,
+        host_id=ev.host_id,
+        created_at=ev.created_at,
+        review_status=ev.review_status,
+        review_note=ev.review_note,
+        created_via=ev.created_via,
+        reviewed_by_username=ev.reviewed_by.username if ev.reviewed_by else None,
+        reviewed_at=ev.reviewed_at,
+    )
+
+
 @router.get("/events", response_model=list[AdminEventOut])
 async def list_all_events(
     q: str | None = Query(None),
     status: str | None = Query(None),
+    review_status: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, le=100),
     _: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy.orm import selectinload
-    stmt = select(Event).options(selectinload(Event.host))
+    stmt = select(Event).options(selectinload(Event.host), selectinload(Event.reviewed_by))
     if q:
         stmt = stmt.where(Event.title.ilike(f"%{q}%"))
     if status:
         stmt = stmt.where(Event.status == status)
+    if review_status:
+        stmt = stmt.where(Event.review_status == review_status)
     stmt = stmt.order_by(Event.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     events = result.scalars().all()
-    out = []
-    for ev in events:
-        out.append(AdminEventOut(
-            id=ev.id,
-            title=ev.title,
-            slug=ev.slug,
-            status=ev.status,
-            is_featured=ev.is_featured,
-            is_trending=ev.is_trending,
-            event_type=ev.event_type,
-            city=ev.city,
-            country=ev.country,
-            start_date=ev.start_date,
-            attendees_count=ev.attendees_count,
-            views_count=ev.views_count,
-            host_username=ev.host.username,
-            host_id=ev.host_id,
-            created_at=ev.created_at,
-        ))
-    return out
+    return [_admin_event_out(ev) for ev in events]
 
 
 @router.patch("/events/{event_id}", response_model=AdminEventOut)
@@ -153,7 +165,10 @@ async def update_event(
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy.orm import selectinload
-    result = await db.execute(select(Event).options(selectinload(Event.host)).where(Event.id == event_id))
+    result = await db.execute(
+        select(Event).options(selectinload(Event.host), selectinload(Event.reviewed_by))
+        .where(Event.id == event_id)
+    )
     ev = result.scalar_one_or_none()
     if not ev:
         raise HTTPException(404, "Event not found")
@@ -165,14 +180,84 @@ async def update_event(
         ev.status = body.status
     await db.flush()
     await db.refresh(ev)
-    return AdminEventOut(
-        id=ev.id, title=ev.title, slug=ev.slug, status=ev.status,
-        is_featured=ev.is_featured, is_trending=ev.is_trending,
-        event_type=ev.event_type, city=ev.city, country=ev.country,
-        start_date=ev.start_date, attendees_count=ev.attendees_count,
-        views_count=ev.views_count, host_username=ev.host.username,
-        host_id=ev.host_id, created_at=ev.created_at,
+    return _admin_event_out(ev)
+
+
+@router.post("/events/{event_id}/approve", response_model=AdminEventOut)
+async def approve_event(
+    event_id: str,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(Event).options(selectinload(Event.host), selectinload(Event.reviewed_by))
+        .where(Event.id == event_id)
     )
+    ev = result.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(404, "Event not found")
+    if ev.review_status == "approved":
+        raise HTTPException(400, "Event is already approved")
+
+    ev.review_status = "approved"
+    ev.review_note = None
+    ev.reviewed_by_id = admin.id
+    ev.reviewed_at = datetime.now(timezone.utc)
+    ev.status = "published"
+
+    db.add(Notification(
+        id=str(uuid.uuid4()),
+        user_id=ev.host_id,
+        type="event_approved",
+        title=f"Event approved: {ev.title}",
+        body=f'"{ev.title}" was approved and is now live.',
+        reference_id=ev.id,
+        reference_type="event",
+        actor_id=admin.id,
+    ))
+    await db.flush()
+    await db.refresh(ev)
+    await db.execute(update(User).where(User.id == ev.host_id).values(
+        events_hosted=User.events_hosted + 1))
+    return _admin_event_out(ev)
+
+
+@router.post("/events/{event_id}/reject", response_model=AdminEventOut)
+async def reject_event(
+    event_id: str,
+    body: AdminEventReject,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(Event).options(selectinload(Event.host), selectinload(Event.reviewed_by))
+        .where(Event.id == event_id)
+    )
+    ev = result.scalar_one_or_none()
+    if not ev:
+        raise HTTPException(404, "Event not found")
+
+    ev.review_status = "rejected"
+    ev.review_note = body.note
+    ev.reviewed_by_id = admin.id
+    ev.reviewed_at = datetime.now(timezone.utc)
+    ev.status = "draft"
+
+    db.add(Notification(
+        id=str(uuid.uuid4()),
+        user_id=ev.host_id,
+        type="event_rejected",
+        title=f"Event needs changes: {ev.title}",
+        body=body.note,
+        reference_id=ev.id,
+        reference_type="event",
+        actor_id=admin.id,
+    ))
+    await db.flush()
+    await db.refresh(ev)
+    return _admin_event_out(ev)
 
 
 @router.get("/categories", response_model=list[AdminCategoryOut])
@@ -273,3 +358,38 @@ async def list_all_orders(
             created_at=o.created_at,
         ))
     return out
+
+
+@router.post("/events/draft", response_model=AIEventDraft)
+async def ai_draft_event(
+    text: str | None = Form(None),
+    url: str | None = Form(None),
+    image: UploadFile | None = File(None),
+    _: User = Depends(get_current_moderator),
+    db: AsyncSession = Depends(get_db),
+):
+    """Draft structured event fields from a pasted description, a URL, and/or a flyer image.
+
+    Moderator/admin only. Returns a suggestion for the caller to review and edit — nothing
+    is created here.
+    """
+    image_bytes = None
+    image_media_type = None
+    if image is not None:
+        image_bytes = await image.read()
+        image_media_type = image.content_type or "image/jpeg"
+
+    categories = (await db.execute(select(Category.name).order_by(Category.name))).scalars().all()
+
+    try:
+        result = await draft_event(
+            text=text,
+            url=url,
+            image_bytes=image_bytes,
+            image_media_type=image_media_type,
+            category_names=list(categories),
+        )
+    except AIAgentError as e:
+        raise HTTPException(422, str(e))
+
+    return AIEventDraft(**result)

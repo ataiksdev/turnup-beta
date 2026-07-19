@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 function RoleBadge({ role }: { role: string }) {
   const colors: Record<string, string> = {
     admin: "border-red-400 text-red-700 bg-red-50",
+    moderator: "border-purple-400 text-purple-700 bg-purple-50",
     organizer: "border-blue-400 text-blue-700 bg-blue-50",
     attendee: "border-border text-text-muted bg-bg-elevated",
   };
@@ -105,6 +106,7 @@ function UserRow({ u, authUserId }: { u: AdminUserOut; authUserId: string }) {
           >
             <option value="attendee">attendee</option>
             <option value="organizer">organizer</option>
+            <option value="moderator">moderator</option>
             <option value="admin">admin</option>
           </select>
         </div>
@@ -160,6 +162,7 @@ export default function AdminUsersPage() {
             <option value="">All</option>
             <option value="attendee">Attendee</option>
             <option value="organizer">Organizer</option>
+            <option value="moderator">Moderator</option>
             <option value="admin">Admin</option>
           </select>
         </div>

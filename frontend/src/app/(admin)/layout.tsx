@@ -1,11 +1,17 @@
 "use client";
+import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 
-const navItems = [
+// Pages under (admin) that moderators may view — everything else is admin-only.
+const MODERATOR_PATHS = ["/admin/events/new", "/admin/events/ai-new"];
+const isAdminOnlyPath = (pathname: string) =>
+  !MODERATOR_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+const adminNavItems = [
   { href: "/admin",            icon: LayoutDashboard, label: "Overview"   },
   { href: "/admin/users",      icon: Users,           label: "Users"      },
   { href: "/admin/events",     icon: CalendarDays,    label: "Events"     },
@@ -13,8 +19,14 @@ const navItems = [
   { href: "/admin/orders",     icon: ShoppingBag,     label: "Orders"     },
 ];
 
-function AdminBottomNav() {
+const moderatorNavItems = [
+  { href: "/admin/events/new",    icon: CalendarPlus, label: "Create"  },
+  { href: "/admin/events/ai-new", icon: Sparkles,      label: "AI Draft" },
+];
+
+function AdminBottomNav({ role }: { role: string }) {
   const pathname = usePathname();
+  const navItems = role === "admin" ? adminNavItems : moderatorNavItems;
   return (
     <nav aria-label="Admin navigation" className="fixed bottom-0 inset-x-0 z-50 bg-bg-surface border-t-2 border-border safe-bottom">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
@@ -49,11 +61,23 @@ function AdminBottomNav() {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
-  if (!user || user.role !== "admin") return null;
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const isModerator = user?.role === "moderator";
+  const shouldBounce = isModerator && isAdminOnlyPath(pathname);
+
+  useEffect(() => {
+    if (shouldBounce) router.replace("/admin/events/new");
+  }, [shouldBounce, router]);
+
+  if (!user || (user.role !== "admin" && user.role !== "moderator")) return null;
+  if (shouldBounce) return null;
+
   return (
     <div className="min-h-screen bg-bg pb-20 max-w-lg mx-auto">
       {children}
-      <AdminBottomNav />
+      <AdminBottomNav role={user.role} />
     </div>
   );
 }

@@ -73,6 +73,7 @@ function LoginPage() {
       setAuth(token.access_token, user);
       router.replace(
         user.role === "admin" ? "/admin" :
+        user.role === "moderator" ? "/admin/events/new" :
         user.role === "organizer" ? "/organizer/dashboard" : "/"
       );
     } catch (err: any) {
@@ -106,6 +107,7 @@ function LoginPage() {
       setAuth(token.access_token, user);
       router.replace(
         user.role === "admin" ? "/admin" :
+        user.role === "moderator" ? "/admin/events/new" :
         user.role === "organizer" ? "/organizer/dashboard" : "/"
       );
     } catch (err: any) {
