@@ -207,7 +207,7 @@ export const eventsApi = {
     );
   },
 
-  categories: () => request<Category[]>("/categories"),
+  categories: () => request<Category[]>("/events/categories"),
 
   analytics: (token: string, eventId: string) =>
     request<EventAnalytics>(`/events/${eventId}/analytics`, {}, token),
