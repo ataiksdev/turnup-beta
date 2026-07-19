@@ -1,15 +1,17 @@
 "use client";
+import { useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { useTicketCache } from "@/store/tickets";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { ShareButton } from "@/components/ui/ShareButton";
 import { QRCodeSVG } from "qrcode.react";
 import {
   CheckCircle2, Clock, XCircle, CalendarDays, MapPin,
-  Ticket, Building2, Tag,
+  Ticket, Building2, Tag, WifiOff,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -25,12 +27,22 @@ const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; 
 export default function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { token } = useAuthStore();
+  const { tickets, setTicket } = useTicketCache();
 
   const { data: ticket, isLoading, isError } = useQuery({
     queryKey: ["ticket", id],
     queryFn: () => organizerApi.getTicket(token!, id),
     enabled: !!token && !!id,
   });
+
+  useEffect(() => {
+    if (ticket) setTicket(ticket);
+  }, [ticket, setTicket]);
+
+  // Fall back to locally cached version when offline or on error
+  const cached = tickets[id];
+  const isOffline = isError && !!cached;
+  const displayTicket = ticket ?? (isError ? cached : undefined);
 
   if (!token) {
     return (
@@ -42,7 +54,7 @@ export default function TicketDetailPage() {
     );
   }
 
-  if (isLoading) {
+  if (isLoading && !cached) {
     return (
       <div className="flex flex-col">
         <TopBar back title="Ticket" />
@@ -55,7 +67,7 @@ export default function TicketDetailPage() {
     );
   }
 
-  if (isError || !ticket) {
+  if (isError && !cached) {
     return (
       <div className="flex flex-col">
         <TopBar back title="Ticket" />
@@ -68,28 +80,36 @@ export default function TicketDetailPage() {
     );
   }
 
-  const s = STATUS_STYLES[ticket.status] ?? STATUS_STYLES.confirmed;
+  const s = STATUS_STYLES[displayTicket!.status] ?? STATUS_STYLES.confirmed;
   const StatusIcon = s.icon;
-  const isConfirmed = ticket.status === "confirmed";
-  const eventDate = ticket.event_date
-    ? format(new Date(ticket.event_date), "EEE, MMM d yyyy · h:mm a")
+  const isConfirmed = displayTicket!.status === "confirmed";
+  const eventDate = displayTicket!.event_date
+    ? format(new Date(displayTicket!.event_date), "EEE, MMM d yyyy · h:mm a")
     : null;
 
   // QR value encodes a JSON payload for the check-in scanner
   const qrValue = JSON.stringify({
-    code: ticket.ticket_code,
-    order: ticket.id,
-    event: ticket.event_id,
+    code: displayTicket!.ticket_code,
+    order: displayTicket!.id,
+    event: displayTicket!.event_id,
   });
 
   return (
     <div className="flex flex-col pb-8">
       <TopBar back title="My Ticket" />
 
+      {/* Offline notice */}
+      {isOffline && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-bg-elevated border-b border-border text-xs text-text-muted">
+          <WifiOff size={12} />
+          <span>You're offline — showing saved ticket</span>
+        </div>
+      )}
+
       {/* Cover */}
-      {ticket.event_cover && (
+      {displayTicket!.event_cover && (
         <div className="h-40 w-full overflow-hidden">
-          <img src={ticket.event_cover} alt="" className="w-full h-full object-cover" />
+          <img src={displayTicket!.event_cover} alt="" className="w-full h-full object-cover" />
         </div>
       )}
 
@@ -97,12 +117,12 @@ export default function TicketDetailPage() {
         {/* Event name + status */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            {ticket.event_slug ? (
-              <Link href={`/events/${ticket.event_slug}`} className="text-lg font-black text-text hover:text-primary transition-colors leading-snug">
-                {ticket.event_title ?? "Event"}
+            {displayTicket!.event_slug ? (
+              <Link href={`/events/${displayTicket!.event_slug}`} className="text-lg font-black text-text hover:text-primary transition-colors leading-snug">
+                {displayTicket!.event_title ?? "Event"}
               </Link>
             ) : (
-              <h1 className="text-lg font-black text-text leading-snug">{ticket.event_title ?? "Event"}</h1>
+              <h1 className="text-lg font-black text-text leading-snug">{displayTicket!.event_title ?? "Event"}</h1>
             )}
           </div>
           <span className={cn(
@@ -121,21 +141,21 @@ export default function TicketDetailPage() {
               <span>{eventDate}</span>
             </div>
           )}
-          {ticket.event_venue && (
+          {displayTicket!.event_venue && (
             <div className="flex items-center gap-2">
               <Building2 size={15} className="text-text-muted shrink-0" />
-              <span>{ticket.event_venue}</span>
+              <span>{displayTicket!.event_venue}</span>
             </div>
           )}
-          {(ticket.event_address || ticket.event_city) && (
+          {(displayTicket!.event_address || displayTicket!.event_city) && (
             <div className="flex items-center gap-2">
               <MapPin size={15} className="text-text-muted shrink-0" />
-              <span>{[ticket.event_address, ticket.event_city].filter(Boolean).join(", ")}</span>
+              <span>{[displayTicket!.event_address, displayTicket!.event_city].filter(Boolean).join(", ")}</span>
             </div>
           )}
           <div className="flex items-center gap-2">
             <Tag size={15} className="text-text-muted shrink-0" />
-            <span>{ticket.tier_name} × {ticket.quantity}</span>
+            <span>{displayTicket!.tier_name} × {displayTicket!.quantity}</span>
           </div>
         </div>
 
@@ -144,17 +164,17 @@ export default function TicketDetailPage() {
           <div>
             <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Total paid</p>
             <p className="text-xl font-black text-text mt-0.5">
-              {ticket.unit_price === 0 ? "Free" : `₦${ticket.total_price.toLocaleString()}`}
+              {displayTicket!.unit_price === 0 ? "Free" : `₦${displayTicket!.total_price.toLocaleString()}`}
             </p>
           </div>
           <div className="text-right">
             <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Order ID</p>
-            <p className="font-mono text-xs text-text-muted mt-0.5">{ticket.id.slice(0, 8).toUpperCase()}</p>
+            <p className="font-mono text-xs text-text-muted mt-0.5">{displayTicket!.id.slice(0, 8).toUpperCase()}</p>
           </div>
         </div>
 
         {/* QR code — only for confirmed tickets */}
-        {isConfirmed && ticket.ticket_code ? (
+        {isConfirmed && displayTicket!.ticket_code ? (
           <div className="flex flex-col items-center gap-4 p-6 rounded-xl border-2 border-border bg-bg-card">
             <p className="text-[10px] font-black text-text-muted uppercase tracking-widest">Entry QR Code</p>
             <div className="p-4 bg-white rounded-xl shadow-brutal-sm">
@@ -169,12 +189,12 @@ export default function TicketDetailPage() {
               Show this at the door. Screenshot it for offline access.
             </p>
             <p className="font-mono text-xs text-text-muted tracking-widest">
-              {ticket.ticket_code.toUpperCase().replace(/-/g, " ")}
+              {displayTicket!.ticket_code.toUpperCase().replace(/-/g, " ")}
             </p>
-            {ticket.checked_in_at && (
+            {displayTicket!.checked_in_at && (
               <div className="flex items-center gap-1.5 text-xs font-bold text-success">
                 <CheckCircle2 size={14} />
-                Checked in {format(new Date(ticket.checked_in_at), "MMM d · h:mm a")}
+                Checked in {format(new Date(displayTicket!.checked_in_at), "MMM d · h:mm a")}
               </div>
             )}
           </div>
@@ -186,18 +206,18 @@ export default function TicketDetailPage() {
         ) : null}
 
         {/* Share event */}
-        {ticket.event_slug && (
+        {displayTicket!.event_slug && (
           <div className="flex items-center gap-3 p-3 rounded border-2 border-border bg-bg-card">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-black text-text-secondary uppercase tracking-wide">Going to this event?</p>
               <p className="text-[10px] text-text-muted mt-0.5">Share it with friends</p>
             </div>
             <ShareButton
-              title={ticket.event_title ?? "Event on Turnup"}
-              text={`I'm going to ${ticket.event_title} — check it out on Turnup!`}
+              title={displayTicket!.event_title ?? "Event on Turnup"}
+              text={`I'm going to ${displayTicket!.event_title} — check it out on Turnup!`}
               url={typeof window !== "undefined"
-                ? `${window.location.origin}/events/${ticket.event_slug}`
-                : `/events/${ticket.event_slug}`}
+                ? `${window.location.origin}/events/${displayTicket!.event_slug}`
+                : `/events/${displayTicket!.event_slug}`}
               size={16}
             />
           </div>
