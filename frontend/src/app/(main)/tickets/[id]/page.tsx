@@ -5,6 +5,7 @@ import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
+import { ShareButton } from "@/components/ui/ShareButton";
 import { QRCodeSVG } from "qrcode.react";
 import {
   CheckCircle2, Clock, XCircle, CalendarDays, MapPin,
@@ -183,6 +184,24 @@ export default function TicketDetailPage() {
             <p className="text-sm text-text-muted">QR code available once your ticket is confirmed</p>
           </div>
         ) : null}
+
+        {/* Share event */}
+        {ticket.event_slug && (
+          <div className="flex items-center gap-3 p-3 rounded border-2 border-border bg-bg-card">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black text-text-secondary uppercase tracking-wide">Going to this event?</p>
+              <p className="text-[10px] text-text-muted mt-0.5">Share it with friends</p>
+            </div>
+            <ShareButton
+              title={ticket.event_title ?? "Event on Turnup"}
+              text={`I'm going to ${ticket.event_title} — check it out on Turnup!`}
+              url={typeof window !== "undefined"
+                ? `${window.location.origin}/events/${ticket.event_slug}`
+                : `/events/${ticket.event_slug}`}
+              size={16}
+            />
+          </div>
+        )}
 
         {/* Back link */}
         <Link href="/tickets">

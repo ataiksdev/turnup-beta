@@ -285,7 +285,9 @@ export function EventDetailClient({ id }: { id: string }) {
   const tags    = parseTags(event.tags);
   const isGoing = attendance === "going";
   const isInterested = attendance === "interested";
-  const shareUrl = `${SITE}/events/${id}`;
+  const shareUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/events/${id}`
+    : `${SITE}/events/${id}`;
 
   return (
     <article className="flex flex-col pb-8">
