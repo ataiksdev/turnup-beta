@@ -4,6 +4,7 @@ import { EventDetailClient } from "./EventDetailClient";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
+export const revalidate = 0;
 export function generateStaticParams() {
   return [];
 }
