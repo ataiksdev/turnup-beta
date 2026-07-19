@@ -60,13 +60,13 @@ export default function AdminDashboardPage() {
 
       <div className="px-4 mb-6">
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {Array.from({ length: 9 }).map((_, i) => (
               <div key={i} className="animate-pulse bg-bg-elevated rounded h-24" />
             ))}
           </div>
         ) : stats ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             <KpiCard icon={Users}       label="Total Users"       value={stats.total_users.toLocaleString("en-NG")}       iconClass="text-blue-500" />
             <KpiCard icon={Briefcase}   label="Total Organizers"  value={stats.total_organizers.toLocaleString("en-NG")}  iconClass="text-purple-500" />
             <KpiCard icon={CalendarDays} label="Total Events"     value={stats.total_events.toLocaleString("en-NG")}      iconClass="text-green-500" />
@@ -82,7 +82,7 @@ export default function AdminDashboardPage() {
 
       <div className="px-4 space-y-3">
         <h2 className="text-xs font-black text-text-primary uppercase tracking-widest">Quick Actions</h2>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           {[
             { href: "/admin/users",         label: "Manage Users"       },
             { href: "/admin/events",        label: "Moderate Events"    },

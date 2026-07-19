@@ -2,7 +2,7 @@
 import { cn, displayName } from "@/lib/utils";
 import { Bell, ChevronLeft, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -17,8 +17,12 @@ interface TopBarProps {
 
 export function TopBar({ title, back, transparent, actions, className }: TopBarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user } = useAuthStore();
   const isOrganizer = user?.role === "organizer";
+  // The admin sidebar already shows the "turnup" wordmark on desktop — avoid the double-up
+  // on the admin root page, which is the only admin page that renders the bare TopBar logo.
+  const hideLogoOnDesktop = pathname === "/admin";
 
   return (
     <header
@@ -42,7 +46,11 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
             <ChevronLeft size={20} className="text-text" aria-hidden />
           </button>
         ) : (
-          <Link href="/" aria-label="Turnup home" className="flex items-center gap-1.5">
+          <Link
+            href="/"
+            aria-label="Turnup home"
+            className={cn("flex items-center gap-1.5", hideLogoOnDesktop && "md:hidden")}
+          >
             <span className="text-xl font-black text-primary tracking-tight">turnup</span>
           </Link>
         )}

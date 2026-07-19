@@ -104,7 +104,8 @@ export default function AIDraftEventPage() {
     <div className="flex flex-col pb-24">
       <TopBar title="AI Draft Event" back />
 
-      <div className="px-4 py-4 space-y-5">
+      <div className="px-4 py-4 lg:flex lg:gap-6 lg:items-start lg:max-w-5xl">
+        <div className="space-y-5 lg:flex-1 lg:max-w-xl">
         <p className="text-xs text-text-muted">
           Paste a description, drop in a source URL, and/or upload a flyer image — Claude will
           draft the event fields for you to review and edit before submitting.
@@ -169,9 +170,10 @@ export default function AIDraftEventPage() {
         <Button fullWidth loading={loading} onClick={generate}>
           <Sparkles size={16} /> Generate Draft
         </Button>
+        </div>
 
         {draft && (
-          <div className="border-2 border-purple-300 bg-purple-50 rounded p-4 space-y-3">
+          <div className="mt-5 lg:mt-0 lg:w-96 lg:shrink-0 lg:sticky lg:top-20 border-2 border-purple-300 bg-purple-50 rounded p-4 space-y-3">
             <div className="flex items-center gap-2 text-purple-700">
               <Sparkles size={14} />
               <span className="text-xs font-black uppercase tracking-widest">AI Draft</span>

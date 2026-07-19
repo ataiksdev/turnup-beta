@@ -172,13 +172,13 @@ export default function AdminUsersPage() {
         )}
 
         {isLoading ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="animate-pulse bg-bg-elevated rounded h-28" />
             ))}
           </div>
         ) : users && users.length > 0 ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {users.map((u) => (
               <UserRow key={u.id} u={u} authUserId={authUser?.id ?? ""} />
             ))}

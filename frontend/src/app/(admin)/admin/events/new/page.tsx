@@ -141,7 +141,7 @@ export default function AdminCreateEventPage() {
     <div className="flex flex-col pb-24">
       <TopBar title="Create Event" back />
 
-      <div className="px-4 py-4 space-y-5">
+      <div className="px-4 py-4 space-y-5 lg:max-w-2xl">
         {!isAdmin && (
           <p className="text-xs font-bold text-yellow-700 bg-yellow-50 border-2 border-yellow-300 rounded px-3 py-2">
             As a moderator, this event will be submitted for admin approval before it goes live.
@@ -175,7 +175,7 @@ export default function AdminCreateEventPage() {
 
         <FieldWrap>
           <Label>Category</Label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {categories?.map((cat) => (
               <button
                 key={cat.id}
