@@ -99,6 +99,13 @@ class Event(Base):
     is_trending: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     tags: Mapped[str | None] = mapped_column(Text)  # comma-separated
 
+    # Moderation / approval workflow (organizer & moderator submissions; admins bypass)
+    review_status: Mapped[str] = mapped_column(String(20), default="approved")  # pending | approved | rejected
+    review_note: Mapped[str | None] = mapped_column(Text)
+    reviewed_by_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_via: Mapped[str] = mapped_column(String(20), default="manual")  # manual | ai_agent
+
     host_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     category_id: Mapped[str | None] = mapped_column(ForeignKey("categories.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -106,6 +113,7 @@ class Event(Base):
 
     # Core relationships
     host = relationship("User", back_populates="events", foreign_keys=[host_id])
+    reviewed_by = relationship("User", foreign_keys=[reviewed_by_id])
     category = relationship("Category", back_populates="events")
     series = relationship("EventSeries", back_populates="events", foreign_keys=[series_id])
     attendees = relationship("EventAttendee", back_populates="event", cascade="all, delete-orphan")

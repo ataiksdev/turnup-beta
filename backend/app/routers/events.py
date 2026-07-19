@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.middleware.auth import get_current_organizer, get_current_user, get_optional_user
+from app.middleware.auth import get_current_event_creator, get_current_organizer, get_current_user, get_optional_user
 from app.models.event import Category, Event, EventAttendee, EventSave
 from app.models.organizer import (
     EventCoHost, EventReview, EventView, EventWaitlist, TicketOrder, TicketTier,
@@ -66,6 +66,8 @@ def _serialize(event: Event, is_saved: bool = False,
         "event_type": event.event_type, "meeting_url": event.meeting_url,
         "is_saved": is_saved, "attendance_status": attendance_status,
         "is_waitlisted": is_waitlisted,
+        "review_status": event.review_status, "review_note": event.review_note,
+        "created_via": event.created_via,
     }
 
 
@@ -466,7 +468,7 @@ async def get_event(
 async def create_event(
     payload: EventCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_organizer),
+    user: User = Depends(get_current_event_creator),
 ):
     data = payload.model_dump()
     template_id = data.pop("template_id", None)
@@ -483,6 +485,13 @@ async def create_event(
             for k, v in defaults.items():
                 if k in data and data[k] is None:
                     data[k] = v
+
+    # Admins bypass approval; organizer/moderator submissions go to review as drafts.
+    if user.role == "admin":
+        data["review_status"] = "approved"
+    else:
+        data["review_status"] = "pending"
+        data["status"] = "draft"
 
     eid = str(uuid.uuid4())
     event = Event(id=eid, slug=_slugify(payload.title, eid),
@@ -509,6 +518,15 @@ async def update_event(
     old_start = event.start_date
 
     changes = payload.model_dump(exclude_none=True)
+
+    if user.role != "admin":
+        if changes.get("status") == "published" and event.review_status != "approved":
+            raise HTTPException(403, "This event is awaiting admin approval before it can be published.")
+        # Editing a rejected (or still-pending) submission resubmits it for review.
+        if changes and event.review_status in ("pending", "rejected"):
+            event.review_status = "pending"
+            event.review_note = None
+
     for k, v in changes.items():
         setattr(event, k, v)
 

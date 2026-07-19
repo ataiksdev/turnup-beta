@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminUserOut(BaseModel):
@@ -42,6 +42,11 @@ class AdminEventOut(BaseModel):
     host_username: str
     host_id: str
     created_at: datetime
+    review_status: str
+    review_note: str | None = None
+    created_via: str
+    reviewed_by_username: str | None = None
+    reviewed_at: datetime | None = None
     model_config = {"from_attributes": True}
 
 
@@ -49,6 +54,29 @@ class AdminEventUpdate(BaseModel):
     is_featured: bool | None = None
     is_trending: bool | None = None
     status: str | None = None
+
+
+class AdminEventReject(BaseModel):
+    note: str = Field(min_length=3, max_length=1000)
+
+
+class AIEventDraft(BaseModel):
+    title: str = ""
+    description: str = ""
+    venue_name: str = ""
+    address: str = ""
+    city: str = ""
+    country: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    is_free: bool = True
+    price_min: float | None = None
+    price_max: float | None = None
+    currency: str = ""
+    event_type: str = "physical"
+    category_guess: str = ""
+    tags: str = ""
+    confidence_notes: str = ""
 
 
 class AdminCategoryCreate(BaseModel):

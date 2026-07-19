@@ -453,6 +453,19 @@ export interface AdminEventOut {
   city: string; country: string; start_date: string;
   attendees_count: number; views_count: number;
   host_username: string; host_id: string; created_at: string;
+  review_status: "pending" | "approved" | "rejected";
+  review_note: string | null;
+  created_via: "manual" | "ai_agent";
+  reviewed_by_username: string | null;
+  reviewed_at: string | null;
+}
+
+export interface AIEventDraft {
+  title: string; description: string; venue_name: string; address: string;
+  city: string; country: string; start_date: string; end_date: string;
+  is_free: boolean; price_min: number | null; price_max: number | null;
+  currency: string; event_type: "physical" | "virtual" | "hybrid";
+  category_guess: string; tags: string; confidence_notes: string;
 }
 
 export interface AdminCategoryOut {
@@ -488,16 +501,41 @@ export const adminApi = {
   updateUser: (token: string, userId: string, body: { role?: string; is_active?: boolean; is_verified?: boolean }) =>
     request<AdminUserOut>(`/admin/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) }, token),
 
-  events: (token: string, params?: { q?: string; status?: string; skip?: number }) => {
+  events: (token: string, params?: { q?: string; status?: string; review_status?: string; skip?: number }) => {
     const qs = new URLSearchParams();
     if (params?.q) qs.set("q", params.q);
     if (params?.status) qs.set("status", params.status);
+    if (params?.review_status) qs.set("review_status", params.review_status);
     if (params?.skip) qs.set("skip", String(params.skip));
     return request<AdminEventOut[]>(`/admin/events?${qs}`, {}, token);
   },
 
   updateEvent: (token: string, eventId: string, body: { is_featured?: boolean; is_trending?: boolean; status?: string }) =>
     request<AdminEventOut>(`/admin/events/${eventId}`, { method: "PATCH", body: JSON.stringify(body) }, token),
+
+  approveEvent: (token: string, eventId: string) =>
+    request<AdminEventOut>(`/admin/events/${eventId}/approve`, { method: "POST" }, token),
+
+  rejectEvent: (token: string, eventId: string, note: string) =>
+    request<AdminEventOut>(`/admin/events/${eventId}/reject`, { method: "POST", body: JSON.stringify({ note }) }, token),
+
+  draftEvent: async (token: string, input: { text?: string; url?: string; image?: File }) => {
+    const form = new FormData();
+    if (input.text) form.set("text", input.text);
+    if (input.url) form.set("url", input.url);
+    if (input.image) form.set("image", input.image);
+
+    const res = await fetch(`${BASE}/api/admin/events/draft`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ApiError(res.status, err.detail ?? "AI drafting failed");
+    }
+    return res.json() as Promise<AIEventDraft>;
+  },
 
   categories: (token: string) =>
     request<AdminCategoryOut[]>("/admin/categories", {}, token),

@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     paystack_secret_key: str = ""
     paystack_public_key: str = ""
 
+    # AI event-drafting agent — Anthropic
+    anthropic_api_key: str = ""
+    ai_agent_model: str = "claude-sonnet-5"
+
     # Rate limiting
     rate_limit_login: str = "5/minute"
     rate_limit_register: str = "3/minute"

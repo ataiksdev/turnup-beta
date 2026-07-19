@@ -4,7 +4,7 @@ export interface User {
   full_name: string;
   display_name?: string | null;
   email?: string;
-  role?: "attendee" | "organizer" | "admin";
+  role?: "attendee" | "organizer" | "moderator" | "admin";
   bio?: string | null;
   avatar_url?: string | null;
   location?: string | null;
@@ -76,6 +76,9 @@ export interface Event {
   series_id?: string | null;
   avg_rating?: number | null;
   review_count?: number;
+  review_status?: "pending" | "approved" | "rejected";
+  review_note?: string | null;
+  created_via?: "manual" | "ai_agent";
 }
 
 export interface Comment {

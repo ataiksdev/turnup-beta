@@ -84,10 +84,12 @@ export default function AdminDashboardPage() {
         <h2 className="text-xs font-black text-text-primary uppercase tracking-widest">Quick Actions</h2>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { href: "/admin/users",      label: "Manage Users"       },
-            { href: "/admin/events",     label: "Moderate Events"    },
-            { href: "/admin/categories", label: "Edit Categories"    },
-            { href: "/admin/orders",     label: "View All Orders"    },
+            { href: "/admin/users",         label: "Manage Users"       },
+            { href: "/admin/events",        label: "Moderate Events"    },
+            { href: "/admin/events/new",    label: "Create Event"       },
+            { href: "/admin/events/ai-new", label: "AI Draft Event"     },
+            { href: "/admin/categories",    label: "Edit Categories"    },
+            { href: "/admin/orders",        label: "View All Orders"    },
           ].map(({ href, label }) => (
             <Link
               key={href}
