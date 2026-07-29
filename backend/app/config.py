@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     scout_bot_username: str = "ai_scout"
     scout_hour_utc: int = 6            # 0-23, UTC hour the daily run fires
     scout_max_items_per_run: int = 20  # cap on Anthropic calls per run, across all sources
+    scout_max_links_per_source: int = 25  # cap on candidate links pulled from one source per poll
 
     # Rate limiting
     rate_limit_login: str = "5/minute"

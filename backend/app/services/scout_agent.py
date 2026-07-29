@@ -2,6 +2,8 @@ import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from sqlalchemy import and_, func, or_, select
@@ -17,6 +19,7 @@ from app.services.ai_agent import AIAgentError, draft_event
 
 _FEED_FETCH_TIMEOUT = 15
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
+_NON_CONTENT_SCHEMES = ("mailto:", "tel:", "javascript:")
 
 
 @dataclass
@@ -59,11 +62,70 @@ def _parse_feed_links(xml_text: str) -> list[str]:
     return out
 
 
-async def _fetch_feed_links(url: str) -> list[str]:
+class _LinkExtractor(HTMLParser):
+    """Collects every <a href="..."> target on a page. No dependency beyond stdlib."""
+
+    def __init__(self):
+        super().__init__()
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "a":
+            return
+        for name, value in attrs:
+            if name == "href" and value:
+                self.hrefs.append(value)
+
+
+def _parse_listing_links(html_text: str, base_url: str, limit: int) -> list[str]:
+    """Fallback for sources with no RSS/Atom feed: pull candidate event links straight off a
+    public listing/news page. Deliberately unopinionated about what "looks like an event" —
+    same-domain links are handed to draft_event() same as an RSS item, and anything that isn't
+    actually an event gets filtered out downstream (skipped_no_event) at the cost of one wasted
+    Claude call, which is cheap insurance against being too clever about arbitrary site markup.
+    """
+    extractor = _LinkExtractor()
+    try:
+        extractor.feed(html_text)
+    except Exception:
+        return []
+
+    base_host = urlparse(base_url).netloc
+    seen: set[str] = set()
+    out: list[str] = []
+    for href in extractor.hrefs:
+        href = href.strip()
+        if not href or href.startswith("#") or href.lower().startswith(_NON_CONTENT_SCHEMES):
+            continue
+        resolved = urljoin(base_url, href)
+        parsed = urlparse(resolved)
+        if parsed.scheme not in ("http", "https") or parsed.netloc != base_host:
+            continue
+        # Strip the fragment so #section anchors on the same page don't count as distinct links.
+        resolved = resolved.split("#", 1)[0]
+        if resolved == base_url or resolved in seen:
+            continue
+        seen.add(resolved)
+        out.append(resolved)
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def _fetch_candidate_links(url: str) -> list[str]:
+    """Get a list of candidate event-detail URLs from a source. Tries RSS/Atom first (most
+    reliable when available); if the response isn't a feed (or has no entries), falls back to
+    scraping <a href> links directly off the page — most public event listing pages in practice
+    don't expose a feed at all.
+    """
     async with httpx.AsyncClient(follow_redirects=True, timeout=_FEED_FETCH_TIMEOUT) as client:
         resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; TurnupScoutBot/1.0)"})
         resp.raise_for_status()
-    return _parse_feed_links(resp.text)
+
+    links = _parse_feed_links(resp.text)
+    if links:
+        return links
+    return _parse_listing_links(resp.text, str(resp.url), settings.scout_max_links_per_source)
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -172,7 +234,7 @@ async def run_daily_scout(db: AsyncSession) -> ScoutRunSummary:
     for source in sources:
         summary.sources_polled += 1
         try:
-            links = await _fetch_feed_links(source.url)
+            links = await _fetch_candidate_links(source.url)
         except Exception as e:
             source.last_polled_at = datetime.now(timezone.utc)
             source.last_run_status = f"fetch failed: {e}"

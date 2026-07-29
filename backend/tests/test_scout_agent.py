@@ -1,4 +1,5 @@
-"""Tests for the daily RSS scout agent: feed parsing, drafting, dedup, and admin endpoints.
+"""Tests for the daily scout agent: RSS/Atom + listing-page discovery, drafting, dedup, and
+admin endpoints.
 
 Note: conftest's `engine`/`db` fixtures are session-scoped (data persists across tests in this
 file), so every test uses unique URLs/titles and scopes its assertions to rows it created itself,
@@ -91,7 +92,7 @@ async def test_run_daily_scout_creates_pending_event(db, bot_user):
     source = await _make_source(db)
     draft = _fake_draft()
 
-    with patch.object(scout_agent, "_fetch_feed_links", new=AsyncMock(return_value=[_unique_url()])), \
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[_unique_url()])), \
          patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
         summary = await scout_agent.run_daily_scout(db)
 
@@ -117,7 +118,7 @@ async def test_run_daily_scout_skips_already_seen_urls(db, bot_user):
     url = _unique_url()
     draft_mock = AsyncMock(return_value=_fake_draft())
 
-    with patch.object(scout_agent, "_fetch_feed_links", new=AsyncMock(return_value=[url])), \
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[url])), \
          patch.object(scout_agent, "draft_event", new=draft_mock):
         summary1 = await scout_agent.run_daily_scout(db)
         summary2 = await scout_agent.run_daily_scout(db)
@@ -137,7 +138,7 @@ async def test_run_daily_scout_skips_duplicate_title(db, bot_user):
     await _make_source(db)
     shared_draft = _fake_draft()
 
-    with patch.object(scout_agent, "_fetch_feed_links", new=AsyncMock(return_value=[_unique_url(), _unique_url()])), \
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[_unique_url(), _unique_url()])), \
          patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=shared_draft)):
         summary = await scout_agent.run_daily_scout(db)
 
@@ -154,7 +155,7 @@ async def test_run_daily_scout_skips_non_events(db, bot_user):
     source = await _make_source(db)
     draft = _fake_draft(title="", start_date="")
 
-    with patch.object(scout_agent, "_fetch_feed_links", new=AsyncMock(return_value=[_unique_url()])), \
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[_unique_url()])), \
          patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
         summary = await scout_agent.run_daily_scout(db)
 
@@ -212,7 +213,7 @@ async def test_admin_scout_log_reflects_run(db, client, admin_auth, bot_user):
     source = await _make_source(db)
     draft = _fake_draft()
 
-    with patch.object(scout_agent, "_fetch_feed_links", new=AsyncMock(return_value=[_unique_url()])), \
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[_unique_url()])), \
          patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
         await scout_agent.run_daily_scout(db)
 
@@ -225,3 +226,111 @@ async def test_admin_scout_log_reflects_run(db, client, admin_auth, bot_user):
     assert entries[0]["source_name"] == source.name
     assert entries[0]["status"] == "created"
     assert entries[0]["event_title"] == draft["title"]
+
+
+# ── Listing-page fallback (sites with no RSS/Atom feed) ────────────────────────
+
+def test_parse_listing_links_filters_to_same_domain():
+    html = """
+    <html><body>
+    <nav><a href="/about">About</a><a href="https://twitter.com/x">Twitter</a></nav>
+    <div class="events">
+      <a href="/events/afrobeats-night">Afrobeats Night</a>
+      <a href="/events/comedy-show">Comedy Show</a>
+      <a href="https://example.com/events/comedy-show">same link, absolute form</a>
+      <a href="#top">Back to top</a>
+      <a href="mailto:x@example.com">Email</a>
+      <a href="">Empty href</a>
+    </div>
+    </body></html>
+    """
+    links = scout_agent._parse_listing_links(html, "https://example.com/events", limit=25)
+    assert links == [
+        "https://example.com/about",
+        "https://example.com/events/afrobeats-night",
+        "https://example.com/events/comedy-show",
+    ]
+
+
+def test_parse_listing_links_respects_limit():
+    html = "".join(f'<a href="/events/{i}">Event {i}</a>' for i in range(50))
+    links = scout_agent._parse_listing_links(html, "https://example.com/events", limit=10)
+    assert len(links) == 10
+
+
+def test_parse_listing_links_excludes_self():
+    html = '<a href="/events">Back to listing</a><a href="/events/real-one">Real Event</a>'
+    links = scout_agent._parse_listing_links(html, "https://example.com/events", limit=25)
+    assert links == ["https://example.com/events/real-one"]
+
+
+def test_parse_feed_links_returns_empty_for_plain_html():
+    # This is the trigger condition _fetch_candidate_links uses to fall back to link-scraping.
+    html = "<html><body><a href=\"/events/x\">X</a></body></html>"
+    assert scout_agent._parse_feed_links(html) == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_candidate_links_falls_back_to_listing_page():
+    html = (
+        "<html><body>"
+        '<a href="/events/afrobeats-night">Afrobeats Night</a>'
+        '<a href="https://elsewhere.com/spam">Spam</a>'
+        "</body></html>"
+    )
+
+    class _FakeResponse:
+        text = html
+        url = "https://example.com/whats-on"
+
+        def raise_for_status(self):
+            pass
+
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            return _FakeResponse()
+
+    with patch.object(scout_agent.httpx, "AsyncClient", return_value=_FakeClient()):
+        links = await scout_agent._fetch_candidate_links("https://example.com/whats-on")
+
+    assert links == ["https://example.com/events/afrobeats-night"]
+
+
+@pytest.mark.asyncio
+async def test_run_daily_scout_via_listing_page_fallback(db, bot_user):
+    """End-to-end: a source with no RSS feed still gets polled via the HTML fallback."""
+    source = await _make_source(db)
+    draft = _fake_draft()
+    event_url = _unique_url()
+    html = f'<html><body><a href="{event_url}">An Event</a></body></html>'
+
+    class _FakeResponse:
+        text = html
+        url = source.url
+
+        def raise_for_status(self):
+            pass
+
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            return _FakeResponse()
+
+    with patch.object(scout_agent.httpx, "AsyncClient", return_value=_FakeClient()), \
+         patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
+        summary = await scout_agent.run_daily_scout(db)
+
+    assert summary.events_created == 1
+    ev = (await db.execute(select(Event).where(Event.title == draft["title"]))).scalar_one_or_none()
+    assert ev is not None

@@ -10,7 +10,9 @@ def utcnow() -> datetime:
 
 
 class ScoutSource(Base):
-    """An RSS/Atom feed the daily scout agent polls for candidate events."""
+    """A public page the daily scout agent polls for candidate events — an RSS/Atom feed if the
+    site has one, otherwise a regular events/news listing page (see scout_agent._fetch_candidate_links,
+    which tries a feed parse first and falls back to scraping <a href> links off the page)."""
     __tablename__ = "scout_sources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

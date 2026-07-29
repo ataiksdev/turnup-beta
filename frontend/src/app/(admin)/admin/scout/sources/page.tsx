@@ -95,9 +95,9 @@ function AddSourceForm() {
 
   return (
     <div className="lg:max-w-xl border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-3">
-      <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Add RSS Source</h3>
+      <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Add Source</h3>
       <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lagos Events Blog" />
-      <Input label="RSS/Atom feed URL" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/feed.xml" />
+      <Input label="Feed or events page URL" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/events" />
       <Button size="sm" loading={mutation.isPending} disabled={!name || !url} onClick={() => mutation.mutate()}>
         Add Source
       </Button>
@@ -135,7 +135,8 @@ export default function ScoutSourcesPage() {
 
       <div className="px-4 py-4 space-y-4 lg:max-w-4xl">
         <p className="text-xs text-text-muted">
-          The scout agent checks these RSS/Atom feeds daily, drafts anything that looks like a
+          The scout agent checks these sources daily — an RSS/Atom feed if the site has one,
+          otherwise it reads links straight off the page — drafts anything that looks like a
           real event with Claude, and submits it for your approval in the Events queue — same
           as a moderator submission, just automated.
         </p>
