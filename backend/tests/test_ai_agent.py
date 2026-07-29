@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.config import settings
@@ -46,9 +47,75 @@ async def test_draft_event_dispatches_to_selected_provider():
 
 @pytest.mark.asyncio
 async def test_build_prompt_text_includes_categories_and_text():
-    prompt = await ai_agent._build_prompt_text("Party tonight", None, False, ["Music", "Comedy"])
+    prompt, image_url = await ai_agent._build_prompt_text("Party tonight", None, False, ["Music", "Comedy"])
     assert "Music, Comedy" in prompt
     assert "Party tonight" in prompt
+    assert image_url is None
+
+
+# ── og:image / twitter:image extraction ─────────────────────────────────────────
+
+def test_extract_meta_image_prefers_og_image():
+    html = """
+    <html><head>
+      <meta property="og:image" content="https://cdn.example.com/flyer.jpg" />
+      <meta name="twitter:image" content="https://cdn.example.com/twitter.jpg" />
+    </head></html>
+    """
+    assert ai_agent._extract_meta_image(html, "https://example.com/event") == "https://cdn.example.com/flyer.jpg"
+
+
+def test_extract_meta_image_falls_back_to_twitter_image():
+    html = '<html><head><meta name="twitter:image" content="https://cdn.example.com/twitter.jpg" /></head></html>'
+    assert ai_agent._extract_meta_image(html, "https://example.com/event") == "https://cdn.example.com/twitter.jpg"
+
+
+def test_extract_meta_image_resolves_relative_url():
+    html = '<html><head><meta property="og:image" content="/uploads/flyer.jpg" /></head></html>'
+    assert ai_agent._extract_meta_image(html, "https://example.com/events/party") == "https://example.com/uploads/flyer.jpg"
+
+
+def test_extract_meta_image_returns_none_when_absent():
+    html = "<html><head><title>No image here</title></head></html>"
+    assert ai_agent._extract_meta_image(html, "https://example.com/event") is None
+
+
+def test_extract_meta_image_tolerates_malformed_html():
+    assert ai_agent._extract_meta_image("<meta property=og:image content=", "https://example.com") is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_url_page_returns_text_and_cover_image():
+    fake_html = """
+    <html><head><meta property="og:image" content="https://cdn.example.com/flyer.jpg" />
+    <script>ignoreMe()</script></head>
+    <body><p>Afrobeats night this Saturday.</p></body></html>
+    """
+    fake_resp = MagicMock(text=fake_html, url="https://example.com/event")
+    fake_resp.raise_for_status = MagicMock()
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(return_value=fake_resp)
+    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("httpx.AsyncClient", return_value=fake_client):
+        text, image_url = await ai_agent.fetch_url_page("https://example.com/event")
+
+    assert "Afrobeats night this Saturday" in text
+    assert "ignoreMe" not in text
+    assert image_url == "https://cdn.example.com/flyer.jpg"
+
+
+@pytest.mark.asyncio
+async def test_fetch_url_page_raises_ai_agent_error_on_http_failure():
+    fake_client = MagicMock()
+    fake_client.get = AsyncMock(side_effect=httpx.HTTPError("boom"))
+    fake_client.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("httpx.AsyncClient", return_value=fake_client):
+        with pytest.raises(ai_agent.AIAgentError, match="Could not fetch URL"):
+            await ai_agent.fetch_url_page("https://example.com/event")
 
 
 # ── Anthropic adapter ───────────────────────────────────────────────────────────

@@ -63,6 +63,7 @@ class AdminEventReject(BaseModel):
 class AIEventDraft(BaseModel):
     title: str = ""
     description: str = ""
+    cover_image: str | None = None
     venue_name: str = ""
     address: str = ""
     city: str = ""

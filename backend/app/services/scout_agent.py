@@ -189,6 +189,7 @@ async def _process_item(
         slug=_slugify(draft.title, eid),
         title=draft.title.strip(),
         description=draft.description.strip(),
+        cover_image=draft.cover_image or None,
         venue_name=draft.venue_name.strip() or "Venue TBA",
         address=draft.address.strip() or "Address TBA",
         city=draft.city.strip() or "Unknown",

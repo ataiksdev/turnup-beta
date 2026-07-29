@@ -60,6 +60,7 @@ def _fake_draft(**overrides) -> dict:
     start = datetime.now(timezone.utc) + timedelta(days=5)
     base = dict(
         title=f"Afrobeats Night {unique}", description="A great night of live afrobeats music downtown.",
+        cover_image=f"https://cdn.example.com/{unique}.jpg",
         venue_name=f"The Venue {unique}", address="123 Main St", city="Lagos", country="Nigeria",
         start_date=start.isoformat(), end_date=(start + timedelta(hours=3)).isoformat(),
         is_free=True, price_min=None, price_max=None, currency="NGN",
@@ -110,6 +111,7 @@ async def test_run_daily_scout_creates_pending_event(db, bot_user):
     assert ev.status == "draft"
     assert ev.created_via == "ai_agent"
     assert ev.host_id == bot_user
+    assert ev.cover_image == draft["cover_image"]
 
 
 @pytest.mark.asyncio

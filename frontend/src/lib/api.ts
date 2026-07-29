@@ -477,7 +477,7 @@ export interface ScoutRunResult {
 }
 
 export interface AIEventDraft {
-  title: string; description: string; venue_name: string; address: string;
+  title: string; description: string; cover_image: string | null; venue_name: string; address: string;
   city: string; country: string; start_date: string; end_date: string;
   is_free: boolean; price_min: number | null; price_max: number | null;
   currency: string; event_type: "physical" | "virtual" | "hybrid";

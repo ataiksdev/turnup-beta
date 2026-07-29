@@ -2,6 +2,8 @@ import base64
 import json
 import re
 from datetime import datetime, timezone
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import httpx
 
@@ -42,8 +44,46 @@ class AIAgentError(Exception):
     pass
 
 
-async def fetch_url_text(url: str) -> str:
-    """Fetch a URL and strip it down to text a model can read. No JS rendering."""
+class _MetaImageExtractor(HTMLParser):
+    """Pulls the og:image / twitter:image <meta> tag off a page — the same image a link
+    preview on social media or WhatsApp would show. These are typically present even on
+    JS-rendered pages (sites inject them for SEO/link-preview purposes), unlike the actual
+    page content, which is why this is a much more reliable image signal than trying to guess
+    at <img> tags."""
+
+    def __init__(self):
+        super().__init__()
+        self.og_image: str | None = None
+        self.twitter_image: str | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "meta":
+            return
+        attrs_d = {k.lower(): v for k, v in attrs if v}
+        prop = (attrs_d.get("property") or attrs_d.get("name") or "").lower()
+        content = attrs_d.get("content")
+        if not content:
+            return
+        if prop == "og:image" and not self.og_image:
+            self.og_image = content
+        elif prop == "twitter:image" and not self.twitter_image:
+            self.twitter_image = content
+
+
+def _extract_meta_image(html_text: str, base_url: str) -> str | None:
+    extractor = _MetaImageExtractor()
+    try:
+        extractor.feed(html_text)
+    except Exception:
+        return None
+    image = extractor.og_image or extractor.twitter_image
+    return urljoin(base_url, image) if image else None
+
+
+async def fetch_url_page(url: str) -> tuple[str, str | None]:
+    """Fetch a URL; return (text a model can read, best-guess cover image URL). No JS rendering
+    — sites whose actual content only appears after client-side JS runs may yield little or no
+    usable text here even though the og:image (usually server-rendered) still comes through."""
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=_URL_FETCH_TIMEOUT) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; TurnupBot/1.0)"})
@@ -51,24 +91,29 @@ async def fetch_url_text(url: str) -> str:
     except httpx.HTTPError as e:
         raise AIAgentError(f"Could not fetch URL: {e}")
 
-    html = resp.text[:_MAX_HTML_CHARS * 4]  # cap before regex work
+    raw_html = resp.text
+    image_url = _extract_meta_image(raw_html, str(resp.url))
+
+    html = raw_html[:_MAX_HTML_CHARS * 4]  # cap before regex work
     html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text).strip()
-    return text[:_MAX_HTML_CHARS]
+    return text[:_MAX_HTML_CHARS], image_url
 
 
 async def _build_prompt_text(
     text: str | None, url: str | None, has_image: bool, category_names: list[str],
-) -> str:
+) -> tuple[str, str | None]:
     prompt_parts = [
         f"Today's date is {datetime.now(timezone.utc).isoformat()} (UTC). "
         "Resolve any relative dates (e.g. 'this Friday', 'next month') against it.",
     ]
     if category_names:
         prompt_parts.append("Available categories: " + ", ".join(category_names) + ".")
+
+    cover_image_url = None
     if url:
-        page_text = await fetch_url_text(url)
+        page_text, cover_image_url = await fetch_url_page(url)
         prompt_parts.append(f"Source URL: {url}\n\nPage content:\n{page_text}")
     if text:
         prompt_parts.append(f"Pasted description:\n{text}")
@@ -80,7 +125,7 @@ async def _build_prompt_text(
         "If a field truly cannot be determined, omit it rather than inventing a value, "
         "except title, description, and confidence_notes which are required."
     )
-    return "\n\n".join(prompt_parts)
+    return "\n\n".join(prompt_parts), cover_image_url
 
 
 async def _draft_anthropic(prompt_text: str, image_bytes: bytes | None, image_media_type: str | None) -> dict:
@@ -215,13 +260,20 @@ async def draft_event(
             f"Unknown AI_PROVIDER '{settings.ai_provider}' — expected one of: {', '.join(_KNOWN_PROVIDERS)}."
         )
 
-    prompt_text = await _build_prompt_text(text, url, bool(image_bytes), category_names)
+    prompt_text, cover_image_url = await _build_prompt_text(text, url, bool(image_bytes), category_names)
 
     # Dispatched by bare name (not a dict of function references captured at import time) so
     # tests can patch.object(ai_agent, "_draft_openai", ...) and have it actually take effect.
     if settings.ai_provider == "anthropic":
-        return await _draft_anthropic(prompt_text, image_bytes, image_media_type)
+        result = await _draft_anthropic(prompt_text, image_bytes, image_media_type)
     elif settings.ai_provider == "openai":
-        return await _draft_openai(prompt_text, image_bytes, image_media_type)
+        result = await _draft_openai(prompt_text, image_bytes, image_media_type)
     else:
-        return await _draft_gemini(prompt_text, image_bytes, image_media_type)
+        result = await _draft_gemini(prompt_text, image_bytes, image_media_type)
+
+    # The cover image is extracted deterministically (og:image/twitter:image), not guessed by
+    # the LLM, which never sees raw <img> tags in the first place (the prompt text is stripped
+    # of markup). Only fill it in if the model didn't already return one of its own.
+    if cover_image_url and not result.get("cover_image"):
+        result["cover_image"] = cover_image_url
+    return result

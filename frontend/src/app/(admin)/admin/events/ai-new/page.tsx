@@ -82,6 +82,7 @@ export default function AIDraftEventPage() {
     const prefill = {
       title: draft.title,
       description: draft.description,
+      cover_image: draft.cover_image || "",
       venue_name: draft.venue_name,
       address: draft.address,
       city: draft.city,
@@ -178,6 +179,13 @@ export default function AIDraftEventPage() {
               <Sparkles size={14} />
               <span className="text-xs font-black uppercase tracking-widest">AI Draft</span>
             </div>
+            {draft.cover_image && (
+              <img
+                src={draft.cover_image}
+                alt="Extracted cover"
+                className="w-full h-40 object-cover rounded border-2 border-border"
+              />
+            )}
             <div>
               <p className="font-black text-text-primary">{draft.title || "(no title extracted)"}</p>
               <p className="text-sm text-text-secondary mt-1">{draft.description || "(no description extracted)"}</p>
