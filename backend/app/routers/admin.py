@@ -495,3 +495,26 @@ async def run_scout_now(
         skipped_no_event=summary.skipped_no_event,
         failed=summary.failed,
     )
+
+
+@router.post("/scout/sources/{source_id}/run", response_model=ScoutRunResult)
+async def run_scout_source_now(
+    source_id: str,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = (await db.execute(select(ScoutSource).where(ScoutSource.id == source_id))).scalar_one_or_none()
+    if not source:
+        raise HTTPException(404, "Source not found")
+    try:
+        summary = await run_daily_scout(db, source_id=source_id)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return ScoutRunResult(
+        sources_polled=summary.sources_polled,
+        items_seen=summary.items_seen,
+        events_created=summary.events_created,
+        skipped_duplicate=summary.skipped_duplicate,
+        skipped_no_event=summary.skipped_no_event,
+        failed=summary.failed,
+    )

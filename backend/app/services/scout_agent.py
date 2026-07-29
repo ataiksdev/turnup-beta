@@ -214,7 +214,10 @@ async def _process_item(
     return "created"
 
 
-async def run_daily_scout(db: AsyncSession) -> ScoutRunSummary:
+async def run_daily_scout(db: AsyncSession, source_id: str | None = None) -> ScoutRunSummary:
+    """Poll active scout sources and draft candidate events. If `source_id` is given, only that
+    one source is polled (used by the admin UI's per-source "Run Now"); otherwise every active
+    source is polled, as the daily scheduled job does."""
     summary = ScoutRunSummary()
 
     bot = (await db.execute(
@@ -229,7 +232,12 @@ async def run_daily_scout(db: AsyncSession) -> ScoutRunSummary:
 
     already_seen: set[str] = set((await db.execute(select(ScoutedItem.url))).scalars().all())
 
-    sources = (await db.execute(select(ScoutSource).where(ScoutSource.is_active == True))).scalars().all()
+    # A single-source run (admin UI "Run Now" on one row) is allowed even if that source is
+    # paused, so an admin can test a source without first having to resume it.
+    sources_stmt = select(ScoutSource).where(ScoutSource.is_active == True)
+    if source_id:
+        sources_stmt = select(ScoutSource).where(ScoutSource.id == source_id)
+    sources = (await db.execute(sources_stmt)).scalars().all()
 
     budget = settings.scout_max_items_per_run
     for source in sources:

@@ -592,6 +592,9 @@ export const adminApi = {
 
   runScoutNow: (token: string) =>
     request<ScoutRunResult>("/admin/scout/run-now", { method: "POST" }, token),
+
+  runScoutSourceNow: (token: string, sourceId: string) =>
+    request<ScoutRunResult>(`/admin/scout/sources/${sourceId}/run`, { method: "POST" }, token),
 };
 
 // ── Community types ───────────────────────────────────────────────────────────
