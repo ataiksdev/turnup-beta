@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-flash-latest"
 
     # Daily scout agent — polls public RSS/Atom feeds and drafts pending events
     scout_bot_username: str = "ai_scout"
