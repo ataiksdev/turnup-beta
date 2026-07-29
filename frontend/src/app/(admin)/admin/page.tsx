@@ -88,6 +88,7 @@ export default function AdminDashboardPage() {
             { href: "/admin/events",        label: "Moderate Events"    },
             { href: "/admin/events/new",    label: "Create Event"       },
             { href: "/admin/events/ai-new", label: "AI Draft Event"     },
+            { href: "/admin/scout/sources", label: "Manage AI Scout"    },
             { href: "/admin/categories",    label: "Edit Categories"    },
             { href: "/admin/orders",        label: "View All Orders"    },
           ].map(({ href, label }) => (

@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ai_agent_model: str = "claude-sonnet-5"
 
+    # Daily scout agent — polls public RSS/Atom feeds and drafts pending events
+    scout_bot_username: str = "ai_scout"
+    scout_hour_utc: int = 6            # 0-23, UTC hour the daily run fires
+    scout_max_items_per_run: int = 20  # cap on Anthropic calls per run, across all sources
+
     # Rate limiting
     rate_limit_login: str = "5/minute"
     rate_limit_register: str = "3/minute"

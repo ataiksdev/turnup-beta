@@ -8,6 +8,7 @@ from app.database import get_db
 from app.middleware.auth import get_current_admin, get_current_moderator
 from app.models.event import Category, Event
 from app.models.organizer import TicketOrder, TicketTier
+from app.models.scout import ScoutedItem, ScoutSource
 from app.models.social import Notification
 from app.models.user import User
 from app.schemas.admin import (
@@ -17,8 +18,10 @@ from app.schemas.admin import (
     AdminUserOut, AdminUserUpdate,
     AIEventDraft,
     PlatformStats,
+    ScoutedItemOut, ScoutRunResult, ScoutSourceCreate, ScoutSourceOut, ScoutSourceUpdate,
 )
 from app.services.ai_agent import AIAgentError, draft_event
+from app.services.scout_agent import run_daily_scout
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -393,3 +396,102 @@ async def ai_draft_event(
         raise HTTPException(422, str(e))
 
     return AIEventDraft(**result)
+
+
+# ── Daily scout agent: RSS sources, run log, manual trigger ────────────────────
+
+@router.get("/scout/sources", response_model=list[ScoutSourceOut])
+async def list_scout_sources(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(ScoutSource).order_by(ScoutSource.created_at.desc()))
+    return result.scalars().all()
+
+
+@router.post("/scout/sources", response_model=ScoutSourceOut, status_code=201)
+async def create_scout_source(
+    body: ScoutSourceCreate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = ScoutSource(id=str(uuid.uuid4()), name=body.name, url=body.url)
+    db.add(source)
+    await db.flush()
+    await db.refresh(source)
+    return source
+
+
+@router.patch("/scout/sources/{source_id}", response_model=ScoutSourceOut)
+async def update_scout_source(
+    source_id: str,
+    body: ScoutSourceUpdate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = (await db.execute(select(ScoutSource).where(ScoutSource.id == source_id))).scalar_one_or_none()
+    if not source:
+        raise HTTPException(404, "Source not found")
+    for field, val in body.model_dump(exclude_none=True).items():
+        setattr(source, field, val)
+    await db.flush()
+    await db.refresh(source)
+    return source
+
+
+@router.delete("/scout/sources/{source_id}", status_code=204)
+async def delete_scout_source(
+    source_id: str,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = (await db.execute(select(ScoutSource).where(ScoutSource.id == source_id))).scalar_one_or_none()
+    if not source:
+        raise HTTPException(404, "Source not found")
+    await db.delete(source)
+
+
+@router.get("/scout/log", response_model=list[ScoutedItemOut])
+async def list_scout_log(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, le=100),
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy.orm import selectinload
+    stmt = (
+        select(ScoutedItem)
+        .options(selectinload(ScoutedItem.source), selectinload(ScoutedItem.event))
+        .order_by(ScoutedItem.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    items = (await db.execute(stmt)).scalars().all()
+    return [
+        ScoutedItemOut(
+            id=i.id, source_id=i.source_id, source_name=i.source.name if i.source else "—",
+            url=i.url, status=i.status, event_id=i.event_id,
+            event_title=i.event.title if i.event else None,
+            error_note=i.error_note, created_at=i.created_at,
+        )
+        for i in items
+    ]
+
+
+@router.post("/scout/run-now", response_model=ScoutRunResult)
+async def run_scout_now(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        summary = await run_daily_scout(db)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return ScoutRunResult(
+        sources_polled=summary.sources_polled,
+        items_seen=summary.items_seen,
+        events_created=summary.events_created,
+        skipped_duplicate=summary.skipped_duplicate,
+        skipped_no_event=summary.skipped_no_event,
+        failed=summary.failed,
+    )

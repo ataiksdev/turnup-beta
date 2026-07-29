@@ -1,5 +1,8 @@
+import logging
 import os
 from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -7,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
-from app.database import init_db
+from app.database import AsyncSessionLocal, init_db
 from app.middleware.rate_limit import limiter
 from app.routers import auth, events, social, users
 from app.routers import organizer
@@ -16,12 +19,40 @@ from app.routers import admin
 from app.routers import communities
 
 os.makedirs("data", exist_ok=True)
+logger = logging.getLogger("turnup.scout")
+
+
+async def _run_scheduled_scout():
+    from app.services.scout_agent import run_daily_scout
+    async with AsyncSessionLocal() as db:
+        try:
+            summary = await run_daily_scout(db)
+            logger.info("Daily scout run complete: %s", summary)
+        except Exception:
+            logger.exception("Daily scout run failed")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+
+    scheduler = None
+    if settings.anthropic_api_key:
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(
+            _run_scheduled_scout,
+            CronTrigger(hour=settings.scout_hour_utc, minute=0),
+            id="daily_scout",
+            replace_existing=True,
+        )
+        scheduler.start()
+    else:
+        logger.warning("ANTHROPIC_API_KEY not set — daily scout agent is disabled.")
+
     yield
+
+    if scheduler:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(

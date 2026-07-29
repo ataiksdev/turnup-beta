@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield, Radar } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -12,11 +12,12 @@ const isAdminOnlyPath = (pathname: string) =>
   !MODERATOR_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
 const adminNavItems = [
-  { href: "/admin",            icon: LayoutDashboard, label: "Overview"   },
-  { href: "/admin/users",      icon: Users,           label: "Users"      },
-  { href: "/admin/events",     icon: CalendarDays,    label: "Events"     },
-  { href: "/admin/categories", icon: Tag,             label: "Categories" },
-  { href: "/admin/orders",     icon: ShoppingBag,     label: "Orders"     },
+  { href: "/admin",              icon: LayoutDashboard, label: "Overview"   },
+  { href: "/admin/users",        icon: Users,           label: "Users"      },
+  { href: "/admin/events",       icon: CalendarDays,    label: "Events"     },
+  { href: "/admin/scout/sources", icon: Radar,          label: "AI Scout"   },
+  { href: "/admin/categories",   icon: Tag,             label: "Categories" },
+  { href: "/admin/orders",       icon: ShoppingBag,     label: "Orders"     },
 ];
 
 const moderatorNavItems = [

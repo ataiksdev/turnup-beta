@@ -460,6 +460,22 @@ export interface AdminEventOut {
   reviewed_at: string | null;
 }
 
+export interface ScoutSourceOut {
+  id: string; name: string; url: string; is_active: boolean;
+  last_polled_at: string | null; last_run_status: string | null; created_at: string;
+}
+
+export interface ScoutedItemOut {
+  id: string; source_id: string; source_name: string; url: string;
+  status: "created" | "skipped_duplicate" | "skipped_no_event" | "failed";
+  event_id: string | null; event_title: string | null; error_note: string | null; created_at: string;
+}
+
+export interface ScoutRunResult {
+  sources_polled: number; items_seen: number; events_created: number;
+  skipped_duplicate: number; skipped_no_event: number; failed: number;
+}
+
 export interface AIEventDraft {
   title: string; description: string; venue_name: string; address: string;
   city: string; country: string; start_date: string; end_date: string;
@@ -554,6 +570,28 @@ export const adminApi = {
     if (params?.skip) qs.set("skip", String(params.skip));
     return request<AdminOrderOut[]>(`/admin/orders?${qs}`, {}, token);
   },
+
+  scoutSources: (token: string) =>
+    request<ScoutSourceOut[]>("/admin/scout/sources", {}, token),
+
+  createScoutSource: (token: string, body: { name: string; url: string }) =>
+    request<ScoutSourceOut>("/admin/scout/sources", { method: "POST", body: JSON.stringify(body) }, token),
+
+  updateScoutSource: (token: string, sourceId: string, body: Partial<{ name: string; url: string; is_active: boolean }>) =>
+    request<ScoutSourceOut>(`/admin/scout/sources/${sourceId}`, { method: "PATCH", body: JSON.stringify(body) }, token),
+
+  deleteScoutSource: (token: string, sourceId: string) =>
+    request<void>(`/admin/scout/sources/${sourceId}`, { method: "DELETE" }, token),
+
+  scoutLog: (token: string, params?: { skip?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.skip) qs.set("skip", String(params.skip));
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return request<ScoutedItemOut[]>(`/admin/scout/log?${qs}`, {}, token);
+  },
+
+  runScoutNow: (token: string) =>
+    request<ScoutRunResult>("/admin/scout/run-now", { method: "POST" }, token),
 };
 
 // ── Community types ───────────────────────────────────────────────────────────
