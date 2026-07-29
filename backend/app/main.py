@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     scheduler = None
-    if settings.anthropic_api_key:
+    if settings.ai_provider_api_key:
         scheduler = AsyncIOScheduler()
         scheduler.add_job(
             _run_scheduled_scout,
@@ -47,7 +47,10 @@ async def lifespan(app: FastAPI):
         )
         scheduler.start()
     else:
-        logger.warning("ANTHROPIC_API_KEY not set — daily scout agent is disabled.")
+        logger.warning(
+            "No API key set for AI_PROVIDER=%s — daily scout agent is disabled.",
+            settings.ai_provider,
+        )
 
     yield
 
