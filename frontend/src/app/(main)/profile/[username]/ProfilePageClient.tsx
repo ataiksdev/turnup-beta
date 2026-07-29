@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount, displayName } from "@/lib/utils";
-import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, type LucideIcon } from "lucide-react";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
@@ -264,9 +264,9 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Tickets quick-link (own profile) */}
+      {/* Tickets + Personalization quick-links (own profile) */}
       {isOwnProfile && (
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-4 space-y-2">
           <Link
             href="/tickets"
             className="flex items-center justify-between p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
@@ -276,6 +276,16 @@ export default function ProfilePage() {
               <span className="text-sm font-bold text-text">My Tickets</span>
             </div>
             <span className="text-xs text-primary">View →</span>
+          </Link>
+          <Link
+            href="/onboarding"
+            className="flex items-center justify-between p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={16} className="text-primary" />
+              <span className="text-sm font-bold text-text">Personalization</span>
+            </div>
+            <span className="text-xs text-primary">Edit →</span>
           </Link>
         </div>
       )}

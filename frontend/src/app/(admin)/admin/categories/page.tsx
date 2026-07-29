@@ -151,7 +151,7 @@ function CreateCategoryForm() {
   });
 
   return (
-    <div className="border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-3">
+    <div className="lg:max-w-xl border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-3">
       <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">New Category</h3>
       <div className="grid grid-cols-2 gap-2">
         <Input
@@ -228,13 +228,13 @@ export default function AdminCategoriesPage() {
         <div className="space-y-3">
           <h2 className="text-xs font-black text-text-primary uppercase tracking-widest">Categories</h2>
           {isLoading ? (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="animate-pulse bg-bg-elevated rounded h-16" />
               ))}
             </div>
           ) : categories && categories.length > 0 ? (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {categories.map((cat) => (
                 <CategoryRow key={cat.id} cat={cat} />
               ))}

@@ -50,9 +50,24 @@ class Settings(BaseSettings):
     paystack_secret_key: str = ""
     paystack_public_key: str = ""
 
-    # AI event-drafting agent — Anthropic
+    # AI event-drafting agent — pluggable provider (used by both the manual AI Draft
+    # screen and the daily scout agent). Set ai_provider to whichever key you have.
+    ai_provider: str = "anthropic"  # anthropic | openai | gemini
+
     anthropic_api_key: str = ""
-    ai_agent_model: str = "claude-sonnet-5"
+    anthropic_model: str = "claude-sonnet-5"
+
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-flash-latest"
+
+    # Daily scout agent — polls public RSS/Atom feeds and drafts pending events
+    scout_bot_username: str = "ai_scout"
+    scout_hour_utc: int = 6            # 0-23, UTC hour the daily run fires
+    scout_max_items_per_run: int = 20  # cap on Anthropic calls per run, across all sources
+    scout_max_links_per_source: int = 25  # cap on candidate links pulled from one source per poll
 
     # Rate limiting
     rate_limit_login: str = "5/minute"
@@ -66,6 +81,14 @@ class Settings(BaseSettings):
     @property
     def origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]
+
+    @property
+    def ai_provider_api_key(self) -> str:
+        return {
+            "anthropic": self.anthropic_api_key,
+            "openai": self.openai_api_key,
+            "gemini": self.gemini_api_key,
+        }.get(self.ai_provider, "")
 
 
 @lru_cache

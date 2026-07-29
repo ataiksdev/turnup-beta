@@ -2,9 +2,10 @@ import base64
 import json
 import re
 from datetime import datetime, timezone
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import httpx
-from anthropic import AsyncAnthropic
 
 from app.config import settings
 
@@ -12,46 +13,77 @@ _URL_FETCH_TIMEOUT = 15
 _MAX_HTML_CHARS = 20000
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
-_EXTRACT_TOOL = {
-    "name": "extract_event_details",
-    "description": "Structured event details extracted from the supplied source material.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "title": {"type": "string", "description": "Event title"},
-            "description": {"type": "string", "description": "A clean, promotional 2-4 sentence event description"},
-            "venue_name": {"type": "string"},
-            "address": {"type": "string", "description": "Street address, best guess if not explicit"},
-            "city": {"type": "string"},
-            "country": {"type": "string", "description": "ISO-ish country name, e.g. Nigeria, United States"},
-            "start_date": {"type": "string", "description": "ISO 8601 datetime, resolve relative dates against the given current date"},
-            "end_date": {"type": "string", "description": "ISO 8601 datetime; if unknown, assume 3 hours after start_date"},
-            "is_free": {"type": "boolean"},
-            "price_min": {"type": "number"},
-            "price_max": {"type": "number"},
-            "currency": {"type": "string", "description": "3-letter currency code, e.g. NGN, USD"},
-            "event_type": {"type": "string", "enum": ["physical", "virtual", "hybrid"]},
-            "category_guess": {"type": "string", "description": "Best-matching category name from the provided list, or empty string"},
-            "tags": {"type": "string", "description": "Comma-separated short tags"},
-            "confidence_notes": {"type": "string", "description": "Brief note on which fields were guessed/uncertain vs explicit in the source"},
-        },
-        "required": ["title", "description", "confidence_notes"],
-    },
+_TOOL_NAME = "extract_event_details"
+_TOOL_DESCRIPTION = "Structured event details extracted from the supplied source material."
+
+# Shared JSON-schema-style field definitions. Every provider adapter below translates this into
+# whatever shape its own function/tool-calling (or structured-output) API expects, so adding a
+# new field only ever needs to happen here.
+_EXTRACT_PROPERTIES = {
+    "title": {"type": "string", "description": "Event title"},
+    "description": {"type": "string", "description": "A clean, promotional 2-4 sentence event description"},
+    "venue_name": {"type": "string"},
+    "address": {"type": "string", "description": "Street address, best guess if not explicit"},
+    "city": {"type": "string"},
+    "country": {"type": "string", "description": "ISO-ish country name, e.g. Nigeria, United States"},
+    "start_date": {"type": "string", "description": "ISO 8601 datetime, resolve relative dates against the given current date"},
+    "end_date": {"type": "string", "description": "ISO 8601 datetime; if unknown, assume 3 hours after start_date"},
+    "is_free": {"type": "boolean"},
+    "price_min": {"type": "number"},
+    "price_max": {"type": "number"},
+    "currency": {"type": "string", "description": "3-letter currency code, e.g. NGN, USD"},
+    "event_type": {"type": "string", "enum": ["physical", "virtual", "hybrid"]},
+    "category_guess": {"type": "string", "description": "Best-matching category name from the provided list, or empty string"},
+    "tags": {"type": "string", "description": "Comma-separated short tags"},
+    "confidence_notes": {"type": "string", "description": "Brief note on which fields were guessed/uncertain vs explicit in the source"},
 }
+_EXTRACT_REQUIRED = ["title", "description", "confidence_notes"]
 
 
 class AIAgentError(Exception):
     pass
 
 
-def _client() -> AsyncAnthropic:
-    if not settings.anthropic_api_key:
-        raise AIAgentError("AI drafting is not configured (missing ANTHROPIC_API_KEY).")
-    return AsyncAnthropic(api_key=settings.anthropic_api_key)
+class _MetaImageExtractor(HTMLParser):
+    """Pulls the og:image / twitter:image <meta> tag off a page — the same image a link
+    preview on social media or WhatsApp would show. These are typically present even on
+    JS-rendered pages (sites inject them for SEO/link-preview purposes), unlike the actual
+    page content, which is why this is a much more reliable image signal than trying to guess
+    at <img> tags."""
+
+    def __init__(self):
+        super().__init__()
+        self.og_image: str | None = None
+        self.twitter_image: str | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "meta":
+            return
+        attrs_d = {k.lower(): v for k, v in attrs if v}
+        prop = (attrs_d.get("property") or attrs_d.get("name") or "").lower()
+        content = attrs_d.get("content")
+        if not content:
+            return
+        if prop == "og:image" and not self.og_image:
+            self.og_image = content
+        elif prop == "twitter:image" and not self.twitter_image:
+            self.twitter_image = content
 
 
-async def fetch_url_text(url: str) -> str:
-    """Fetch a URL and strip it down to text a model can read. No JS rendering."""
+def _extract_meta_image(html_text: str, base_url: str) -> str | None:
+    extractor = _MetaImageExtractor()
+    try:
+        extractor.feed(html_text)
+    except Exception:
+        return None
+    image = extractor.og_image or extractor.twitter_image
+    return urljoin(base_url, image) if image else None
+
+
+async def fetch_url_page(url: str) -> tuple[str, str | None]:
+    """Fetch a URL; return (text a model can read, best-guess cover image URL). No JS rendering
+    — sites whose actual content only appears after client-side JS runs may yield little or no
+    usable text here even though the og:image (usually server-rendered) still comes through."""
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=_URL_FETCH_TIMEOUT) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; TurnupBot/1.0)"})
@@ -59,11 +91,154 @@ async def fetch_url_text(url: str) -> str:
     except httpx.HTTPError as e:
         raise AIAgentError(f"Could not fetch URL: {e}")
 
-    html = resp.text[:_MAX_HTML_CHARS * 4]  # cap before regex work
+    raw_html = resp.text
+    image_url = _extract_meta_image(raw_html, str(resp.url))
+
+    html = raw_html[:_MAX_HTML_CHARS * 4]  # cap before regex work
     html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text).strip()
-    return text[:_MAX_HTML_CHARS]
+    return text[:_MAX_HTML_CHARS], image_url
+
+
+async def _build_prompt_text(
+    text: str | None, url: str | None, has_image: bool, category_names: list[str],
+) -> tuple[str, str | None]:
+    prompt_parts = [
+        f"Today's date is {datetime.now(timezone.utc).isoformat()} (UTC). "
+        "Resolve any relative dates (e.g. 'this Friday', 'next month') against it.",
+    ]
+    if category_names:
+        prompt_parts.append("Available categories: " + ", ".join(category_names) + ".")
+
+    cover_image_url = None
+    if url:
+        page_text, cover_image_url = await fetch_url_page(url)
+        prompt_parts.append(f"Source URL: {url}\n\nPage content:\n{page_text}")
+    if text:
+        prompt_parts.append(f"Pasted description:\n{text}")
+    if has_image:
+        prompt_parts.append("A flyer image is attached — read any text/dates/venue/pricing on it.")
+
+    prompt_parts.append(
+        f"Extract the event details and call {_TOOL_NAME}. "
+        "If a field truly cannot be determined, omit it rather than inventing a value, "
+        "except title, description, and confidence_notes which are required."
+    )
+    return "\n\n".join(prompt_parts), cover_image_url
+
+
+async def _draft_anthropic(prompt_text: str, image_bytes: bytes | None, image_media_type: str | None) -> dict:
+    if not settings.anthropic_api_key:
+        raise AIAgentError("AI drafting is not configured (missing ANTHROPIC_API_KEY).")
+    from anthropic import AsyncAnthropic
+
+    content: list[dict] = []
+    if image_bytes:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": image_media_type or "image/jpeg",
+                "data": base64.b64encode(image_bytes).decode("ascii"),
+            },
+        })
+    content.append({"type": "text", "text": prompt_text})
+
+    tool = {
+        "name": _TOOL_NAME,
+        "description": _TOOL_DESCRIPTION,
+        "input_schema": {"type": "object", "properties": _EXTRACT_PROPERTIES, "required": _EXTRACT_REQUIRED},
+    }
+    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    try:
+        resp = await client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=1500,
+            tools=[tool],
+            tool_choice={"type": "tool", "name": _TOOL_NAME},
+            messages=[{"role": "user", "content": content}],
+        )
+    except Exception as e:
+        raise AIAgentError(f"AI drafting failed (Anthropic): {e}")
+
+    for block in resp.content:
+        if block.type == "tool_use" and block.name == _TOOL_NAME:
+            return block.input
+    raise AIAgentError("AI did not return structured event details.")
+
+
+async def _draft_openai(prompt_text: str, image_bytes: bytes | None, image_media_type: str | None) -> dict:
+    if not settings.openai_api_key:
+        raise AIAgentError("AI drafting is not configured (missing OPENAI_API_KEY).")
+    from openai import AsyncOpenAI
+
+    user_content: list[dict] = [{"type": "text", "text": prompt_text}]
+    if image_bytes:
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        media_type = image_media_type or "image/jpeg"
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{media_type};base64,{b64}"},
+        })
+
+    tool = {
+        "type": "function",
+        "function": {
+            "name": _TOOL_NAME,
+            "description": _TOOL_DESCRIPTION,
+            "parameters": {"type": "object", "properties": _EXTRACT_PROPERTIES, "required": _EXTRACT_REQUIRED},
+        },
+    }
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        resp = await client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[{"role": "user", "content": user_content}],
+            tools=[tool],
+            tool_choice={"type": "function", "function": {"name": _TOOL_NAME}},
+        )
+    except Exception as e:
+        raise AIAgentError(f"AI drafting failed (OpenAI): {e}")
+
+    calls = resp.choices[0].message.tool_calls or []
+    for call in calls:
+        if call.function.name == _TOOL_NAME:
+            try:
+                return json.loads(call.function.arguments)
+            except json.JSONDecodeError as e:
+                raise AIAgentError(f"AI returned malformed JSON: {e}")
+    raise AIAgentError("AI did not return structured event details.")
+
+
+async def _draft_gemini(prompt_text: str, image_bytes: bytes | None, image_media_type: str | None) -> dict:
+    if not settings.gemini_api_key:
+        raise AIAgentError("AI drafting is not configured (missing GEMINI_API_KEY).")
+    import google.generativeai as genai
+
+    genai.configure(api_key=settings.gemini_api_key)
+    schema = {"type": "object", "properties": _EXTRACT_PROPERTIES, "required": _EXTRACT_REQUIRED}
+    model = genai.GenerativeModel(
+        settings.gemini_model,
+        generation_config={"response_mime_type": "application/json", "response_schema": schema},
+    )
+
+    parts: list = [prompt_text]
+    if image_bytes:
+        parts.append({"mime_type": image_media_type or "image/jpeg", "data": image_bytes})
+
+    try:
+        resp = await model.generate_content_async(parts)
+    except Exception as e:
+        raise AIAgentError(f"AI drafting failed (Gemini): {e}")
+
+    try:
+        return json.loads(resp.text)
+    except (ValueError, AttributeError) as e:
+        raise AIAgentError(f"AI did not return structured event details: {e}")
+
+
+_KNOWN_PROVIDERS = ("anthropic", "openai", "gemini")
 
 
 async def draft_event(
@@ -80,51 +255,25 @@ async def draft_event(
     if image_bytes and len(image_bytes) > _MAX_IMAGE_BYTES:
         raise AIAgentError("Flyer image is too large (max 8MB).")
 
-    content: list[dict] = []
-    if image_bytes:
-        content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": image_media_type or "image/jpeg",
-                "data": base64.b64encode(image_bytes).decode("ascii"),
-            },
-        })
-
-    prompt_parts = [
-        f"Today's date is {datetime.now(timezone.utc).isoformat()} (UTC). "
-        "Resolve any relative dates (e.g. 'this Friday', 'next month') against it.",
-    ]
-    if category_names:
-        prompt_parts.append("Available categories: " + ", ".join(category_names) + ".")
-    if url:
-        page_text = await fetch_url_text(url)
-        prompt_parts.append(f"Source URL: {url}\n\nPage content:\n{page_text}")
-    if text:
-        prompt_parts.append(f"Pasted description:\n{text}")
-    if image_bytes:
-        prompt_parts.append("A flyer image is attached — read any text/dates/venue/pricing on it.")
-
-    prompt_parts.append(
-        "Extract the event details and call extract_event_details. "
-        "If a field truly cannot be determined, omit it rather than inventing a value, "
-        "except title, description, and confidence_notes which are required."
-    )
-    content.append({"type": "text", "text": "\n\n".join(prompt_parts)})
-
-    client = _client()
-    try:
-        resp = await client.messages.create(
-            model=settings.ai_agent_model,
-            max_tokens=1500,
-            tools=[_EXTRACT_TOOL],
-            tool_choice={"type": "tool", "name": "extract_event_details"},
-            messages=[{"role": "user", "content": content}],
+    if settings.ai_provider not in _KNOWN_PROVIDERS:
+        raise AIAgentError(
+            f"Unknown AI_PROVIDER '{settings.ai_provider}' — expected one of: {', '.join(_KNOWN_PROVIDERS)}."
         )
-    except Exception as e:
-        raise AIAgentError(f"AI drafting failed: {e}")
 
-    for block in resp.content:
-        if block.type == "tool_use" and block.name == "extract_event_details":
-            return block.input
-    raise AIAgentError("AI did not return structured event details.")
+    prompt_text, cover_image_url = await _build_prompt_text(text, url, bool(image_bytes), category_names)
+
+    # Dispatched by bare name (not a dict of function references captured at import time) so
+    # tests can patch.object(ai_agent, "_draft_openai", ...) and have it actually take effect.
+    if settings.ai_provider == "anthropic":
+        result = await _draft_anthropic(prompt_text, image_bytes, image_media_type)
+    elif settings.ai_provider == "openai":
+        result = await _draft_openai(prompt_text, image_bytes, image_media_type)
+    else:
+        result = await _draft_gemini(prompt_text, image_bytes, image_media_type)
+
+    # The cover image is extracted deterministically (og:image/twitter:image), not guessed by
+    # the LLM, which never sees raw <img> tags in the first place (the prompt text is stripped
+    # of markup). Only fill it in if the model didn't already return one of its own.
+    if cover_image_url and not result.get("cover_image"):
+        result["cover_image"] = cover_image_url
+    return result

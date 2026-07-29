@@ -275,13 +275,13 @@ export default function AdminEventsPage() {
         )}
 
         {isLoading ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="animate-pulse bg-bg-elevated rounded h-36" />
             ))}
           </div>
         ) : events && events.length > 0 ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {events.map((ev) => (
               <EventRow key={ev.id} ev={ev} />
             ))}

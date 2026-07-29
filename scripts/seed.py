@@ -737,6 +737,10 @@ async def run():
         await db.commit()
         print(f"✓ {len(saves)} saves for adaeze_sounds")
 
+    # The blanket `delete(User)` above wipes the ai_scout bot account init_db() just seeded —
+    # recreate it now that the demo users are back in place.
+    await init_db()
+
     print()
     print("🎉  Seed complete!")
     print("   Login: adaeze@turnup.ng / password123")

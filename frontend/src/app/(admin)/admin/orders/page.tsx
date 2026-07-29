@@ -93,16 +93,18 @@ export default function AdminOrdersPage() {
         )}
 
         {isLoading && skip === 0 ? (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="animate-pulse bg-bg-elevated rounded h-24" />
             ))}
           </div>
         ) : allOrders.length > 0 ? (
-          <div className="space-y-3">
-            {allOrders.map((order) => (
-              <OrderRow key={order.id} order={order} />
-            ))}
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+              {allOrders.map((order) => (
+                <OrderRow key={order.id} order={order} />
+              ))}
+            </div>
             {hasMore && (
               <Button
                 fullWidth
@@ -113,7 +115,7 @@ export default function AdminOrdersPage() {
                 Load more
               </Button>
             )}
-          </div>
+          </>
         ) : (
           <p className="text-center text-text-muted text-sm py-12">No orders found</p>
         )}
