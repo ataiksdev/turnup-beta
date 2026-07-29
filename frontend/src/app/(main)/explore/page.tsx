@@ -7,7 +7,7 @@ import { EventCard } from "@/components/events/EventCard";
 import { formatEventDate, formatPrice, cn } from "@/lib/utils";
 import {
   Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf,
-  MapPin, Shuffle, Flame, Star, ArrowRight, Tag, Clock,
+  MapPin, Flame, Star, ArrowRight, Tag, Clock,
   CalendarDays,
 } from "lucide-react";
 import Link from "next/link";
@@ -23,12 +23,6 @@ const CATEGORIES = [
   { label: "Sports",    slug: "sports",    icon: Trophy,   bg: "bg-[#1a5c2d]", accent: "#4ade80" },
   { label: "Comedy",    slug: "comedy",    icon: Laugh,    bg: "bg-[#5c3d1a]", accent: "#fbbf24" },
   { label: "Wellness",  slug: "wellness",  icon: Leaf,     bg: "bg-[#2d4a1a]", accent: "#86efac" },
-];
-
-const FORMATS = [
-  { label: "In Person", value: "physical", icon: MapPin,  cls: "bg-primary/10 border-primary/30 text-primary" },
-  { label: "Virtual",   value: "virtual",  icon: Monitor, cls: "bg-info/10 border-info/30 text-info" },
-  { label: "Hybrid",    value: "hybrid",   icon: Shuffle, cls: "bg-warning/10 border-warning/30 text-warning" },
 ];
 
 // ── Section components ────────────────────────────────────────────────────────
@@ -152,23 +146,6 @@ export default function ExplorePage() {
           </div>
         </Link>
       )}
-
-      {/* ── Format tiles ────────────────────────────────────────────── */}
-      <div className="px-4 mt-4 grid grid-cols-3 gap-2">
-        {FORMATS.map(({ label, value, icon: Icon, cls }) => (
-          <Link
-            key={value}
-            href={`/search?event_type=${value}`}
-            className={cn(
-              "flex flex-col items-center gap-1.5 py-3 rounded border-2 text-center transition-all hover:shadow-brutal-sm",
-              cls,
-            )}
-          >
-            <Icon size={18} />
-            <span className="text-[10px] font-black uppercase tracking-wide">{label}</span>
-          </Link>
-        ))}
-      </div>
 
       {/* ── Trending Now ─────────────────────────────────────────────── */}
       {(trending?.length ?? 0) > 0 && (

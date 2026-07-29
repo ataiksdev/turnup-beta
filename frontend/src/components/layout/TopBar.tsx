@@ -1,8 +1,8 @@
 "use client";
 import { cn, displayName } from "@/lib/utils";
-import { Bell, ChevronLeft, LayoutDashboard, Shield } from "lucide-react";
+import { Bell, ChevronLeft, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -17,9 +17,12 @@ interface TopBarProps {
 
 export function TopBar({ title, back, transparent, actions, className }: TopBarProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user } = useAuthStore();
   const isOrganizer = user?.role === "organizer";
-  const isAdmin = user?.role === "admin";
+  // The admin sidebar already shows the "turnup" wordmark on desktop — avoid the double-up
+  // on the admin root page, which is the only admin page that renders the bare TopBar logo.
+  const hideLogoOnDesktop = pathname === "/admin";
 
   return (
     <header
@@ -43,7 +46,11 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
             <ChevronLeft size={20} className="text-text" aria-hidden />
           </button>
         ) : (
-          <Link href="/" aria-label="Turnup home" className="flex items-center gap-1.5">
+          <Link
+            href="/"
+            aria-label="Turnup home"
+            className={cn("flex items-center gap-1.5", hideLogoOnDesktop && "md:hidden")}
+          >
             <span className="text-xl font-black text-primary tracking-tight">turnup</span>
           </Link>
         )}
@@ -55,19 +62,6 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
       {/* Right */}
       <div className="flex items-center gap-1">
         {actions}
-        {/* Admin shortcut */}
-        {!back && isAdmin && (
-          <Link
-            href="/admin"
-            aria-label="Switch to admin panel"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded border-2 border-red-300 bg-red-100 hover:bg-red-200 transition-colors"
-          >
-            <Shield size={13} className="text-red-700" aria-hidden />
-            <span className="text-[10px] font-black text-red-700 uppercase tracking-wider hidden xs:inline">
-              Admin
-            </span>
-          </Link>
-        )}
         {/* Organizer shortcut — visible to organizers in the attendee layout */}
         {!back && isOrganizer && (
           <Link

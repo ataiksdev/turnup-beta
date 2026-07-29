@@ -1,19 +1,24 @@
 "use client";
 import { useAuthStore } from "@/store/auth";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-// Redirect /profile → /profile/:username
+// Redirect /profile → /profile/:username.
+// Uses router.replace() (not next/navigation's redirect(), which only works during
+// Server Component rendering — calling it from a Client Component effect throws
+// outside the render phase and can misbehave instead of navigating cleanly).
 export default function ProfileRedirect() {
-  const { user } = useAuthStore();
+  const { user, hasHydrated } = useAuthStore();
+  const router = useRouter();
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (user?.username) {
-      redirect(`/profile/${user.username}`);
+      router.replace(`/profile/${user.username}`);
     } else {
-      redirect("/login");
+      router.replace("/login");
     }
-  }, [user]);
+  }, [hasHydrated, user, router]);
 
   return null;
 }

@@ -72,3 +72,17 @@ async def get_current_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(403, "Admin access required.")
     return user
+
+
+async def get_current_moderator(user: User = Depends(get_current_user)) -> User:
+    """Requires the authenticated user to have the moderator or admin role."""
+    if user.role not in ("moderator", "admin"):
+        raise HTTPException(403, "Moderator access required.")
+    return user
+
+
+async def get_current_event_creator(user: User = Depends(get_current_user)) -> User:
+    """Requires the authenticated user to be able to create events: organizer, moderator, or admin."""
+    if user.role not in ("organizer", "moderator", "admin"):
+        raise HTTPException(403, "Organizer, moderator, or admin account required.")
+    return user

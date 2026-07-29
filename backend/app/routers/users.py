@@ -33,15 +33,19 @@ def _event_row(event: Event, is_saved: bool = False, attendance_status: str | No
         "is_free": event.is_free, "price_min": event.price_min,
         "price_max": event.price_max, "currency": event.currency,
         "attendees_count": event.attendees_count, "interested_count": event.interested_count,
-        "saves_count": event.saves_count, "status": event.status,
+        "saves_count": event.saves_count, "waitlist_count": event.waitlist_count,
+        "views_count": event.views_count, "waitlist_enabled": event.waitlist_enabled,
+        "status": event.status,
         "is_featured": event.is_featured, "is_trending": event.is_trending,
         "tags": event.tags, "host": event.host, "category": event.category,
         "created_at": event.created_at,
         "description": event.description, "gallery": event.gallery,
         "latitude": event.latitude, "longitude": event.longitude,
         "timezone": event.timezone,
-        "capacity": event.capacity,
+        "capacity": event.capacity, "event_type": event.event_type,
         "is_saved": is_saved, "attendance_status": attendance_status,
+        "review_status": event.review_status, "review_note": event.review_note,
+        "created_via": event.created_via,
     }
 
 

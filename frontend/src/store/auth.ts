@@ -6,10 +6,12 @@ import type { User } from "@/types";
 interface AuthState {
   token: string | null;
   user: User | null;
+  hasHydrated: boolean;
   setAuth: (token: string, user: User) => void;
   setUser: (user: User) => void;
   logout: () => void;
   isAuthenticated: () => boolean;
+  setHasHydrated: (v: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -17,10 +19,12 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       token: null,
       user: null,
+      hasHydrated: false,
       setAuth: (token, user) => set({ token, user }),
       setUser: (user) => set({ user }),
       logout: () => set({ token: null, user: null }),
       isAuthenticated: () => !!get().token,
+      setHasHydrated: (v) => set({ hasHydrated: v }),
     }),
     {
       name: "turnup-auth",
@@ -29,6 +33,9 @@ export const useAuthStore = create<AuthState>()(
         return localStorage;
       }),
       partialize: (s) => ({ token: s.token, user: s.user }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );

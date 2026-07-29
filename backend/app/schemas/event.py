@@ -37,6 +37,7 @@ class EventCreate(BaseModel):
     meeting_url: str | None = None
     status: str = Field("published", pattern=r"^(draft|published)$")
     template_id: str | None = None  # optional: create from template
+    created_via: str = Field("manual", pattern=r"^(manual|ai_agent)$")
 
 
 class EventUpdate(BaseModel):
@@ -91,6 +92,9 @@ class EventOut(BaseModel):
     is_saved: bool = False
     attendance_status: str | None = None
     is_waitlisted: bool = False
+    review_status: str = "approved"
+    review_note: str | None = None
+    created_via: str = "manual"
     model_config = {"from_attributes": True}
 
 

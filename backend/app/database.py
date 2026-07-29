@@ -39,6 +39,11 @@ async def _run_migrations(conn):
         ("users", "goes_out_when", "VARCHAR(20)"),
         ("ticket_orders", "ticket_code", "VARCHAR(36) UNIQUE"),
         ("ticket_orders", "checked_in_at", "DATETIME"),
+        ("events", "review_status", "VARCHAR(20) NOT NULL DEFAULT 'approved'"),
+        ("events", "review_note", "TEXT"),
+        ("events", "reviewed_by_id", "VARCHAR(36)"),
+        ("events", "reviewed_at", "DATETIME"),
+        ("events", "created_via", "VARCHAR(20) NOT NULL DEFAULT 'manual'"),
     ]
     for table, column, definition in new_columns:
         try:
@@ -49,8 +54,34 @@ async def _run_migrations(conn):
             pass  # column already exists
 
 
+async def _ensure_scout_bot(session):
+    import uuid
+    from sqlalchemy import select
+    from app.config import settings
+    from app.models.user import User
+
+    existing = (await session.execute(
+        select(User).where(User.username == settings.scout_bot_username)
+    )).scalar_one_or_none()
+    if existing:
+        return
+    session.add(User(
+        id=str(uuid.uuid4()),
+        username=settings.scout_bot_username,
+        full_name="Turnup Scout",
+        hashed_password=None,  # bot account: cannot log in, only used internally by the scout job
+        role="moderator",
+        is_active=True,
+        is_verified=True,
+    ))
+    await session.commit()
+
+
 async def init_db():
-    from app.models import user, event, social, auth_tokens, organizer, community  # noqa: F401
+    from app.models import user, event, social, auth_tokens, organizer, community, scout  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _run_migrations(conn)
+
+    async with AsyncSessionLocal() as session:
+        await _ensure_scout_bot(session)

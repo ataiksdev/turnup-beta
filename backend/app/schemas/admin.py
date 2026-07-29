@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminUserOut(BaseModel):
@@ -42,6 +42,11 @@ class AdminEventOut(BaseModel):
     host_username: str
     host_id: str
     created_at: datetime
+    review_status: str
+    review_note: str | None = None
+    created_via: str
+    reviewed_by_username: str | None = None
+    reviewed_at: datetime | None = None
     model_config = {"from_attributes": True}
 
 
@@ -49,6 +54,30 @@ class AdminEventUpdate(BaseModel):
     is_featured: bool | None = None
     is_trending: bool | None = None
     status: str | None = None
+
+
+class AdminEventReject(BaseModel):
+    note: str = Field(min_length=3, max_length=1000)
+
+
+class AIEventDraft(BaseModel):
+    title: str = ""
+    description: str = ""
+    cover_image: str | None = None
+    venue_name: str = ""
+    address: str = ""
+    city: str = ""
+    country: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    is_free: bool = True
+    price_min: float | None = None
+    price_max: float | None = None
+    currency: str = ""
+    event_type: str = "physical"
+    category_guess: str = ""
+    tags: str = ""
+    confidence_notes: str = ""
 
 
 class AdminCategoryCreate(BaseModel):
@@ -91,6 +120,49 @@ class AdminOrderOut(BaseModel):
     status: str
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+class ScoutSourceCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    url: str = Field(min_length=8, max_length=500)
+
+
+class ScoutSourceUpdate(BaseModel):
+    name: str | None = None
+    url: str | None = None
+    is_active: bool | None = None
+
+
+class ScoutSourceOut(BaseModel):
+    id: str
+    name: str
+    url: str
+    is_active: bool
+    last_polled_at: datetime | None
+    last_run_status: str | None
+    created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class ScoutedItemOut(BaseModel):
+    id: str
+    source_id: str
+    source_name: str
+    url: str
+    status: str
+    event_id: str | None
+    event_title: str | None
+    error_note: str | None
+    created_at: datetime
+
+
+class ScoutRunResult(BaseModel):
+    sources_polled: int
+    items_seen: int
+    events_created: int
+    skipped_duplicate: int
+    skipped_no_event: int
+    failed: int
 
 
 class PlatformStats(BaseModel):
