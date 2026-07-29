@@ -80,6 +80,62 @@ def _extract_meta_image(html_text: str, base_url: str) -> str | None:
     return urljoin(base_url, image) if image else None
 
 
+def _extract_ld_json_event(html_text: str) -> dict | None:
+    """Pull schema.org Event data out of a page's JSON-LD <script> block, if present. Event
+    platforms (Luma, Eventbrite, Meetup, ...) commonly embed the exact machine-readable fields
+    — start/end date, venue — this way even when the visible page text has no plain-language
+    date at all (it's filled in client-side), which is far more reliable than asking the model
+    to guess a date from prose."""
+    for match in re.finditer(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html_text, flags=re.DOTALL | re.IGNORECASE,
+    ):
+        try:
+            data = json.loads(match.group(1).strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+        entries = data if isinstance(data, list) else [data]
+        # Some publishers nest entries under an @graph array instead of a top-level list.
+        expanded: list = []
+        for entry in entries:
+            if isinstance(entry, dict) and isinstance(entry.get("@graph"), list):
+                expanded.extend(entry["@graph"])
+            else:
+                expanded.append(entry)
+
+        for entry in expanded:
+            if not isinstance(entry, dict):
+                continue
+            types = entry.get("@type")
+            types = types if isinstance(types, list) else [types]
+            if any(isinstance(t, str) and t.endswith("Event") for t in types):
+                return entry
+    return None
+
+
+def _format_ld_json_event(event: dict) -> str:
+    location = event.get("location") if isinstance(event.get("location"), dict) else {}
+    address = location.get("address")
+    if isinstance(address, dict):
+        address_str = ", ".join(filter(None, [
+            address.get("streetAddress"), address.get("addressLocality"),
+            address.get("addressRegion"), address.get("addressCountry"),
+        ]))
+    else:
+        address_str = address or ""
+
+    lines = {
+        "Name": event.get("name"),
+        "Start": event.get("startDate"),
+        "End": event.get("endDate"),
+        "Venue": location.get("name"),
+        "Address": address_str,
+        "Description": event.get("description"),
+    }
+    return "\n".join(f"{k}: {v}" for k, v in lines.items() if v)
+
+
 async def fetch_url_page(url: str) -> tuple[str, str | None]:
     """Fetch a URL; return (text a model can read, best-guess cover image URL). No JS rendering
     — sites whose actual content only appears after client-side JS runs may yield little or no
@@ -93,12 +149,23 @@ async def fetch_url_page(url: str) -> tuple[str, str | None]:
 
     raw_html = resp.text
     image_url = _extract_meta_image(raw_html, str(resp.url))
+    ld_event = _extract_ld_json_event(raw_html)
 
     html = raw_html[:_MAX_HTML_CHARS * 4]  # cap before regex work
     html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text).strip()
-    return text[:_MAX_HTML_CHARS], image_url
+    text = text[:_MAX_HTML_CHARS]
+
+    if ld_event:
+        structured = _format_ld_json_event(ld_event)
+        if structured:
+            text = (
+                "Structured event data (schema.org — authoritative, prefer over the page text "
+                f"below for dates/venue):\n{structured}\n\nPage text:\n{text}"
+            )
+
+    return text, image_url
 
 
 async def _build_prompt_text(
