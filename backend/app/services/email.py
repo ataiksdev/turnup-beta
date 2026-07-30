@@ -79,6 +79,21 @@ def _ticket_html(
 <p style="margin-top:20px;font-size:12px">Show the QR code at the door for entry.</p>""")
 
 
+def _refund_html(event_title: str, tier_name: str, quantity: int, total_price: float) -> str:
+    price_line = "Free" if total_price == 0 else f"₦{total_price:,.0f}"
+    return _base(f"Your ticket for {event_title} was refunded", f"""
+<p>Your order has been refunded by the organizer or Turnup support.</p>
+<table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Event</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{event_title}</td></tr>
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Ticket</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{tier_name} × {quantity}</td></tr>
+  <tr><td style="padding:6px 0;color:#71717A;font-size:13px">Refunded amount</td>
+      <td style="padding:6px 0;font-weight:600;font-size:13px">{price_line}</td></tr>
+</table>
+<p style="margin-top:8px;font-size:12px">If you paid by card or bank transfer, refunds typically take a few business days to reflect.</p>""")
+
+
 # ── Send logic ────────────────────────────────────────────────────────────────
 
 async def _send(to: str, subject: str, html: str) -> None:
@@ -175,3 +190,16 @@ async def send_ticket_email(
         ticket_url=ticket_url,
     )
     await _send(to, f"Your ticket for {event_title}", html)
+
+
+async def send_refund_email(
+    to: str,
+    event_title: str,
+    tier_name: str,
+    quantity: int,
+    total_price: float,
+) -> None:
+    if not to:
+        return
+    html = _refund_html(event_title or "Event", tier_name, quantity, total_price)
+    await _send(to, f"Your ticket for {event_title} was refunded", html)

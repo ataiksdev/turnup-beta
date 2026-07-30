@@ -1,12 +1,15 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import Link from "next/link";
 import {
   Users, Briefcase, CalendarDays, CheckCircle,
-  ShoppingBag, TrendingUp, UserPlus, CalendarPlus,
+  ShoppingBag, TrendingUp, UserPlus, CalendarPlus, Percent, Wallet,
 } from "lucide-react";
 
 function KpiCard({
@@ -27,6 +30,68 @@ function KpiCard({
         <span className="text-xs font-bold uppercase text-text-muted">{label}</span>
       </div>
       <p className="text-2xl font-black text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+function PlatformFeeCard() {
+  const { token } = useAuthStore();
+  const qc = useQueryClient();
+  const [percent, setPercent] = useState("");
+
+  const { data: fee, isLoading } = useQuery({
+    queryKey: ["admin-platform-fee"],
+    queryFn: () => adminApi.platformFee(token!),
+    enabled: !!token,
+  });
+
+  useEffect(() => {
+    if (fee) setPercent(String(fee.ticket_fee_percent));
+  }, [fee]);
+
+  const updateMutation = useMutation({
+    mutationFn: () => adminApi.updatePlatformFee(token!, Number(percent)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-platform-fee"] });
+      qc.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+  });
+
+  const dirty = fee && Number(percent) !== fee.ticket_fee_percent;
+
+  return (
+    <div className="border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Percent size={16} className="text-primary" aria-hidden />
+        <span className="text-xs font-black text-text-primary uppercase tracking-widest">Ticket Platform Fee</span>
+      </div>
+      <p className="text-xs text-text-muted">
+        The percentage of each confirmed paid order Turnup retains, deducted from the organizer's payout. Buyers never pay extra for it. Free tickets are never charged a fee.
+      </p>
+      {isLoading ? (
+        <div className="animate-pulse bg-bg-elevated rounded h-11 w-32" />
+      ) : (
+        <div className="flex items-end gap-2 max-w-xs">
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            step="0.1"
+            value={percent}
+            onChange={(e) => setPercent(e.target.value)}
+            icon={<Percent size={14} />}
+          />
+          <Button size="sm" loading={updateMutation.isPending} disabled={!dirty} onClick={() => updateMutation.mutate()}>
+            Save
+          </Button>
+        </div>
+      )}
+      {updateMutation.isError && (
+        <p className="text-xs text-red-500">{(updateMutation.error as Error).message}</p>
+      )}
+      {updateMutation.isSuccess && !dirty && (
+        <p className="text-xs text-green-600">Saved — applies to orders confirmed from now on.</p>
+      )}
     </div>
   );
 }
@@ -72,12 +137,17 @@ export default function AdminDashboardPage() {
             <KpiCard icon={CalendarDays} label="Total Events"     value={stats.total_events.toLocaleString("en-NG")}      iconClass="text-green-500" />
             <KpiCard icon={CheckCircle} label="Published Events"  value={stats.published_events.toLocaleString("en-NG")}  iconClass="text-emerald-500" />
             <KpiCard icon={ShoppingBag} label="Total Orders"      value={stats.total_orders.toLocaleString("en-NG")}      iconClass="text-orange-500" />
-            <KpiCard icon={TrendingUp}  label="Platform Revenue"  value={`₦${stats.confirmed_revenue.toLocaleString("en-NG")}`} iconClass="text-yellow-500" />
+            <KpiCard icon={TrendingUp}  label="Ticket Sales"      value={`₦${stats.confirmed_revenue.toLocaleString("en-NG")}`} iconClass="text-yellow-500" />
+            <KpiCard icon={Wallet}      label="Turnup Fee Revenue" value={`₦${stats.platform_fee_revenue.toLocaleString("en-NG")}`} iconClass="text-amber-500" />
             <KpiCard icon={Users}       label="Total Attendees"   value={stats.total_attendees.toLocaleString("en-NG")}   iconClass="text-pink-500" />
             <KpiCard icon={UserPlus}    label="New Users (7d)"    value={stats.new_users_this_week.toLocaleString("en-NG")} iconClass="text-indigo-500" />
             <KpiCard icon={CalendarPlus} label="New Events (7d)"  value={stats.new_events_this_week.toLocaleString("en-NG")} iconClass="text-teal-500" />
           </div>
         ) : null}
+      </div>
+
+      <div className="px-4 mb-6 lg:max-w-md">
+        <PlatformFeeCard />
       </div>
 
       <div className="px-4 space-y-3">

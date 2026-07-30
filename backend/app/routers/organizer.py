@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -19,6 +19,8 @@ from app.schemas.organizer import (
     TemplateCreate, TemplateOut, TemplateUpdate, TicketOrderOut,
 )
 from app.schemas.user import UserMe
+from app.services.email import send_refund_email
+from app.services.tickets import notify_buyer, refund_order
 
 router = APIRouter(prefix="/api/organizer", tags=["organizer"])
 
@@ -117,6 +119,17 @@ async def organizer_dashboard(
     )
     total_revenue = float(rev_result.scalar() or 0)
 
+    fee_result = await db.execute(
+        select(func.sum(TicketOrder.platform_fee_amount))
+        .where(
+            TicketOrder.event_id.in_(
+                select(Event.id).where(Event.host_id == user.id)
+            ),
+            TicketOrder.status == "confirmed",
+        )
+    )
+    platform_fee_total = float(fee_result.scalar() or 0)
+
     # Pending co-host invites for the organizer's events
     pending_result = await db.execute(
         select(func.count(EventCoHost.id))
@@ -133,6 +146,8 @@ async def organizer_dashboard(
         draft_events=drafts,
         total_attendees=total_attendees,
         total_revenue=total_revenue,
+        platform_fee_total=platform_fee_total,
+        net_revenue=total_revenue - platform_fee_total,
         pending_cohost_invites=pending_cohosts,
     )
 
@@ -299,11 +314,51 @@ async def organizer_orders(
             "tier_name": o.tier.name, "buyer_username": o.user.username,
             "buyer_email": o.user.email,
             "quantity": o.quantity, "unit_price": o.unit_price,
-            "total_price": o.total_price, "status": o.status,
+            "total_price": o.total_price, "platform_fee_amount": o.platform_fee_amount,
+            "status": o.status,
             "created_at": o.created_at,
         }
         for o in orders
     ]
+
+
+@router.post("/orders/{order_id}/refund", response_model=TicketOrderOut)
+async def organizer_refund_order(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(TicketOrder)
+        .options(selectinload(TicketOrder.tier), selectinload(TicketOrder.event), selectinload(TicketOrder.user))
+        .where(TicketOrder.id == order_id)
+    )
+    order = (await db.execute(stmt)).scalar_one_or_none()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if not order.event or order.event.host_id != user.id:
+        raise HTTPException(403, "Not your event")
+    if order.status != "confirmed":
+        raise HTTPException(400, f"Cannot refund an order with status '{order.status}'")
+
+    if not await refund_order(db, order):
+        raise HTTPException(409, "Order was already resolved by another request")
+
+    await notify_buyer(db, order, order.event, kind="refunded")
+    background_tasks.add_task(
+        send_refund_email, to=(order.user.email if order.user else "") or "",
+        event_title=order.event.title, tier_name=order.tier.name if order.tier else "",
+        quantity=order.quantity, total_price=order.total_price,
+    )
+    return TicketOrderOut(
+        id=order.id, event_id=order.event_id, tier_id=order.tier_id,
+        tier_name=order.tier.name if order.tier else "", quantity=order.quantity,
+        unit_price=order.unit_price, total_price=order.total_price,
+        status=order.status, payment_reference=order.payment_reference,
+        ticket_code=order.ticket_code, checked_in_at=order.checked_in_at,
+        created_at=order.created_at,
+    )
 
 
 # ── Templates ─────────────────────────────────────────────────────────────────

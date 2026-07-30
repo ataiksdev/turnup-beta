@@ -211,6 +211,60 @@ async def test_admin_scout_sources_crud(client, admin_auth):
 
 
 @pytest.mark.asyncio
+async def test_run_daily_scout_with_source_id_only_polls_that_source(db, bot_user):
+    target = await _make_source(db)
+    # A second active source that must NOT be touched when we pass source_id=target.id.
+    other = ScoutSource(id=str(uuid.uuid4()), name=f"Other {uuid.uuid4().hex[:6]}", url=_unique_url(), is_active=True)
+    db.add(other)
+    await db.commit()
+
+    draft = _fake_draft()
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[_unique_url()])), \
+         patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
+        summary = await scout_agent.run_daily_scout(db, source_id=target.id)
+
+    assert summary.sources_polled == 1
+    await db.refresh(other)
+    assert other.last_polled_at is None
+
+
+@pytest.mark.asyncio
+async def test_run_daily_scout_with_source_id_runs_paused_source(db, bot_user):
+    source = await _make_source(db)
+    source.is_active = False
+    await db.commit()
+
+    draft = _fake_draft()
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[_unique_url()])), \
+         patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
+        summary = await scout_agent.run_daily_scout(db, source_id=source.id)
+
+    assert summary.sources_polled == 1
+    assert summary.events_created == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_scout_source_run_endpoint(db, client, admin_auth, bot_user):
+    source = await _make_source(db)
+    draft = _fake_draft()
+
+    with patch.object(scout_agent, "_fetch_candidate_links", new=AsyncMock(return_value=[_unique_url()])), \
+         patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
+        resp = await client.post(f"/api/admin/scout/sources/{source.id}/run", headers=admin_auth["headers"])
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["sources_polled"] == 1
+    assert body["events_created"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_scout_source_run_endpoint_404_for_unknown_source(client, admin_auth):
+    resp = await client.post(f"/api/admin/scout/sources/{uuid.uuid4()}/run", headers=admin_auth["headers"])
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_admin_scout_log_reflects_run(db, client, admin_auth, bot_user):
     source = await _make_source(db)
     draft = _fake_draft()

@@ -79,6 +79,7 @@ export interface Event {
   review_status?: "pending" | "approved" | "rejected";
   review_note?: string | null;
   created_via?: "manual" | "ai_agent";
+  refund_policy?: string | null;
 }
 
 export interface Comment {
@@ -93,7 +94,8 @@ export interface Comment {
 
 export interface Notification {
   id: string;
-  type: "follow" | "event_invite" | "event_reminder" | "comment" | "going" | "event_update";
+  type: "follow" | "event_invite" | "event_reminder" | "comment" | "going" | "event_update"
+    | "ticket_confirmed" | "ticket_refunded" | "ticket_cancelled";
   title: string;
   body?: string | null;
   reference_id?: string | null;

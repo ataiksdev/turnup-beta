@@ -116,6 +116,7 @@ class AdminOrderOut(BaseModel):
     quantity: int
     unit_price: float
     total_price: float
+    platform_fee_amount: float | None = None
     currency: str
     status: str
     created_at: datetime
@@ -172,6 +173,15 @@ class PlatformStats(BaseModel):
     published_events: int
     total_orders: int
     confirmed_revenue: float
+    platform_fee_revenue: float
     total_attendees: int
     new_users_this_week: int
     new_events_this_week: int
+
+
+class PlatformFeeOut(BaseModel):
+    ticket_fee_percent: float
+
+
+class PlatformFeeUpdate(BaseModel):
+    ticket_fee_percent: float = Field(ge=0, le=100)

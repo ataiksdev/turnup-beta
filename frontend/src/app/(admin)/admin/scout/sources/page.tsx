@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Radar, ScrollText, Play } from "lucide-react";
+import { Radar, ScrollText, Play, Pencil, Check, X as XIcon } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,10 @@ function SourceRow({ source }: { source: ScoutSourceOut }) {
   const { token } = useAuthStore();
   const qc = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(source.name);
+  const [editUrl, setEditUrl] = useState(source.url);
+  const [runResult, setRunResult] = useState<ScoutRunResult | null>(null);
 
   const toggleMutation = useMutation({
     mutationFn: () => adminApi.updateScoutSource(token!, source.id, { is_active: !source.is_active }),
@@ -35,6 +39,40 @@ function SourceRow({ source }: { source: ScoutSourceOut }) {
     mutationFn: () => adminApi.deleteScoutSource(token!, source.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-scout-sources"] }),
   });
+
+  const editMutation = useMutation({
+    mutationFn: () => adminApi.updateScoutSource(token!, source.id, { name: editName.trim(), url: editUrl.trim() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-scout-sources"] });
+      setEditing(false);
+    },
+  });
+
+  const runMutation = useMutation({
+    mutationFn: () => adminApi.runScoutSourceNow(token!, source.id),
+    onSuccess: (result) => {
+      setRunResult(result);
+      qc.invalidateQueries({ queryKey: ["admin-scout-sources"] });
+    },
+  });
+
+  if (editing) {
+    return (
+      <div className="border-2 border-primary bg-bg-surface shadow-brutal-sm rounded p-4 space-y-2">
+        <Input label="Name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+        <Input label="Feed or events page URL" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} />
+        {editMutation.error && <p className="text-red-500 text-sm">{(editMutation.error as Error).message}</p>}
+        <div className="flex gap-2">
+          <Button size="sm" loading={editMutation.isPending} disabled={!editName.trim() || !editUrl.trim()} onClick={() => editMutation.mutate()}>
+            <Check size={14} /> Save
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => { setEditing(false); setEditName(source.name); setEditUrl(source.url); }}>
+            <XIcon size={14} /> Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-2">
@@ -58,7 +96,19 @@ function SourceRow({ source }: { source: ScoutSourceOut }) {
         {source.last_run_status && ` · ${source.last_run_status}`}
       </p>
 
-      <div className="flex gap-2">
+      {runResult && (
+        <p className="text-xs text-primary">
+          Run complete — {runResult.items_seen} item(s) seen, {runResult.events_created} created for review
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" loading={runMutation.isPending} onClick={() => runMutation.mutate()}>
+          <Play size={14} /> Run Now
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+          <Pencil size={14} /> Edit
+        </Button>
         <Button size="sm" variant="secondary" loading={toggleMutation.isPending} onClick={() => toggleMutation.mutate()}>
           {source.is_active ? "Pause" : "Resume"}
         </Button>

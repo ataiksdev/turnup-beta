@@ -44,6 +44,10 @@ async def _run_migrations(conn):
         ("events", "reviewed_by_id", "VARCHAR(36)"),
         ("events", "reviewed_at", "DATETIME"),
         ("events", "created_via", "VARCHAR(20) NOT NULL DEFAULT 'manual'"),
+        ("ticket_orders", "idempotency_key", "VARCHAR(64)"),
+        ("events", "refund_policy", "TEXT"),
+        ("ticket_orders", "platform_fee_percent", "FLOAT"),
+        ("ticket_orders", "platform_fee_amount", "FLOAT"),
     ]
     for table, column, definition in new_columns:
         try:
@@ -77,11 +81,28 @@ async def _ensure_scout_bot(session):
     await session.commit()
 
 
+async def _ensure_platform_settings(session):
+    from sqlalchemy import select
+    from app.models.settings import PLATFORM_SETTINGS_ID, PlatformSettings
+
+    existing = (await session.execute(
+        select(PlatformSettings).where(PlatformSettings.id == PLATFORM_SETTINGS_ID)
+    )).scalar_one_or_none()
+    if existing:
+        return
+    session.add(PlatformSettings(id=PLATFORM_SETTINGS_ID))
+    await session.commit()
+
+
 async def init_db():
-    from app.models import user, event, social, auth_tokens, organizer, community, scout  # noqa: F401
+    from app.models import (  # noqa: F401
+        user, event, social, auth_tokens, organizer, community, scout,
+    )
+    from app.models import settings as settings_model  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _run_migrations(conn)
 
     async with AsyncSessionLocal() as session:
         await _ensure_scout_bot(session)
+        await _ensure_platform_settings(session)

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -100,11 +100,12 @@ export function EventDetailClient({ id }: { id: string }) {
   const [attendance, setAttend] = useState(event?.attendance_status ?? null);
   const [actionError, setActionError] = useState("");
 
-  // Ticket purchase state
-  const [selectedTier, setSelectedTier] = useState<string | null>(null);
-  const [qty, setQty] = useState(1);
+  // Ticket cart state: tier id -> quantity (0/absent = not in cart). Several tiers can be
+  // bought together in one checkout.
+  const [cart, setCart] = useState<Record<string, number>>({});
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   // Waitlist state
   const [waitlisted, setWaitlisted] = useState(event?.is_waitlisted ?? false);
@@ -161,7 +162,12 @@ export function EventDetailClient({ id }: { id: string }) {
     onError: () => flashError("Could not post comment. Please try again."),
   });
 
-  const openPaystack = useCallback((pubKey: string, email: string, amountKobo: number, reference: string, tierId: string) => {
+  function clearCart() {
+    setCart({});
+    idempotencyKeyRef.current = null;
+  }
+
+  const openPaystack = useCallback((pubKey: string, email: string, amountKobo: number, reference: string) => {
     const PaystackPop = (window as any).PaystackPop;
     if (!PaystackPop) return;
     const handler = PaystackPop.setup({
@@ -174,9 +180,9 @@ export function EventDetailClient({ id }: { id: string }) {
       onClose: () => setPaymentPending(false),
       callback: async () => {
         try {
-          await eventsApi.verifyPayment(token!, eid, tierId, reference);
+          await eventsApi.verifyPayment(token!, eid, reference);
           setPurchaseSuccess(true);
-          setSelectedTier(null);
+          clearCart();
           qc.invalidateQueries({ queryKey: ["tiers", eid] });
           qc.invalidateQueries({ queryKey: ["event", id] });
           qc.invalidateQueries({ queryKey: ["my-tickets"] });
@@ -190,15 +196,26 @@ export function EventDetailClient({ id }: { id: string }) {
     handler.openIframe();
   }, [token, eid, id, qc]);
 
+  const cartItems = Object.entries(cart)
+    .filter(([, qty]) => qty > 0)
+    .map(([tier_id, quantity]) => ({ tier_id, quantity }));
+  const cartTotal = cartItems.reduce((sum, item) => {
+    const tier = tiers?.find((t) => t.id === item.tier_id);
+    return sum + (tier ? tier.price * item.quantity : 0);
+  }, 0);
+
   const purchaseMutation = useMutation({
-    mutationFn: () =>
-      token && selectedTier
-        ? eventsApi.initPayment(token, eid, selectedTier, qty)
-        : Promise.reject(),
+    mutationFn: () => {
+      if (!token || cartItems.length === 0) return Promise.reject();
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = crypto.randomUUID();
+      }
+      return eventsApi.checkout(token, eid, cartItems, idempotencyKeyRef.current);
+    },
     onSuccess: (data) => {
       if (data.is_free) {
         setPurchaseSuccess(true);
-        setSelectedTier(null);
+        clearCart();
         qc.invalidateQueries({ queryKey: ["tiers", eid] });
         qc.invalidateQueries({ queryKey: ["event", id] });
         qc.invalidateQueries({ queryKey: ["my-tickets"] });
@@ -208,10 +225,10 @@ export function EventDetailClient({ id }: { id: string }) {
         if (!(window as any).PaystackPop) {
           const script = document.createElement("script");
           script.src = "https://js.paystack.co/v1/inline.js";
-          script.onload = () => openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference, selectedTier!);
+          script.onload = () => openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference);
           document.body.appendChild(script);
         } else {
-          openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference, selectedTier!);
+          openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference);
         }
       }
     },
@@ -556,18 +573,15 @@ export function EventDetailClient({ id }: { id: string }) {
               {tiers.filter((t) => t.is_active).map((tier) => {
                 const available = tier.available;
                 const soldOut = available !== null && available <= 0;
-                const isSelected = selectedTier === tier.id;
+                const qtyInCart = cart[tier.id] ?? 0;
+                const maxQty = Math.min(tier.max_per_order, available ?? 99);
                 return (
                   <div key={tier.id} className={cn(
-                    "rounded border-2 transition-all",
-                    isSelected ? "border-primary" : "border-border",
-                    soldOut ? "opacity-60" : "cursor-pointer hover:border-primary/60",
+                    "rounded border-2 p-3 transition-all",
+                    qtyInCart > 0 ? "border-primary" : "border-border",
+                    soldOut && "opacity-60",
                   )}>
-                    <button
-                      className="w-full flex items-center justify-between p-3 text-left"
-                      onClick={() => !soldOut && setSelectedTier(isSelected ? null : tier.id)}
-                      disabled={soldOut}
-                    >
+                    <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-bold text-text text-sm">{tier.name}</p>
                         {tier.description && <p className="text-xs text-text-muted">{tier.description}</p>}
@@ -583,57 +597,35 @@ export function EventDetailClient({ id }: { id: string }) {
                       )}>
                         {tier.price === 0 ? "Free" : `${tier.currency} ${tier.price}`}
                       </p>
-                    </button>
+                    </div>
 
-                    {isSelected && user && (
-                      <div className="px-3 pb-3 border-t border-border pt-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-text-muted">Quantity</span>
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => setQty(Math.max(1, qty - 1))}
-                              className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors"
-                            >
-                              <Minus size={12} />
-                            </button>
-                            <span className="font-black text-text w-6 text-center">{qty}</span>
-                            <button
-                              onClick={() => setQty(Math.min(tier.max_per_order, available ?? 99, qty + 1))}
-                              className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors"
-                            >
-                              <Plus size={12} />
-                            </button>
-                          </div>
+                    {user && !soldOut && (
+                      <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-border">
+                        <span className="text-sm text-text-muted">Quantity</span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setCart((c) => ({ ...c, [tier.id]: Math.max(0, (c[tier.id] ?? 0) - 1) }))}
+                            disabled={qtyInCart === 0}
+                            className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors disabled:opacity-40"
+                          >
+                            <Minus size={12} />
+                          </button>
+                          <span className="font-black text-text w-6 text-center">{qtyInCart}</span>
+                          <button
+                            onClick={() => setCart((c) => ({ ...c, [tier.id]: Math.min(maxQty, (c[tier.id] ?? 0) + 1) }))}
+                            disabled={qtyInCart >= maxQty}
+                            className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors disabled:opacity-40"
+                          >
+                            <Plus size={12} />
+                          </button>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-text-muted">Total</span>
-                          <span className="font-black text-text">
-                            {tier.price === 0 ? "Free" : `${tier.currency} ${(tier.price * qty).toFixed(2)}`}
-                          </span>
-                        </div>
-                        <Button
-                          fullWidth
-                          loading={purchaseMutation.isPending || paymentPending}
-                          onClick={() => purchaseMutation.mutate()}
-                        >
-                          {tier.price === 0
-                            ? "Claim Free Ticket"
-                            : paymentPending
-                              ? "Opening payment…"
-                              : `Pay ₦${(tier.price * qty).toLocaleString()}`}
-                        </Button>
-                        {purchaseMutation.isError && (
-                          <p className="text-xs text-error text-center">
-                            {(purchaseMutation.error as any)?.message ?? "Purchase failed"}
-                          </p>
-                        )}
                       </div>
                     )}
 
-                    {isSelected && !user && (
-                      <div className="px-3 pb-3 border-t border-border pt-3">
+                    {!user && (
+                      <div className="mt-2.5 pt-2.5 border-t border-border">
                         <Link href="/login">
-                          <Button fullWidth>Log in to get tickets</Button>
+                          <Button fullWidth size="sm">Log in to get tickets</Button>
                         </Link>
                       </div>
                     )}
@@ -641,6 +633,39 @@ export function EventDetailClient({ id }: { id: string }) {
                 );
               })}
             </div>
+
+            {event?.refund_policy && (
+              <p className="text-xs text-text-muted mt-3">{event.refund_policy}</p>
+            )}
+
+            {cartItems.length > 0 && (
+              <div className="mt-3 p-3 rounded border-2 border-primary bg-primary/5 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-text-muted">
+                    {cartItems.reduce((n, i) => n + i.quantity, 0)} ticket(s)
+                  </span>
+                  <span className="font-black text-text">
+                    {cartTotal === 0 ? "Free" : `₦${cartTotal.toLocaleString()}`}
+                  </span>
+                </div>
+                <Button
+                  fullWidth
+                  loading={purchaseMutation.isPending || paymentPending}
+                  onClick={() => purchaseMutation.mutate()}
+                >
+                  {cartTotal === 0
+                    ? "Claim Free Ticket(s)"
+                    : paymentPending
+                      ? "Opening payment…"
+                      : `Pay ₦${cartTotal.toLocaleString()}`}
+                </Button>
+                {purchaseMutation.isError && (
+                  <p className="text-xs text-error text-center">
+                    {(purchaseMutation.error as any)?.message ?? "Purchase failed"}
+                  </p>
+                )}
+              </div>
+            )}
           </section>
         )}
 

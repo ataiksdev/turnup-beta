@@ -79,10 +79,19 @@ export default function OrganizerDashboardPage() {
             <StatCard icon={CalendarPlus}  label="Total Events"    value={stats.total_events}    color="bg-primary" />
             <StatCard icon={TrendingUp}    label="Published"       value={stats.published_events} color="bg-success" />
             <StatCard icon={Users}         label="Total Attendees" value={stats.total_attendees}  color="bg-[#3B82F6]" />
-            <StatCard icon={DollarSign}    label="Revenue"         value={`$${stats.total_revenue.toLocaleString()}`} color="bg-[#A855F7]" />
+            <StatCard icon={DollarSign}    label="Net Payout"      value={`₦${stats.net_revenue.toLocaleString()}`} color="bg-[#A855F7]" />
           </div>
         ) : null}
       </div>
+
+      {/* Revenue breakdown */}
+      {stats && stats.total_revenue > 0 && (
+        <div className="px-4 mb-6 -mt-2">
+          <p className="text-xs text-text-muted">
+            ₦{stats.total_revenue.toLocaleString()} gross ticket sales · −₦{stats.platform_fee_total.toLocaleString()} platform fee
+          </p>
+        </div>
+      )}
 
       {/* Draft events alert */}
       {stats && stats.draft_events > 0 && (

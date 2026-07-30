@@ -67,6 +67,7 @@ interface FormState {
   cover_image: string;
   tags: string;
   tiers: TierDraft[];
+  refund_policy: string;
 }
 
 const TIMEZONES = [
@@ -206,7 +207,7 @@ function CreateEventPage() {
     start_date: "", end_date: "", timezone: "Africa/Lagos",
     capacity: "", waitlist_enabled: false,
     is_free: true, cover_image: "", tags: "",
-    tiers: [newTier()],
+    tiers: [newTier()], refund_policy: "",
   });
 
   const { data: categories } = useQuery({
@@ -252,6 +253,7 @@ function CreateEventPage() {
       waitlist_enabled: typeof d.waitlist_enabled === "boolean" ? d.waitlist_enabled : f.waitlist_enabled,
       is_free: typeof d.is_free === "boolean" ? d.is_free : f.is_free,
       tags: typeof d.tags === "string" ? d.tags : f.tags,
+      refund_policy: typeof d.refund_policy === "string" ? d.refund_policy : f.refund_policy,
       tiers: Array.isArray(d.tiers)
         ? (d.tiers as Record<string, string>[]).map((t) => ({
             id: uid(),
@@ -383,6 +385,7 @@ function CreateEventPage() {
         waitlist_enabled: form.waitlist_enabled,
         category_id: form.category_id || undefined,
         tags: form.tags.trim() || undefined,
+        refund_policy: (!form.is_free && form.refund_policy.trim()) ? form.refund_policy.trim() : undefined,
         status,
       };
 
@@ -909,6 +912,17 @@ function CreateEventPage() {
               </FieldWrap>
             </div>
           ))}
+
+          <FieldWrap>
+            <Label>Refund Policy (optional)</Label>
+            <Textarea
+              value={form.refund_policy}
+              onChange={set("refund_policy")}
+              placeholder="e.g. Refunds available up to 48h before the event — contact us to request one."
+              rows={3}
+            />
+            <p className="text-[10px] text-text-muted">Shown to buyers before they pay. Refunds themselves are issued manually from your Orders page.</p>
+          </FieldWrap>
         </div>
       )}
 

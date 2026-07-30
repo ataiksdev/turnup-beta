@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.middleware.auth import get_current_admin, get_current_moderator
@@ -17,11 +18,14 @@ from app.schemas.admin import (
     AdminOrderOut,
     AdminUserOut, AdminUserUpdate,
     AIEventDraft,
-    PlatformStats,
+    PlatformFeeOut, PlatformFeeUpdate, PlatformStats,
     ScoutedItemOut, ScoutRunResult, ScoutSourceCreate, ScoutSourceOut, ScoutSourceUpdate,
 )
 from app.services.ai_agent import AIAgentError, draft_event
+from app.services.email import send_refund_email
 from app.services.scout_agent import run_daily_scout
+from app.services.settings import get_platform_settings, set_ticket_fee_percent
+from app.services.tickets import notify_buyer, refund_order
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -42,6 +46,9 @@ async def platform_stats(
     confirmed_revenue_row = (await db.execute(
         select(func.coalesce(func.sum(TicketOrder.total_price), 0.0)).where(TicketOrder.status == "confirmed")
     )).scalar_one()
+    platform_fee_revenue_row = (await db.execute(
+        select(func.coalesce(func.sum(TicketOrder.platform_fee_amount), 0.0)).where(TicketOrder.status == "confirmed")
+    )).scalar_one()
     total_attendees = (await db.execute(select(func.sum(Event.attendees_count)))).scalar_one() or 0
     new_users = (await db.execute(
         select(func.count(User.id)).where(User.created_at >= week_ago, User.is_deleted == False)
@@ -57,10 +64,30 @@ async def platform_stats(
         published_events=published_events,
         total_orders=total_orders,
         confirmed_revenue=float(confirmed_revenue_row),
+        platform_fee_revenue=float(platform_fee_revenue_row),
         total_attendees=total_attendees,
         new_users_this_week=new_users,
         new_events_this_week=new_events,
     )
+
+
+@router.get("/settings/platform-fee", response_model=PlatformFeeOut)
+async def get_platform_fee(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    settings_row = await get_platform_settings(db)
+    return PlatformFeeOut(ticket_fee_percent=settings_row.ticket_fee_percent)
+
+
+@router.patch("/settings/platform-fee", response_model=PlatformFeeOut)
+async def update_platform_fee(
+    payload: PlatformFeeUpdate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    settings_row = await set_ticket_fee_percent(db, payload.ticket_fee_percent)
+    return PlatformFeeOut(ticket_fee_percent=settings_row.ticket_fee_percent)
 
 
 @router.get("/users", response_model=list[AdminUserOut])
@@ -323,6 +350,24 @@ async def delete_category(
     await db.delete(cat)
 
 
+def _admin_order_out(o: TicketOrder) -> AdminOrderOut:
+    return AdminOrderOut(
+        id=o.id,
+        event_id=o.event_id,
+        event_title=o.event.title if o.event else "—",
+        tier_name=o.tier.name if o.tier else "—",
+        buyer_username=o.user.username if o.user else "—",
+        buyer_email=o.user.email if o.user else None,
+        quantity=o.quantity,
+        unit_price=o.unit_price,
+        total_price=o.total_price,
+        platform_fee_amount=o.platform_fee_amount,
+        currency=o.tier.currency if o.tier else "NGN",
+        status=o.status,
+        created_at=o.created_at,
+    )
+
+
 @router.get("/orders", response_model=list[AdminOrderOut])
 async def list_all_orders(
     skip: int = Query(0, ge=0),
@@ -330,7 +375,6 @@ async def list_all_orders(
     _: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy.orm import selectinload
     stmt = (
         select(TicketOrder)
         .options(
@@ -344,23 +388,41 @@ async def list_all_orders(
     )
     result = await db.execute(stmt)
     orders = result.scalars().all()
-    out = []
-    for o in orders:
-        out.append(AdminOrderOut(
-            id=o.id,
-            event_id=o.event_id,
-            event_title=o.event.title if o.event else "—",
-            tier_name=o.tier.name if o.tier else "—",
-            buyer_username=o.user.username if o.user else "—",
-            buyer_email=o.user.email if o.user else None,
-            quantity=o.quantity,
-            unit_price=o.unit_price,
-            total_price=o.total_price,
-            currency=o.tier.currency if o.tier else "NGN",
-            status=o.status,
-            created_at=o.created_at,
-        ))
-    return out
+    return [_admin_order_out(o) for o in orders]
+
+
+@router.post("/orders/{order_id}/refund", response_model=AdminOrderOut)
+async def admin_refund_order(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(TicketOrder)
+        .options(
+            selectinload(TicketOrder.user),
+            selectinload(TicketOrder.event),
+            selectinload(TicketOrder.tier),
+        )
+        .where(TicketOrder.id == order_id)
+    )
+    order = (await db.execute(stmt)).scalar_one_or_none()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.status != "confirmed":
+        raise HTTPException(400, f"Cannot refund an order with status '{order.status}'")
+
+    if not await refund_order(db, order):
+        raise HTTPException(409, "Order was already resolved by another request")
+
+    await notify_buyer(db, order, order.event, kind="refunded")
+    background_tasks.add_task(
+        send_refund_email, to=(order.user.email if order.user else "") or "",
+        event_title=order.event.title, tier_name=order.tier.name if order.tier else "",
+        quantity=order.quantity, total_price=order.total_price,
+    )
+    return _admin_order_out(order)
 
 
 @router.post("/events/draft", response_model=AIEventDraft)
@@ -485,6 +547,29 @@ async def run_scout_now(
 ):
     try:
         summary = await run_daily_scout(db)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return ScoutRunResult(
+        sources_polled=summary.sources_polled,
+        items_seen=summary.items_seen,
+        events_created=summary.events_created,
+        skipped_duplicate=summary.skipped_duplicate,
+        skipped_no_event=summary.skipped_no_event,
+        failed=summary.failed,
+    )
+
+
+@router.post("/scout/sources/{source_id}/run", response_model=ScoutRunResult)
+async def run_scout_source_now(
+    source_id: str,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    source = (await db.execute(select(ScoutSource).where(ScoutSource.id == source_id))).scalar_one_or_none()
+    if not source:
+        raise HTTPException(404, "Source not found")
+    try:
+        summary = await run_daily_scout(db, source_id=source_id)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     return ScoutRunResult(
