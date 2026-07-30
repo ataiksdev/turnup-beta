@@ -8,7 +8,7 @@ import { formatEventDate, formatPrice, cn } from "@/lib/utils";
 import {
   Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf,
   MapPin, Flame, Star, ArrowRight, Tag, Clock,
-  CalendarDays,
+  CalendarDays, Users,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -53,7 +53,16 @@ function HScrollRow({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MiniEventCard({ event }: { event: any }) {
+function networkNote(event: any): string | null {
+  if (event.following_count > 0) {
+    return `${event.following_count} you follow ${event.following_count === 1 ? "is" : "are"} going`;
+  }
+  if (event.following_hosted) return "Hosted by someone you follow";
+  return null;
+}
+
+function MiniEventCard({ event, showNetworkNote }: { event: any; showNetworkNote?: boolean }) {
+  const note = showNetworkNote ? networkNote(event) : null;
   return (
     <Link
       href={`/events/${event.slug}`}
@@ -81,6 +90,12 @@ function MiniEventCard({ event }: { event: any }) {
           <CalendarDays size={9} />
           {formatEventDate(event.start_date)}
         </p>
+        {note && (
+          <p className="text-[10px] text-primary font-bold flex items-center gap-1">
+            <Users size={9} />
+            {note}
+          </p>
+        )}
         <p className="text-[10px] font-bold text-primary">
           {formatPrice(event.is_free, event.price_min, event.price_max)}
         </p>
@@ -104,6 +119,13 @@ export default function ExplorePage() {
     queryKey: ["explore-featured"],
     queryFn: () => eventsApi.featured(4, token ?? undefined),
     staleTime: 60_000,
+  });
+
+  const { data: following } = useQuery({
+    queryKey: ["explore-following"],
+    queryFn: () => eventsApi.following(token!, 12),
+    enabled: !!token,
+    staleTime: 30_000,
   });
 
   const { data: free } = useQuery({
@@ -153,6 +175,16 @@ export default function ExplorePage() {
           <SectionHeader title="Trending Now" href="/search?trending=true" icon={Flame} />
           <HScrollRow>
             {trending!.map((e: any) => <MiniEventCard key={e.id} event={e} />)}
+          </HScrollRow>
+        </section>
+      )}
+
+      {/* ── From your network ────────────────────────────────────────── */}
+      {(following?.length ?? 0) > 0 && (
+        <section className="mt-5">
+          <SectionHeader title="From Your Network" icon={Users} />
+          <HScrollRow>
+            {following!.map((e: any) => <MiniEventCard key={e.id} event={e} showNetworkNote />)}
           </HScrollRow>
         </section>
       )}

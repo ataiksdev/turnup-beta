@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -76,3 +77,15 @@ class User(Base):
     # Relationships — communities
     communities_created = relationship("Community", back_populates="creator", foreign_keys="Community.creator_id")
     community_memberships = relationship("CommunityMember", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def is_verified_organizer(self) -> bool:
+        """Visual trust-badge signal only — never gates any permission.
+
+        Reads the eagerly-loaded organizer_profile relationship if present; returns
+        False (rather than triggering a lazy load, which would crash outside an
+        awaited context) when the relationship wasn't loaded by the query.
+        """
+        if "organizer_profile" in sa_inspect(self).unloaded:
+            return False
+        return bool(self.organizer_profile and self.organizer_profile.is_verified_organizer)

@@ -29,6 +29,12 @@ class OrganizerProfile(Base):
     organizer_bio: Mapped[str | None] = mapped_column(Text)
     website: Mapped[str | None] = mapped_column(String(255))
     is_verified_organizer: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Verification review workflow: none -> pending -> approved | rejected
+    verification_status: Mapped[str] = mapped_column(String(20), default="none")
+    verification_note: Mapped[str | None] = mapped_column(Text)
+    verification_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by_id: Mapped[str | None] = mapped_column(String(36))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="organizer_profile")

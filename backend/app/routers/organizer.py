@@ -16,7 +16,7 @@ from app.models.organizer import (
 from app.models.user import User
 from app.schemas.organizer import (
     DashboardOut, OrganizerBecomeRequest, OrganizerProfileOut, OrganizerProfileUpdate,
-    TemplateCreate, TemplateOut, TemplateUpdate, TicketOrderOut,
+    TemplateCreate, TemplateOut, TemplateUpdate, TicketOrderOut, VerificationRequest,
 )
 from app.schemas.user import UserMe
 from app.services.email import send_refund_email
@@ -80,6 +80,36 @@ async def update_organizer_profile(
         setattr(user.organizer_profile, field, val)
     await db.flush()
     return user.organizer_profile
+
+
+# ── Verification (self-serve application → admin review queue) ───────────────
+
+@router.post("/verification/request", response_model=OrganizerProfileOut)
+async def request_verification(
+    payload: VerificationRequest,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply for the verified-organizer trust badge.
+
+    Purely cosmetic once approved — does not change what the organizer can do;
+    they still go through the normal event-review queue either way.
+    """
+    profile = user.organizer_profile
+    if not profile:
+        raise HTTPException(404, "Organizer profile not found")
+    if profile.is_verified_organizer:
+        raise HTTPException(400, "Already verified")
+    if profile.verification_status == "pending":
+        raise HTTPException(400, "A verification request is already pending review")
+
+    profile.verification_status = "pending"
+    profile.verification_note = payload.note
+    profile.verification_requested_at = datetime.now(timezone.utc)
+    profile.reviewed_by_id = None
+    profile.reviewed_at = None
+    await db.flush()
+    return profile
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────

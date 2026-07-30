@@ -98,6 +98,9 @@ class EventOut(BaseModel):
     review_note: str | None = None
     created_via: str = "manual"
     refund_policy: str | None = None
+    # Only populated by GET /events/following (network-based discovery)
+    following_count: int = 0
+    following_hosted: bool = False
     model_config = {"from_attributes": True}
 
 

@@ -11,6 +11,7 @@ class UserSummary(BaseModel):
     bio: str | None = None
     avatar_url: str | None
     is_verified: bool
+    is_verified_organizer: bool = False
     role: str
     followers_count: int
     events_hosted: int = 0

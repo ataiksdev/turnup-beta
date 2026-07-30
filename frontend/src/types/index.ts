@@ -10,6 +10,7 @@ export interface User {
   location?: string | null;
   website?: string | null;
   is_verified: boolean;
+  is_verified_organizer?: boolean;
   is_active?: boolean;
   followers_count: number;
   following_count: number;
@@ -25,6 +26,20 @@ export interface User {
   onboarding_completed?: boolean;
   created_at?: string;
   is_following?: boolean;
+  organizer_profile?: OrganizerProfile | null;
+}
+
+export interface OrganizerProfile {
+  id: string;
+  organization_name: string | null;
+  organizer_bio: string | null;
+  website: string | null;
+  is_verified_organizer: boolean;
+  verification_status: "none" | "pending" | "approved" | "rejected";
+  verification_note: string | null;
+  verification_requested_at: string | null;
+  reviewed_at: string | null;
+  created_at: string;
 }
 
 export interface Category {
@@ -80,6 +95,8 @@ export interface Event {
   review_note?: string | null;
   created_via?: "manual" | "ai_agent";
   refund_policy?: string | null;
+  following_count?: number;
+  following_hosted?: boolean;
 }
 
 export interface Comment {
@@ -95,7 +112,8 @@ export interface Comment {
 export interface Notification {
   id: string;
   type: "follow" | "event_invite" | "event_reminder" | "comment" | "going" | "event_update"
-    | "ticket_confirmed" | "ticket_refunded" | "ticket_cancelled";
+    | "ticket_confirmed" | "ticket_refunded" | "ticket_cancelled"
+    | "organizer_verified" | "organizer_verification_rejected";
   title: string;
   body?: string | null;
   reference_id?: string | null;

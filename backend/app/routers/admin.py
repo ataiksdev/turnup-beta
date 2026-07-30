@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.middleware.auth import get_current_admin, get_current_moderator
 from app.models.event import Category, Event
-from app.models.organizer import TicketOrder, TicketTier
+from app.models.organizer import OrganizerProfile, TicketOrder, TicketTier
 from app.models.scout import ScoutedItem, ScoutSource
 from app.models.social import Notification
 from app.models.user import User
@@ -16,6 +16,7 @@ from app.schemas.admin import (
     AdminCategoryCreate, AdminCategoryOut, AdminCategoryUpdate,
     AdminEventOut, AdminEventReject, AdminEventUpdate,
     AdminOrderOut,
+    AdminOrganizerReject, AdminOrganizerVerificationOut,
     AdminUserOut, AdminUserUpdate,
     AIEventDraft,
     PlatformFeeOut, PlatformFeeUpdate, PlatformStats,
@@ -56,6 +57,9 @@ async def platform_stats(
     new_events = (await db.execute(
         select(func.count(Event.id)).where(Event.created_at >= week_ago)
     )).scalar_one()
+    pending_verifications = (await db.execute(
+        select(func.count(OrganizerProfile.id)).where(OrganizerProfile.verification_status == "pending")
+    )).scalar_one()
 
     return PlatformStats(
         total_users=total_users,
@@ -68,6 +72,7 @@ async def platform_stats(
         total_attendees=total_attendees,
         new_users_this_week=new_users,
         new_events_this_week=new_events,
+        pending_verifications=pending_verifications,
     )
 
 
@@ -88,6 +93,115 @@ async def update_platform_fee(
 ):
     settings_row = await set_ticket_fee_percent(db, payload.ticket_fee_percent)
     return PlatformFeeOut(ticket_fee_percent=settings_row.ticket_fee_percent)
+
+
+# ── Organizer verification review queue ─────────────────────────────────────
+
+def _verification_out(p: OrganizerProfile) -> AdminOrganizerVerificationOut:
+    return AdminOrganizerVerificationOut(
+        user_id=p.user_id,
+        username=p.user.username,
+        full_name=p.user.full_name,
+        avatar_url=p.user.avatar_url,
+        organization_name=p.organization_name,
+        organizer_bio=p.organizer_bio,
+        website=p.website,
+        events_hosted=p.user.events_hosted,
+        is_verified_organizer=p.is_verified_organizer,
+        verification_status=p.verification_status,
+        verification_note=p.verification_note,
+        verification_requested_at=p.verification_requested_at,
+        reviewed_at=p.reviewed_at,
+        profile_created_at=p.created_at,
+    )
+
+
+@router.get("/organizers/verification-queue", response_model=list[AdminOrganizerVerificationOut])
+async def list_verification_queue(
+    status: str = Query("pending"),
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(OrganizerProfile)
+        .options(selectinload(OrganizerProfile.user))
+        .where(OrganizerProfile.verification_status == status)
+        .order_by(OrganizerProfile.verification_requested_at.asc())
+    )
+    profiles = (await db.execute(stmt)).scalars().all()
+    return [_verification_out(p) for p in profiles]
+
+
+@router.post("/organizers/{user_id}/verify", response_model=AdminOrganizerVerificationOut)
+async def approve_organizer_verification(
+    user_id: str,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (await db.execute(
+        select(OrganizerProfile).options(selectinload(OrganizerProfile.user))
+        .where(OrganizerProfile.user_id == user_id)
+    )).scalar_one_or_none()
+    if not profile:
+        raise HTTPException(404, "Organizer profile not found")
+    if profile.is_verified_organizer:
+        raise HTTPException(400, "Already verified")
+
+    profile.is_verified_organizer = True
+    profile.verification_status = "approved"
+    profile.verification_note = None
+    profile.reviewed_by_id = admin.id
+    profile.reviewed_at = datetime.now(timezone.utc)
+
+    db.add(Notification(
+        id=str(uuid.uuid4()),
+        user_id=profile.user_id,
+        type="organizer_verified",
+        title="You're a verified organizer!",
+        body="Your account now shows the verified badge on your profile, events, and communities.",
+        reference_id=profile.user_id,
+        reference_type="organizer_verification",
+        actor_id=admin.id,
+    ))
+    await db.flush()
+    await db.refresh(profile)
+    return _verification_out(profile)
+
+
+@router.post("/organizers/{user_id}/reject-verification", response_model=AdminOrganizerVerificationOut)
+async def reject_organizer_verification(
+    user_id: str,
+    body: AdminOrganizerReject,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = (await db.execute(
+        select(OrganizerProfile).options(selectinload(OrganizerProfile.user))
+        .where(OrganizerProfile.user_id == user_id)
+    )).scalar_one_or_none()
+    if not profile:
+        raise HTTPException(404, "Organizer profile not found")
+    if profile.verification_status != "pending":
+        raise HTTPException(400, f"Cannot reject a request with status '{profile.verification_status}'")
+
+    profile.verification_status = "rejected"
+    profile.verification_note = body.note
+    profile.reviewed_by_id = admin.id
+    profile.reviewed_at = datetime.now(timezone.utc)
+
+    db.add(Notification(
+        id=str(uuid.uuid4()),
+        user_id=profile.user_id,
+        type="organizer_verification_rejected",
+        title="Your verification request needs changes",
+        body=body.note,
+        reference_id=profile.user_id,
+        reference_type="organizer_verification",
+        actor_id=admin.id,
+    ))
+    await db.flush()
+    await db.refresh(profile)
+    return _verification_out(profile)
 
 
 @router.get("/users", response_model=list[AdminUserOut])

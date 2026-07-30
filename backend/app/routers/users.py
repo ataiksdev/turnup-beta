@@ -55,7 +55,10 @@ async def get_profile(
     db: AsyncSession = Depends(get_db),
     me: User | None = Depends(get_optional_user),
 ):
-    result = await db.execute(select(User).where(User.username == username))
+    result = await db.execute(
+        select(User).options(selectinload(User.organizer_profile))
+        .where(User.username == username)
+    )
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not found")
@@ -85,6 +88,7 @@ async def get_profile(
         "events_hosted": hosted_count,
         "avg_rating": avg_rating,
         "review_count": review_count,
+        "organizer_profile": user.organizer_profile,
     }
 
 

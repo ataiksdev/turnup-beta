@@ -1,6 +1,6 @@
 import type {
   Category, Comment, Event, EventFilters, FeedItem,
-  Notification, Token, User,
+  Notification, OrganizerProfile, Token, User,
 } from "@/types";
 
 export interface TicketTierDetail {
@@ -170,6 +170,9 @@ export const eventsApi = {
 
   forYou: (limit = 20, token?: string) =>
     request<Event[]>(`/events/for-you?limit=${limit}`, {}, token),
+
+  following: (token: string, limit = 20) =>
+    request<Event[]>(`/events/following?limit=${limit}`, {}, token),
 
   get: (idOrSlug: string, token?: string) =>
     request<Event>(`/events/${idOrSlug}`, {}, token),
@@ -374,6 +377,11 @@ export const organizerApi = {
 
   removeCohost: (token: string, eventId: string, cohostUserId: string) =>
     request<void>(`/events/${eventId}/cohosts/${cohostUserId}`, { method: "DELETE" }, token),
+
+  requestVerification: (token: string, note?: string) =>
+    request<OrganizerProfile>("/organizer/verification/request", {
+      method: "POST", body: JSON.stringify({ note: note || undefined }),
+    }, token),
 };
 
 // ── Series ─────────────────────────────────────────────────────────────────────
@@ -513,10 +521,20 @@ export interface PlatformStats {
   published_events: number; total_orders: number; confirmed_revenue: number;
   platform_fee_revenue: number;
   total_attendees: number; new_users_this_week: number; new_events_this_week: number;
+  pending_verifications: number;
 }
 
 export interface PlatformFee {
   ticket_fee_percent: number;
+}
+
+export interface AdminOrganizerVerification {
+  user_id: string; username: string; full_name: string | null; avatar_url: string | null;
+  organization_name: string | null; organizer_bio: string | null; website: string | null;
+  events_hosted: number; is_verified_organizer: boolean;
+  verification_status: "none" | "pending" | "approved" | "rejected";
+  verification_note: string | null; verification_requested_at: string | null;
+  reviewed_at: string | null; profile_created_at: string;
 }
 
 export const adminApi = {
@@ -598,6 +616,17 @@ export const adminApi = {
 
   refundOrder: (token: string, orderId: string) =>
     request<AdminOrderOut>(`/admin/orders/${orderId}/refund`, { method: "POST" }, token),
+
+  verificationQueue: (token: string, status = "pending") =>
+    request<AdminOrganizerVerification[]>(`/admin/organizers/verification-queue?status=${status}`, {}, token),
+
+  approveVerification: (token: string, userId: string) =>
+    request<AdminOrganizerVerification>(`/admin/organizers/${userId}/verify`, { method: "POST" }, token),
+
+  rejectVerification: (token: string, userId: string, note: string) =>
+    request<AdminOrganizerVerification>(`/admin/organizers/${userId}/reject-verification`, {
+      method: "POST", body: JSON.stringify({ note }),
+    }, token),
 
   scoutSources: (token: string) =>
     request<ScoutSourceOut[]>("/admin/scout/sources", {}, token),

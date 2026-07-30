@@ -28,7 +28,7 @@ def _slugify(name: str, uid: str) -> str:
 
 def _load_community():
     return [
-        selectinload(Community.creator),
+        selectinload(Community.creator).selectinload(User.organizer_profile),
         selectinload(Community.category),
         selectinload(Community.members).selectinload(CommunityMember.user),
     ]
@@ -58,7 +58,7 @@ def _serialize(
         "created_at": community.created_at,
         "is_member": my_membership is not None,
         "member_role": my_membership.role if my_membership else None,
-        "is_verified_community": community.creator.role == "organizer",
+        "is_verified_community": community.creator.is_verified_organizer,
         "invite_token": community.invite_token if (community.is_private and is_admin) else None,
     }
 

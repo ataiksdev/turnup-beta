@@ -48,6 +48,11 @@ async def _run_migrations(conn):
         ("events", "refund_policy", "TEXT"),
         ("ticket_orders", "platform_fee_percent", "FLOAT"),
         ("ticket_orders", "platform_fee_amount", "FLOAT"),
+        ("organizer_profiles", "verification_status", "VARCHAR(20) NOT NULL DEFAULT 'none'"),
+        ("organizer_profiles", "verification_note", "TEXT"),
+        ("organizer_profiles", "verification_requested_at", "DATETIME"),
+        ("organizer_profiles", "reviewed_by_id", "VARCHAR(36)"),
+        ("organizer_profiles", "reviewed_at", "DATETIME"),
     ]
     for table, column, definition in new_columns:
         try:

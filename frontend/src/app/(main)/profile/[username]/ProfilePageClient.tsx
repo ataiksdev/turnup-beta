@@ -116,7 +116,12 @@ export default function ProfilePage() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute -bottom-10 left-4">
           <div className="border-4 border-bg rounded-full shadow-brutal">
-            <Avatar src={profile.avatar_url} name={displayName(profile)} size="xl" verified={profile.is_verified} />
+            <Avatar
+              src={profile.avatar_url}
+              name={displayName(profile)}
+              size="xl"
+              verified={profile.is_verified || !!profile.organizer_profile?.is_verified_organizer}
+            />
           </div>
         </div>
       </div>
@@ -127,8 +132,11 @@ export default function ProfilePage() {
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-black text-text">{displayName(profile)}</h1>
             {profile.role === "organizer" && (
-              <span className="px-2 py-0.5 rounded border border-primary/40 bg-primary/10 text-[10px] font-black text-primary uppercase tracking-widest">
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-primary/40 bg-primary/10 text-[10px] font-black text-primary uppercase tracking-widest">
                 Organizer
+                {profile.organizer_profile?.is_verified_organizer && (
+                  <CheckCircle2 size={11} className="fill-primary text-white" aria-hidden />
+                )}
               </span>
             )}
           </div>

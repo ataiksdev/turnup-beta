@@ -44,7 +44,10 @@ def _slugify(text: str, uid: str) -> str:
 
 
 def _load():
-    return [selectinload(Event.host), selectinload(Event.category)]
+    return [
+        selectinload(Event.host).selectinload(User.organizer_profile),
+        selectinload(Event.category),
+    ]
 
 
 def _serialize(event: Event, is_saved: bool = False,
@@ -414,6 +417,56 @@ async def for_you_events(
     return result
 
 
+@router.get("/following", response_model=list[EventOut])
+async def following_events(
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Network-based discovery: upcoming events that people you follow are
+    attending or hosting. A separate, unblended surface from /for-you — built
+    directly on the follow graph rather than any scoring model."""
+    now = datetime.now(timezone.utc)
+
+    following_ids = (await db.execute(
+        select(Follow.following_id).where(Follow.follower_id == user.id)
+    )).scalars().all()
+    if not following_ids:
+        return []
+
+    attendee_rows = (await db.execute(
+        select(EventAttendee.event_id, func.count(func.distinct(EventAttendee.user_id)))
+        .where(EventAttendee.user_id.in_(following_ids))
+        .group_by(EventAttendee.event_id)
+    )).all()
+    following_counts = {row[0]: row[1] for row in attendee_rows}
+
+    hosted_ids = set((await db.execute(
+        select(Event.id).where(Event.host_id.in_(following_ids), Event.status == "published")
+    )).scalars().all())
+
+    candidate_ids = set(following_counts) | hosted_ids
+    if not candidate_ids:
+        return []
+
+    stmt = (
+        select(Event).options(*_load())
+        .where(Event.id.in_(candidate_ids), Event.status == "published", Event.start_date > now)
+        .order_by(Event.start_date.asc())
+        .limit(limit)
+    )
+    events = (await db.execute(stmt)).scalars().all()
+
+    result = []
+    for e in events:
+        saved, att, waitlisted = await _user_state(e.id, user, db)
+        data = _serialize(e, saved, att, waitlisted)
+        data["following_count"] = following_counts.get(e.id, 0)
+        data["following_hosted"] = e.id in hosted_ids
+        result.append(data)
+    return result
+
+
 @router.post("/webhooks/paystack", status_code=200)
 async def paystack_webhook(
     request: Request,
@@ -507,6 +560,7 @@ async def get_event(
         "id": h.id, "username": h.username, "full_name": h.full_name,
         "display_name": h.display_name, "bio": h.bio,
         "avatar_url": h.avatar_url, "is_verified": h.is_verified,
+        "is_verified_organizer": h.is_verified_organizer,
         "role": h.role, "followers_count": h.followers_count,
         "events_hosted": host_events_hosted,
         "avg_rating": host_avg_rating, "review_count": host_review_count,

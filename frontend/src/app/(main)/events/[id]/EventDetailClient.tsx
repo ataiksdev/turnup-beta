@@ -475,7 +475,12 @@ export function EventDetailClient({ id }: { id: string }) {
           aria-label={`View ${displayName(event.host)}'s profile`}
         >
           <div className="flex items-center gap-3">
-            <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="md" verified={event.host.is_verified} />
+            <Avatar
+              src={event.host.avatar_url}
+              name={displayName(event.host)}
+              size="md"
+              verified={event.host.is_verified || !!event.host.is_verified_organizer}
+            />
             <div className="flex-1 min-w-0">
               <p className="text-xs text-text-muted">Hosted by</p>
               <p className="text-sm font-semibold text-text">{displayName(event.host)}</p>
