@@ -78,6 +78,12 @@ class TicketOrder(Base):
     # Shared across every row created by one checkout call (identifies a retried/resubmitted
     # cart, not a single tier line) -- see services/tickets.py's checkout idempotency replay.
     idempotency_key: Mapped[str | None] = mapped_column(String(64), index=True)
+    # Snapshotted at confirmation time from PlatformSettings.ticket_fee_percent -- deliberately
+    # frozen per-order so a later admin rate change never rewrites the economics of past orders.
+    # Zero for free tickets (nothing to take a cut of). Deducted from the organizer's payout;
+    # the buyer is never charged more than total_price.
+    platform_fee_percent: Mapped[float | None] = mapped_column(Float)
+    platform_fee_amount: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="ticket_orders")

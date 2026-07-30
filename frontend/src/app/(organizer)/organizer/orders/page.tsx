@@ -199,6 +199,12 @@ export default function OrganizerOrdersPage() {
                 </p>
               </div>
 
+              {!!order.platform_fee_amount && (
+                <p className="text-[10px] text-text-muted -mt-2">
+                  −{formatNGN(order.platform_fee_amount)} platform fee · net {formatNGN(order.total_price - order.platform_fee_amount)}
+                </p>
+              )}
+
               <div className="flex items-center justify-between">
                 <p className="text-[10px] text-text-muted uppercase tracking-widest">
                   {timeAgo(order.created_at)}

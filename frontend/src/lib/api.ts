@@ -283,6 +283,8 @@ export interface OrganizerDashboard {
   draft_events: number;
   total_attendees: number;
   total_revenue: number;
+  platform_fee_total: number;
+  net_revenue: number;
   pending_cohost_invites: number;
 }
 
@@ -299,6 +301,7 @@ export interface OrganizerOrder {
   id: string; event_id: string; tier_id: string; tier_name: string;
   buyer_username: string; buyer_email: string;
   quantity: number; unit_price: number; total_price: number;
+  platform_fee_amount: number | null;
   status: string; created_at: string;
 }
 
@@ -501,18 +504,32 @@ export interface AdminOrderOut {
   id: string; event_id: string; event_title: string; tier_name: string;
   buyer_username: string; buyer_email: string | null;
   quantity: number; unit_price: number; total_price: number;
+  platform_fee_amount: number | null;
   currency: string; status: string; created_at: string;
 }
 
 export interface PlatformStats {
   total_users: number; total_organizers: number; total_events: number;
   published_events: number; total_orders: number; confirmed_revenue: number;
+  platform_fee_revenue: number;
   total_attendees: number; new_users_this_week: number; new_events_this_week: number;
+}
+
+export interface PlatformFee {
+  ticket_fee_percent: number;
 }
 
 export const adminApi = {
   stats: (token: string) =>
     request<PlatformStats>("/admin/stats", {}, token),
+
+  platformFee: (token: string) =>
+    request<PlatformFee>("/admin/settings/platform-fee", {}, token),
+
+  updatePlatformFee: (token: string, ticketFeePercent: number) =>
+    request<PlatformFee>("/admin/settings/platform-fee", {
+      method: "PATCH", body: JSON.stringify({ ticket_fee_percent: ticketFeePercent }),
+    }, token),
 
   users: (token: string, params?: { q?: string; role?: string; skip?: number }) => {
     const qs = new URLSearchParams();

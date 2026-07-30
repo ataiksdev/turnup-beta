@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.event import Event
 from app.models.organizer import TicketOrder, TicketTier
 from app.models.social import Notification
+from app.services.settings import get_platform_settings
 
 _NOTIFICATION_TITLES = {
     "confirmed": "You're going to {title}!",
@@ -47,7 +48,12 @@ async def release_inventory(db: AsyncSession, tier_id: str, qty: int) -> None:
 async def confirm_order(db: AsyncSession, order_id: str, payment_channel: str | None) -> TicketOrder | None:
     """Atomic pending->confirmed flip. Returns the order only if THIS call flipped it —
     the shared idempotency primitive for verify-payment and the webhook, so whichever of
-    the two arrives first wins and the other is a clean no-op (no double email/notification)."""
+    the two arrives first wins and the other is a clean no-op (no double email/notification).
+
+    Also snapshots the platform fee onto the order: the fee rate in effect *right now* is
+    frozen onto this order permanently, so a later admin rate change never retroactively
+    rewrites the economics of an order that already happened. Free tickets get a zero fee —
+    there's no money to take a cut of."""
     ticket_code = str(uuid.uuid4())
     result = await db.execute(
         update(TicketOrder)
@@ -56,7 +62,18 @@ async def confirm_order(db: AsyncSession, order_id: str, payment_channel: str | 
     )
     if result.rowcount == 0:
         return None
-    return (await db.execute(select(TicketOrder).where(TicketOrder.id == order_id))).scalar_one()
+    order = (await db.execute(select(TicketOrder).where(TicketOrder.id == order_id))).scalar_one()
+
+    fee_percent = 0.0
+    fee_amount = 0.0
+    if order.total_price > 0:
+        platform_settings = await get_platform_settings(db)
+        fee_percent = platform_settings.ticket_fee_percent
+        fee_amount = round(order.total_price * fee_percent / 100, 2)
+    order.platform_fee_percent = fee_percent
+    order.platform_fee_amount = fee_amount
+    await db.flush()
+    return order
 
 
 async def cancel_order(db: AsyncSession, order: TicketOrder, reason: str) -> bool:

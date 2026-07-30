@@ -50,6 +50,9 @@ function OrderRow({ order, onRefunded }: { order: AdminOrderOut; onRefunded: (or
       <div className="text-xs text-text-muted space-y-0.5">
         <p>@{order.buyer_username}{order.buyer_email ? ` · ${order.buyer_email}` : ""}</p>
         <p>{order.tier_name} · {order.quantity} × ₦{order.unit_price.toLocaleString("en-NG")} = <span className="font-black text-text-primary">₦{order.total_price.toLocaleString("en-NG")}</span></p>
+        {!!order.platform_fee_amount && (
+          <p>Turnup fee: ₦{order.platform_fee_amount.toLocaleString("en-NG")}</p>
+        )}
       </div>
       <div className="flex items-center justify-between">
         <p className="text-xs text-text-muted">{timeAgo(order.created_at)}</p>

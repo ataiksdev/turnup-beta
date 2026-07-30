@@ -119,6 +119,17 @@ async def organizer_dashboard(
     )
     total_revenue = float(rev_result.scalar() or 0)
 
+    fee_result = await db.execute(
+        select(func.sum(TicketOrder.platform_fee_amount))
+        .where(
+            TicketOrder.event_id.in_(
+                select(Event.id).where(Event.host_id == user.id)
+            ),
+            TicketOrder.status == "confirmed",
+        )
+    )
+    platform_fee_total = float(fee_result.scalar() or 0)
+
     # Pending co-host invites for the organizer's events
     pending_result = await db.execute(
         select(func.count(EventCoHost.id))
@@ -135,6 +146,8 @@ async def organizer_dashboard(
         draft_events=drafts,
         total_attendees=total_attendees,
         total_revenue=total_revenue,
+        platform_fee_total=platform_fee_total,
+        net_revenue=total_revenue - platform_fee_total,
         pending_cohost_invites=pending_cohosts,
     )
 
@@ -301,7 +314,8 @@ async def organizer_orders(
             "tier_name": o.tier.name, "buyer_username": o.user.username,
             "buyer_email": o.user.email,
             "quantity": o.quantity, "unit_price": o.unit_price,
-            "total_price": o.total_price, "status": o.status,
+            "total_price": o.total_price, "platform_fee_amount": o.platform_fee_amount,
+            "status": o.status,
             "created_at": o.created_at,
         }
         for o in orders

@@ -18,12 +18,13 @@ from app.schemas.admin import (
     AdminOrderOut,
     AdminUserOut, AdminUserUpdate,
     AIEventDraft,
-    PlatformStats,
+    PlatformFeeOut, PlatformFeeUpdate, PlatformStats,
     ScoutedItemOut, ScoutRunResult, ScoutSourceCreate, ScoutSourceOut, ScoutSourceUpdate,
 )
 from app.services.ai_agent import AIAgentError, draft_event
 from app.services.email import send_refund_email
 from app.services.scout_agent import run_daily_scout
+from app.services.settings import get_platform_settings, set_ticket_fee_percent
 from app.services.tickets import notify_buyer, refund_order
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -45,6 +46,9 @@ async def platform_stats(
     confirmed_revenue_row = (await db.execute(
         select(func.coalesce(func.sum(TicketOrder.total_price), 0.0)).where(TicketOrder.status == "confirmed")
     )).scalar_one()
+    platform_fee_revenue_row = (await db.execute(
+        select(func.coalesce(func.sum(TicketOrder.platform_fee_amount), 0.0)).where(TicketOrder.status == "confirmed")
+    )).scalar_one()
     total_attendees = (await db.execute(select(func.sum(Event.attendees_count)))).scalar_one() or 0
     new_users = (await db.execute(
         select(func.count(User.id)).where(User.created_at >= week_ago, User.is_deleted == False)
@@ -60,10 +64,30 @@ async def platform_stats(
         published_events=published_events,
         total_orders=total_orders,
         confirmed_revenue=float(confirmed_revenue_row),
+        platform_fee_revenue=float(platform_fee_revenue_row),
         total_attendees=total_attendees,
         new_users_this_week=new_users,
         new_events_this_week=new_events,
     )
+
+
+@router.get("/settings/platform-fee", response_model=PlatformFeeOut)
+async def get_platform_fee(
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    settings_row = await get_platform_settings(db)
+    return PlatformFeeOut(ticket_fee_percent=settings_row.ticket_fee_percent)
+
+
+@router.patch("/settings/platform-fee", response_model=PlatformFeeOut)
+async def update_platform_fee(
+    payload: PlatformFeeUpdate,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    settings_row = await set_ticket_fee_percent(db, payload.ticket_fee_percent)
+    return PlatformFeeOut(ticket_fee_percent=settings_row.ticket_fee_percent)
 
 
 @router.get("/users", response_model=list[AdminUserOut])
@@ -337,6 +361,7 @@ def _admin_order_out(o: TicketOrder) -> AdminOrderOut:
         quantity=o.quantity,
         unit_price=o.unit_price,
         total_price=o.total_price,
+        platform_fee_amount=o.platform_fee_amount,
         currency=o.tier.currency if o.tier else "NGN",
         status=o.status,
         created_at=o.created_at,

@@ -216,7 +216,9 @@ class DashboardOut(BaseModel):
     published_events: int
     draft_events: int
     total_attendees: int
-    total_revenue: float
+    total_revenue: float  # gross ticket sales, before the platform fee
+    platform_fee_total: float
+    net_revenue: float  # total_revenue - platform_fee_total -- what you actually get paid
     pending_cohost_invites: int
 
 
