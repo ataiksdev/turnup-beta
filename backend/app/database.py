@@ -44,6 +44,8 @@ async def _run_migrations(conn):
         ("events", "reviewed_by_id", "VARCHAR(36)"),
         ("events", "reviewed_at", "DATETIME"),
         ("events", "created_via", "VARCHAR(20) NOT NULL DEFAULT 'manual'"),
+        ("ticket_orders", "idempotency_key", "VARCHAR(64)"),
+        ("events", "refund_policy", "TEXT"),
     ]
     for table, column, definition in new_columns:
         try:

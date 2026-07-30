@@ -19,8 +19,13 @@ export interface TicketOrder {
   event_date?: string; event_city?: string; event_address?: string; event_venue?: string;
 }
 
-export interface PaymentInit {
-  order_id: string;
+export interface CheckoutItem {
+  tier_id: string;
+  quantity: number;
+}
+
+export interface CheckoutInit {
+  order_ids: string[];
   payment_reference: string;
   paystack_public_key: string;
   amount_kobo: number;
@@ -212,13 +217,13 @@ export const eventsApi = {
   analytics: (token: string, eventId: string) =>
     request<EventAnalytics>(`/events/${eventId}/analytics`, {}, token),
 
-  initPayment: (token: string, eventId: string, tierId: string, quantity: number) =>
-    request<PaymentInit>(`/events/${eventId}/tickets/${tierId}/purchase`, {
-      method: "POST", body: JSON.stringify({ quantity }),
+  checkout: (token: string, eventId: string, items: CheckoutItem[], idempotencyKey?: string) =>
+    request<CheckoutInit>(`/events/${eventId}/tickets/checkout`, {
+      method: "POST", body: JSON.stringify({ items, idempotency_key: idempotencyKey }),
     }, token),
 
-  verifyPayment: (token: string, eventId: string, tierId: string, reference: string) =>
-    request<TicketOrder>(`/events/${eventId}/tickets/${tierId}/verify-payment`, {
+  verifyPayment: (token: string, eventId: string, reference: string) =>
+    request<TicketOrder[]>(`/events/${eventId}/tickets/verify-payment`, {
       method: "POST", body: JSON.stringify({ reference }),
     }, token),
 
@@ -338,6 +343,9 @@ export const organizerApi = {
     if (eventId) params.set("event_id", eventId);
     return request<OrganizerOrder[]>(`/organizer/orders?${params}`, {}, token);
   },
+
+  refundOrder: (token: string, orderId: string) =>
+    request<TicketOrder>(`/organizer/orders/${orderId}/refund`, { method: "POST" }, token),
 
   // Templates
   listTemplates: (token: string) =>
@@ -570,6 +578,9 @@ export const adminApi = {
     if (params?.skip) qs.set("skip", String(params.skip));
     return request<AdminOrderOut[]>(`/admin/orders?${qs}`, {}, token);
   },
+
+  refundOrder: (token: string, orderId: string) =>
+    request<AdminOrderOut>(`/admin/orders/${orderId}/refund`, { method: "POST" }, token),
 
   scoutSources: (token: string) =>
     request<ScoutSourceOut[]>("/admin/scout/sources", {}, token),

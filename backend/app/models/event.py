@@ -64,8 +64,9 @@ class Event(Base):
     is_free: Mapped[bool] = mapped_column(Boolean, default=True)
     price_min: Mapped[float | None] = mapped_column(Float)
     price_max: Mapped[float | None] = mapped_column(Float)
-    currency: Mapped[str] = mapped_column(String(3), default="USD")
+    currency: Mapped[str] = mapped_column(String(3), default="NGN")
     ticket_url: Mapped[str | None] = mapped_column(String(500))
+    refund_policy: Mapped[str | None] = mapped_column(Text)
 
     capacity: Mapped[int | None] = mapped_column(Integer)
     attendees_count: Mapped[int] = mapped_column(Integer, default=0)

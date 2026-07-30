@@ -7,7 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { timeAgo, displayName } from "@/lib/utils";
 import Link from "next/link";
-import { Bell, Check, UserPlus, PartyPopper, MessageCircle, Clock, Megaphone, Mail, Eye, Zap } from "lucide-react";
+import { Bell, Check, UserPlus, PartyPopper, MessageCircle, Clock, Megaphone, Mail, Eye, Zap, Ticket, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -168,8 +168,9 @@ export default function ActivityPage() {
             ) : notifications && notifications.length > 0 ? (
               notifications.map((n) => {
                 const href =
-                  n.reference_type === "event" ? `/events/${n.reference_id}` :
-                  n.reference_type === "user"  ? `/profile/${n.actor?.username}` :
+                  n.reference_type === "event"       ? `/events/${n.reference_id}` :
+                  n.reference_type === "user"        ? `/profile/${n.actor?.username}` :
+                  n.reference_type === "ticket_order" ? `/tickets/${n.reference_id}` :
                   null;
 
                 const isCoHostInvite = n.type === "event_invite" && n.reference_id;
@@ -192,6 +193,8 @@ export default function ActivityPage() {
                       {n.type === "event_reminder" && <Clock         size={16} aria-hidden />}
                       {n.type === "event_update"   && <Megaphone     size={16} aria-hidden />}
                       {n.type === "event_invite"   && <Mail          size={16} aria-hidden />}
+                      {n.type === "ticket_confirmed" && <Ticket      size={16} aria-hidden />}
+                      {(n.type === "ticket_refunded" || n.type === "ticket_cancelled") && <RotateCcw size={16} aria-hidden />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-text leading-snug">{n.title}</p>

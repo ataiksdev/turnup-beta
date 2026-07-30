@@ -1,13 +1,16 @@
+import hashlib
+import hmac
 import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.middleware.auth import get_current_event_creator, get_current_organizer, get_current_user, get_optional_user
 from app.models.event import Category, Event, EventAttendee, EventSave
@@ -21,13 +24,15 @@ from app.schemas.event import (
     AttendRequest, CategoryOut, EventCreate, EventDetail, EventOut, EventUpdate,
 )
 from app.schemas.organizer import (
-    AnalyticsOut, CheckInRequest, CheckInResult, CoHostInviteRequest, CoHostOut,
-    CoHostRespondRequest, DailyViewOut, PaymentInitOut, PurchaseTicketRequest,
+    AnalyticsOut, CheckInRequest, CheckInResult, CheckoutInitOut, CheckoutRequest,
+    CoHostInviteRequest, CoHostOut, CoHostRespondRequest, DailyViewOut,
     ReviewCreate, ReviewOut, TicketOrderOut, TicketTierCreate, TicketTierOut,
     TicketTierUpdate, VerifyPaymentRequest, WaitlistEntryOut, WaitlistNotifyRequest,
     WaitlistStatusOut,
 )
-from app.services.paystack import initialize_transaction, verify_transaction
+from app.services.email import send_ticket_email
+from app.services.paystack import PaystackConfigError, initialize_transaction, verify_transaction
+from app.services.tickets import confirm_order, notify_buyer, reserve_inventory
 from app.schemas.user import UserSummary
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -67,7 +72,7 @@ def _serialize(event: Event, is_saved: bool = False,
         "is_saved": is_saved, "attendance_status": attendance_status,
         "is_waitlisted": is_waitlisted,
         "review_status": event.review_status, "review_note": event.review_note,
-        "created_via": event.created_via,
+        "created_via": event.created_via, "refund_policy": event.refund_policy,
     }
 
 
@@ -407,6 +412,53 @@ async def for_you_events(
             result.append(_serialize(e, sv, at, wl))
 
     return result
+
+
+@router.post("/webhooks/paystack", status_code=200)
+async def paystack_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Server-side payment reconciliation, independent of the buyer's browser. If a buyer
+    pays but their callback never fires (closed tab, crash, flaky network), this is what
+    still confirms the order. Idempotent against verify-payment via confirm_order()'s atomic
+    pending->confirmed flip -- whichever of the two arrives first wins, the other is a no-op."""
+    raw = await request.body()
+    if not settings.paystack_secret_key:
+        raise HTTPException(503, "Paystack not configured")
+    expected = hmac.new(settings.paystack_secret_key.encode(), raw, hashlib.sha512).hexdigest()
+    if not hmac.compare_digest(expected, request.headers.get("x-paystack-signature", "")):
+        raise HTTPException(401, "Invalid signature")
+
+    payload = json.loads(raw)
+    if payload.get("event") != "charge.success":
+        return {"status": "ignored"}
+
+    reference = payload.get("data", {}).get("reference")
+    orders = (await db.execute(select(TicketOrder).where(
+        TicketOrder.payment_reference == reference))).scalars().all()
+    if not orders:
+        return {"status": "unknown_reference"}
+
+    channel = payload["data"].get("channel")
+    for order in orders:
+        row = await confirm_order(db, order.id, channel)
+        if not row:
+            continue  # already confirmed via the client's verify-payment call
+        event = (await db.execute(select(Event).where(Event.id == row.event_id))).scalar_one_or_none()
+        t = await _get_tier(row.tier_id, row.event_id, db)
+        buyer = (await db.execute(select(User).where(User.id == row.user_id))).scalar_one_or_none()
+        await _auto_rsvp(event, buyer, db)
+        await notify_buyer(db, row, event, kind="confirmed")
+        background_tasks.add_task(
+            send_ticket_email, to=(buyer.email if buyer else "") or "", order_id=row.id,
+            ticket_code=row.ticket_code, event_title=event.title,
+            event_date=event.start_date, event_venue=event.venue_name,
+            event_address=event.address, tier_name=t.name,
+            quantity=row.quantity, total_price=row.total_price,
+        )
+    return {"status": "ok"}
 
 
 @router.get("/{event_id}", response_model=EventDetail)
@@ -871,109 +923,110 @@ async def delete_ticket_tier(
     await db.delete(t)
 
 
-@router.post("/{event_id}/tickets/{tier_id}/purchase", response_model=PaymentInitOut)
-async def purchase_tickets(
+@router.post("/{event_id}/tickets/checkout", response_model=CheckoutInitOut)
+async def checkout_tickets(
     event_id: str,
-    tier_id: str,
-    payload: PurchaseTicketRequest,
+    payload: CheckoutRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """
-    For paid tickets: creates a pending order and returns Paystack init data.
-    For free tickets: confirms immediately and returns is_free=True.
+    Buy one or more ticket tiers in a single checkout. All resulting orders share one
+    `payment_reference` — that's the cart grouping (no separate cart table needed).
+    For paid carts: reserves inventory, creates pending orders, returns Paystack init data
+    for ONE transaction covering the summed total. For all-free carts: confirms immediately.
     """
     event = (await db.execute(select(Event).where(
         Event.id == event_id, Event.status == "published"))).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found")
 
-    t = await _get_tier(tier_id, event_id, db)
-    if not t.is_active:
-        raise HTTPException(400, "This ticket tier is not available")
+    # Idempotency replay: a retried submit of the same checkout intent returns the same
+    # reservation instead of creating a duplicate one.
+    if payload.idempotency_key:
+        existing = (await db.execute(select(TicketOrder).where(
+            TicketOrder.user_id == user.id,
+            TicketOrder.idempotency_key == payload.idempotency_key,
+        ))).scalars().all()
+        if existing:
+            total = sum(o.total_price for o in existing)
+            return CheckoutInitOut(
+                order_ids=[o.id for o in existing],
+                payment_reference=existing[0].payment_reference,
+                paystack_public_key=settings.paystack_public_key if total > 0 else "",
+                amount_kobo=int(total * 100),
+                email=user.email or "",
+                is_free=(total == 0),
+            )
 
     now = datetime.now(timezone.utc)
-    if t.sale_start and now < t.sale_start:
-        raise HTTPException(400, "Ticket sales have not started yet")
-    if t.sale_end and now > t.sale_end:
-        raise HTTPException(400, "Ticket sales have ended")
-    if t.quantity is not None and (t.quantity - t.quantity_sold) < payload.quantity:
-        raise HTTPException(409, f"Only {t.quantity - t.quantity_sold} tickets remaining")
-    if payload.quantity > t.max_per_order:
-        raise HTTPException(400, f"Maximum {t.max_per_order} tickets per order")
-
-    total = t.price * payload.quantity
     reference = f"turnup-{uuid.uuid4().hex[:16]}"
+    orders: list[TicketOrder] = []
+    tiers_by_order: dict[str, TicketTier] = {}
 
-    order = TicketOrder(
-        id=str(uuid.uuid4()),
-        user_id=user.id,
-        event_id=event_id,
-        tier_id=tier_id,
-        quantity=payload.quantity,
-        unit_price=t.price,
-        total_price=total,
-        status="pending",
-        payment_reference=reference,
-    )
-    db.add(order)
+    for item in payload.items:
+        t = await _get_tier(item.tier_id, event_id, db)
+        if not t.is_active:
+            raise HTTPException(400, f"'{t.name}' is not available")
+        if t.sale_start and now < t.sale_start:
+            raise HTTPException(400, f"Sales for '{t.name}' have not started yet")
+        if t.sale_end and now > t.sale_end:
+            raise HTTPException(400, f"Sales for '{t.name}' have ended")
+        if item.quantity > t.max_per_order:
+            raise HTTPException(400, f"Maximum {t.max_per_order} '{t.name}' tickets per order")
+
+        # Reserves inventory atomically -- raises 409 if not enough left. Any failure here
+        # rolls back the whole request (including reservations already taken earlier in this
+        # same loop) via get_db's rollback-on-exception, so a cart never partially reserves.
+        await reserve_inventory(db, t, item.quantity)
+
+        order = TicketOrder(
+            id=str(uuid.uuid4()), user_id=user.id, event_id=event_id, tier_id=t.id,
+            quantity=item.quantity, unit_price=t.price, total_price=t.price * item.quantity,
+            status="pending", payment_reference=reference,
+            idempotency_key=payload.idempotency_key,
+        )
+        db.add(order)
+        orders.append(order)
+        tiers_by_order[order.id] = t
+
     await db.flush()
+    total = sum(o.total_price for o in orders)
 
-    if t.price == 0:
-        # Free ticket — confirm immediately
-        order.status = "confirmed"
-        order.ticket_code = str(uuid.uuid4())
-        if t.quantity is not None:
-            t.quantity_sold += payload.quantity
+    if total == 0:
+        for order in orders:
+            row = await confirm_order(db, order.id, payment_channel=None)
+            await notify_buyer(db, row, event, kind="confirmed")
+            background_tasks.add_task(
+                send_ticket_email, to=user.email or "", order_id=row.id,
+                ticket_code=row.ticket_code, event_title=event.title,
+                event_date=event.start_date, event_venue=event.venue_name,
+                event_address=event.address, tier_name=tiers_by_order[row.id].name,
+                quantity=row.quantity, total_price=0.0,
+            )
         await _auto_rsvp(event, user, db)
-        await db.flush()
-        # Send confirmation email in the background (non-blocking)
-        try:
-            from app.services.email import send_ticket_email
-            import asyncio
-            asyncio.ensure_future(send_ticket_email(
-                to=user.email or "",
-                order_id=order.id,
-                ticket_code=order.ticket_code,
-                event_title=event.title,
-                event_date=event.start_date,
-                event_venue=event.venue_name,
-                event_address=event.address,
-                tier_name=t.name,
-                quantity=payload.quantity,
-                total_price=0.0,
-            ))
-        except Exception:
-            pass
-        return PaymentInitOut(
-            order_id=order.id,
-            payment_reference=reference,
-            paystack_public_key="",
-            amount_kobo=0,
-            email=user.email or "",
-            is_free=True,
+        return CheckoutInitOut(
+            order_ids=[o.id for o in orders], payment_reference=reference,
+            paystack_public_key="", amount_kobo=0, email=user.email or "", is_free=True,
         )
 
-    # Paid — init Paystack transaction (amount in kobo)
+    # Paid — init one Paystack transaction for the summed total (amount in kobo)
     amount_kobo = int(total * 100)
     email = user.email or f"{user.username}@turnup.app"
     try:
-        ps_resp = await initialize_transaction(
-            email=email,
-            amount_kobo=amount_kobo,
-            reference=reference,
-            metadata={"order_id": order.id, "event_id": event_id, "tier_id": tier_id},
+        await initialize_transaction(
+            email=email, amount_kobo=amount_kobo, reference=reference,
+            metadata={"order_ids": [o.id for o in orders], "event_id": event_id},
         )
+    except PaystackConfigError as e:
+        raise HTTPException(503, str(e))
     except Exception:
         raise HTTPException(502, "Payment gateway unavailable. Please try again.")
 
-    from app.config import settings as _s
-    return PaymentInitOut(
-        order_id=order.id,
-        payment_reference=reference,
-        paystack_public_key=_s.paystack_public_key,
-        amount_kobo=amount_kobo,
-        email=email,
+    return CheckoutInitOut(
+        order_ids=[o.id for o in orders], payment_reference=reference,
+        paystack_public_key=settings.paystack_public_key, amount_kobo=amount_kobo, email=email,
     )
 
 
@@ -990,30 +1043,42 @@ async def _auto_rsvp(event: Event, user: User, db: AsyncSession) -> None:
         event.attendees_count += 1
 
 
-@router.post("/{event_id}/tickets/{tier_id}/verify-payment", response_model=TicketOrderOut)
+def _order_out(order: TicketOrder, tier_name: str) -> TicketOrderOut:
+    return TicketOrderOut(
+        id=order.id, event_id=order.event_id, tier_id=order.tier_id, tier_name=tier_name,
+        quantity=order.quantity, unit_price=order.unit_price, total_price=order.total_price,
+        status=order.status, payment_reference=order.payment_reference,
+        ticket_code=order.ticket_code, checked_in_at=order.checked_in_at,
+        created_at=order.created_at,
+    )
+
+
+@router.post("/{event_id}/tickets/verify-payment", response_model=list[TicketOrderOut])
 async def verify_payment(
     event_id: str,
-    tier_id: str,
     payload: VerifyPaymentRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Verify Paystack payment and confirm the pending order."""
-    order = (await db.execute(select(TicketOrder).where(
+    """Verify a Paystack payment and confirm every pending order sharing this reference
+    (a checkout may have created several, one per tier line)."""
+    orders = (await db.execute(select(TicketOrder).where(
         TicketOrder.payment_reference == payload.reference,
         TicketOrder.user_id == user.id,
         TicketOrder.status == "pending",
-    ))).scalar_one_or_none()
-    if not order:
+    ))).scalars().all()
+    if not orders:
         raise HTTPException(404, "Order not found or already processed")
 
-    t = await _get_tier(order.tier_id, event_id, db)
     event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found")
 
     try:
         ps_resp = await verify_transaction(payload.reference)
+    except PaystackConfigError as e:
+        raise HTTPException(503, str(e))
     except Exception:
         raise HTTPException(502, "Could not verify payment. Please contact support.")
 
@@ -1021,40 +1086,25 @@ async def verify_payment(
     if ps_data.get("status") != "success":
         raise HTTPException(402, "Payment not completed")
 
-    order.status = "confirmed"
-    order.payment_channel = ps_data.get("channel")
-    order.ticket_code = str(uuid.uuid4())
-    if t.quantity is not None:
-        t.quantity_sold += order.quantity
-    await _auto_rsvp(event, user, db)
-    await db.flush()
+    confirmed: list[TicketOrderOut] = []
+    for order in orders:
+        row = await confirm_order(db, order.id, ps_data.get("channel"))
+        if not row:
+            continue  # already confirmed by the webhook -- no-op, avoids double email/notify
+        t = await _get_tier(row.tier_id, event_id, db)
+        await notify_buyer(db, row, event, kind="confirmed")
+        background_tasks.add_task(
+            send_ticket_email, to=user.email or "", order_id=row.id,
+            ticket_code=row.ticket_code, event_title=event.title,
+            event_date=event.start_date, event_venue=event.venue_name,
+            event_address=event.address, tier_name=t.name,
+            quantity=row.quantity, total_price=row.total_price,
+        )
+        confirmed.append(_order_out(row, t.name))
 
-    # Send confirmation email in the background (non-blocking)
-    try:
-        from app.services.email import send_ticket_email
-        import asyncio
-        asyncio.ensure_future(send_ticket_email(
-            to=user.email or "",
-            order_id=order.id,
-            ticket_code=order.ticket_code,
-            event_title=event.title,
-            event_date=event.start_date,
-            event_venue=event.venue_name,
-            event_address=event.address,
-            tier_name=t.name,
-            quantity=order.quantity,
-            total_price=order.total_price,
-        ))
-    except Exception:
-        pass
-
-    return TicketOrderOut(
-        id=order.id, event_id=event_id, tier_id=order.tier_id, tier_name=t.name,
-        quantity=order.quantity, unit_price=order.unit_price, total_price=order.total_price,
-        status="confirmed", payment_reference=order.payment_reference,
-        ticket_code=order.ticket_code,
-        created_at=order.created_at,
-    )
+    if confirmed:
+        await _auto_rsvp(event, user, db)
+    return confirmed
 
 
 def _tier_out(t: TicketTier) -> TicketTierOut:

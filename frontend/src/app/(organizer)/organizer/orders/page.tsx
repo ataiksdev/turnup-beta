@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
+import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn, timeAgo } from "@/lib/utils";
 import { ShoppingBag } from "lucide-react";
@@ -33,6 +34,37 @@ function StatusBadge({ status }: { status: string }) {
     >
       {status}
     </span>
+  );
+}
+
+function RefundButton({ orderId }: { orderId: string }) {
+  const { token } = useAuthStore();
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+
+  const refundMutation = useMutation({
+    mutationFn: () => organizerApi.refundOrder(token!, orderId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["organizer", "orders"] }),
+  });
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="danger" loading={refundMutation.isPending} onClick={() => refundMutation.mutate()}>
+          Confirm Refund
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>Cancel</Button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setConfirming(true)}
+      className="text-[10px] font-black text-error uppercase tracking-widest hover:underline"
+    >
+      Refund
+    </button>
   );
 }
 
@@ -167,9 +199,12 @@ export default function OrganizerOrdersPage() {
                 </p>
               </div>
 
-              <p className="text-[10px] text-text-muted uppercase tracking-widest">
-                {timeAgo(order.created_at)}
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-text-muted uppercase tracking-widest">
+                  {timeAgo(order.created_at)}
+                </p>
+                {order.status.toLowerCase() === "confirmed" && <RefundButton orderId={order.id} />}
+              </div>
             </div>
           ))
         ) : (

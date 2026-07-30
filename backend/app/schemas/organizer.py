@@ -69,8 +69,23 @@ class TicketTierOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PurchaseTicketRequest(BaseModel):
+class CheckoutItem(BaseModel):
+    tier_id: str
     quantity: int = Field(1, ge=1, le=20)
+
+
+class CheckoutRequest(BaseModel):
+    items: list[CheckoutItem] = Field(min_length=1)
+    idempotency_key: str | None = Field(None, max_length=64)
+
+
+class CheckoutInitOut(BaseModel):
+    order_ids: list[str]
+    payment_reference: str
+    paystack_public_key: str = ""
+    amount_kobo: int = 0
+    email: str
+    is_free: bool = False
 
 
 class TicketOrderOut(BaseModel):
@@ -95,15 +110,6 @@ class TicketOrderOut(BaseModel):
     event_venue: str | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
-
-
-class PaymentInitOut(BaseModel):
-    order_id: str
-    payment_reference: str
-    paystack_public_key: str
-    amount_kobo: int
-    email: str
-    is_free: bool = False
 
 
 class VerifyPaymentRequest(BaseModel):

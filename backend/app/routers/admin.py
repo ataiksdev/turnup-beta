@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.middleware.auth import get_current_admin, get_current_moderator
@@ -21,7 +22,9 @@ from app.schemas.admin import (
     ScoutedItemOut, ScoutRunResult, ScoutSourceCreate, ScoutSourceOut, ScoutSourceUpdate,
 )
 from app.services.ai_agent import AIAgentError, draft_event
+from app.services.email import send_refund_email
 from app.services.scout_agent import run_daily_scout
+from app.services.tickets import notify_buyer, refund_order
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -323,6 +326,23 @@ async def delete_category(
     await db.delete(cat)
 
 
+def _admin_order_out(o: TicketOrder) -> AdminOrderOut:
+    return AdminOrderOut(
+        id=o.id,
+        event_id=o.event_id,
+        event_title=o.event.title if o.event else "—",
+        tier_name=o.tier.name if o.tier else "—",
+        buyer_username=o.user.username if o.user else "—",
+        buyer_email=o.user.email if o.user else None,
+        quantity=o.quantity,
+        unit_price=o.unit_price,
+        total_price=o.total_price,
+        currency=o.tier.currency if o.tier else "NGN",
+        status=o.status,
+        created_at=o.created_at,
+    )
+
+
 @router.get("/orders", response_model=list[AdminOrderOut])
 async def list_all_orders(
     skip: int = Query(0, ge=0),
@@ -330,7 +350,6 @@ async def list_all_orders(
     _: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy.orm import selectinload
     stmt = (
         select(TicketOrder)
         .options(
@@ -344,23 +363,41 @@ async def list_all_orders(
     )
     result = await db.execute(stmt)
     orders = result.scalars().all()
-    out = []
-    for o in orders:
-        out.append(AdminOrderOut(
-            id=o.id,
-            event_id=o.event_id,
-            event_title=o.event.title if o.event else "—",
-            tier_name=o.tier.name if o.tier else "—",
-            buyer_username=o.user.username if o.user else "—",
-            buyer_email=o.user.email if o.user else None,
-            quantity=o.quantity,
-            unit_price=o.unit_price,
-            total_price=o.total_price,
-            currency=o.tier.currency if o.tier else "NGN",
-            status=o.status,
-            created_at=o.created_at,
-        ))
-    return out
+    return [_admin_order_out(o) for o in orders]
+
+
+@router.post("/orders/{order_id}/refund", response_model=AdminOrderOut)
+async def admin_refund_order(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    _: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(TicketOrder)
+        .options(
+            selectinload(TicketOrder.user),
+            selectinload(TicketOrder.event),
+            selectinload(TicketOrder.tier),
+        )
+        .where(TicketOrder.id == order_id)
+    )
+    order = (await db.execute(stmt)).scalar_one_or_none()
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.status != "confirmed":
+        raise HTTPException(400, f"Cannot refund an order with status '{order.status}'")
+
+    if not await refund_order(db, order):
+        raise HTTPException(409, "Order was already resolved by another request")
+
+    await notify_buyer(db, order, order.event, kind="refunded")
+    background_tasks.add_task(
+        send_refund_email, to=(order.user.email if order.user else "") or "",
+        event_title=order.event.title, tier_name=order.tier.name if order.tier else "",
+        quantity=order.quantity, total_price=order.total_price,
+    )
+    return _admin_order_out(order)
 
 
 @router.post("/events/draft", response_model=AIEventDraft)

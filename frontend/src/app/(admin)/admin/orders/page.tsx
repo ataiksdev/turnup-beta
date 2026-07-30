@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { adminApi, AdminOrderOut } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
@@ -32,7 +32,15 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function OrderRow({ order }: { order: AdminOrderOut }) {
+function OrderRow({ order, onRefunded }: { order: AdminOrderOut; onRefunded: (orderId: string) => void }) {
+  const { token } = useAuthStore();
+  const [confirming, setConfirming] = useState(false);
+
+  const refundMutation = useMutation({
+    mutationFn: () => adminApi.refundOrder(token!, order.id),
+    onSuccess: () => onRefunded(order.id),
+  });
+
   return (
     <div className="border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
@@ -43,7 +51,26 @@ function OrderRow({ order }: { order: AdminOrderOut }) {
         <p>@{order.buyer_username}{order.buyer_email ? ` · ${order.buyer_email}` : ""}</p>
         <p>{order.tier_name} · {order.quantity} × ₦{order.unit_price.toLocaleString("en-NG")} = <span className="font-black text-text-primary">₦{order.total_price.toLocaleString("en-NG")}</span></p>
       </div>
-      <p className="text-xs text-text-muted">{timeAgo(order.created_at)}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-text-muted">{timeAgo(order.created_at)}</p>
+        {order.status === "confirmed" && (
+          confirming ? (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="danger" loading={refundMutation.isPending} onClick={() => refundMutation.mutate()}>
+                Confirm
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>Cancel</Button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirming(true)}
+              className="text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline"
+            >
+              Refund
+            </button>
+          )
+        )}
+      </div>
     </div>
   );
 }
@@ -68,6 +95,10 @@ export default function AdminOrdersPage() {
     },
     enabled: !!token,
   });
+
+  function handleRefunded(orderId: string) {
+    setAllOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status: "refunded" } : o));
+  }
 
   const confirmedRevenue = allOrders
     .filter((o) => o.status === "confirmed")
@@ -102,7 +133,7 @@ export default function AdminOrdersPage() {
           <>
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
               {allOrders.map((order) => (
-                <OrderRow key={order.id} order={order} />
+                <OrderRow key={order.id} order={order} onRefunded={handleRefunded} />
               ))}
             </div>
             {hasMore && (

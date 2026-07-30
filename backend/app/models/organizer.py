@@ -75,6 +75,9 @@ class TicketOrder(Base):
     payment_channel: Mapped[str | None] = mapped_column(String(30))
     ticket_code: Mapped[str | None] = mapped_column(String(36), unique=True, index=True)
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Shared across every row created by one checkout call (identifies a retried/resubmitted
+    # cart, not a single tier line) -- see services/tickets.py's checkout idempotency replay.
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="ticket_orders")

@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # Payments — Paystack
     paystack_secret_key: str = ""
     paystack_public_key: str = ""
+    pending_order_expiry_minutes: int = 30  # abandoned pending ticket orders auto-cancel after this long
 
     # AI event-drafting agent — pluggable provider (used by both the manual AI Draft
     # screen and the daily scout agent). Set ai_provider to whichever key you have.

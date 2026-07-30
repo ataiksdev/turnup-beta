@@ -38,6 +38,7 @@ class EventCreate(BaseModel):
     status: str = Field("published", pattern=r"^(draft|published)$")
     template_id: str | None = None  # optional: create from template
     created_via: str = Field("manual", pattern=r"^(manual|ai_agent)$")
+    refund_policy: str | None = None
 
 
 class EventUpdate(BaseModel):
@@ -58,6 +59,7 @@ class EventUpdate(BaseModel):
     meeting_url: str | None = None
     status: str | None = Field(None, pattern=r"^(draft|published|cancelled|completed)$")
     tags: str | None = None
+    refund_policy: str | None = None
 
 
 class EventOut(BaseModel):
@@ -95,6 +97,7 @@ class EventOut(BaseModel):
     review_status: str = "approved"
     review_note: str | None = None
     created_via: str = "manual"
+    refund_policy: str | None = None
     model_config = {"from_attributes": True}
 
 
