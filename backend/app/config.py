@@ -1,5 +1,8 @@
 from functools import lru_cache
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SECRET_KEY = "changeme"
 
 
 class Settings(BaseSettings):
@@ -15,7 +18,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/turnup.db"
 
     # JWT
-    secret_key: str = "changeme"
+    secret_key: str = DEFAULT_SECRET_KEY
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080       # 7 days
     temp_token_expire_minutes: int = 10            # 2FA pending token
@@ -78,6 +81,12 @@ class Settings(BaseSettings):
     rate_limit_magic_link: str = "3/minute"
     rate_limit_phone_otp: str = "3/minute"
     rate_limit_phone_verify: str = "5/minute"
+    rate_limit_checkout: str = "10/minute"
+    rate_limit_refund: str = "10/minute"
+    rate_limit_checkin: str = "60/minute"    # high-volume door scanning at event entry
+    rate_limit_comment: str = "20/minute"
+    rate_limit_review: str = "10/minute"
+    rate_limit_follow: str = "30/minute"
 
     @property
     def origins(self) -> list[str]:
@@ -90,6 +99,17 @@ class Settings(BaseSettings):
             "openai": self.openai_api_key,
             "gemini": self.gemini_api_key,
         }.get(self.ai_provider, "")
+
+    @model_validator(mode="after")
+    def _forbid_default_secret_outside_debug(self) -> "Settings":
+        if not self.debug and self.secret_key == DEFAULT_SECRET_KEY:
+            raise RuntimeError(
+                "SECRET_KEY is still the default 'changeme' value while DEBUG=False. "
+                "Refusing to start: anyone who knows this default could forge a valid "
+                "auth token for any user, including admins. Set a real SECRET_KEY in "
+                "the environment before running outside debug mode."
+            )
+        return self
 
 
 @lru_cache

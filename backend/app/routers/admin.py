@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.middleware.auth import get_current_admin, get_current_moderator
+from app.middleware.rate_limit import limiter
 from app.models.event import Category, Event
 from app.models.organizer import OrganizerProfile, TicketOrder, TicketTier
 from app.models.scout import ScoutedItem, ScoutSource
@@ -22,7 +24,7 @@ from app.schemas.admin import (
     PlatformFeeOut, PlatformFeeUpdate, PlatformStats,
     ScoutedItemOut, ScoutRunResult, ScoutSourceCreate, ScoutSourceOut, ScoutSourceUpdate,
 )
-from app.services.ai_agent import AIAgentError, draft_event
+from app.services.ai_agent import MAX_IMAGE_BYTES, AIAgentError, draft_event
 from app.services.email import send_refund_email
 from app.services.scout_agent import run_daily_scout
 from app.services.settings import get_platform_settings, set_ticket_fee_percent
@@ -506,7 +508,9 @@ async def list_all_orders(
 
 
 @router.post("/orders/{order_id}/refund", response_model=AdminOrderOut)
+@limiter.limit(settings.rate_limit_refund)
 async def admin_refund_order(
+    request: Request,
     order_id: str,
     background_tasks: BackgroundTasks,
     _: User = Depends(get_current_admin),
@@ -555,7 +559,11 @@ async def ai_draft_event(
     image_bytes = None
     image_media_type = None
     if image is not None:
-        image_bytes = await image.read()
+        # Bound the read itself (not just a post-hoc length check) so an oversized
+        # upload can't be fully buffered into memory before being rejected.
+        image_bytes = await image.read(MAX_IMAGE_BYTES + 1)
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(413, f"Flyer image is too large (max {MAX_IMAGE_BYTES // (1024*1024)}MB).")
         image_media_type = image.content_type or "image/jpeg"
 
     categories = (await db.execute(select(Category.name).order_by(Category.name))).scalars().all()

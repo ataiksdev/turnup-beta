@@ -8,10 +8,11 @@ from urllib.parse import urljoin
 import httpx
 
 from app.config import settings
+from app.services.url_safety import UnsafeURLError, fetch_safely
 
 _URL_FETCH_TIMEOUT = 15
 _MAX_HTML_CHARS = 20000
-_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 _TOOL_NAME = "extract_event_details"
 _TOOL_DESCRIPTION = "Structured event details extracted from the supplied source material."
@@ -141,9 +142,13 @@ async def fetch_url_page(url: str) -> tuple[str, str | None]:
     — sites whose actual content only appears after client-side JS runs may yield little or no
     usable text here even though the og:image (usually server-rendered) still comes through."""
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=_URL_FETCH_TIMEOUT) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; TurnupBot/1.0)"})
-            resp.raise_for_status()
+        resp = await fetch_safely(
+            url, timeout=_URL_FETCH_TIMEOUT,
+            user_agent="Mozilla/5.0 (compatible; TurnupBot/1.0)",
+        )
+        resp.raise_for_status()
+    except UnsafeURLError as e:
+        raise AIAgentError(str(e))
     except httpx.HTTPError as e:
         raise AIAgentError(f"Could not fetch URL: {e}")
 
@@ -319,7 +324,7 @@ async def draft_event(
     if not text and not url and not image_bytes:
         raise AIAgentError("Provide at least one of: pasted text, a URL, or a flyer image.")
 
-    if image_bytes and len(image_bytes) > _MAX_IMAGE_BYTES:
+    if image_bytes and len(image_bytes) > MAX_IMAGE_BYTES:
         raise AIAgentError("Flyer image is too large (max 8MB).")
 
     if settings.ai_provider not in _KNOWN_PROVIDERS:

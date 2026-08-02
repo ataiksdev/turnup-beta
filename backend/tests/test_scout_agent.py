@@ -338,6 +338,7 @@ async def test_fetch_candidate_links_falls_back_to_listing_page():
     class _FakeResponse:
         text = html
         url = "https://example.com/whats-on"
+        is_redirect = False
 
         def raise_for_status(self):
             pass
@@ -352,7 +353,7 @@ async def test_fetch_candidate_links_falls_back_to_listing_page():
         async def get(self, *args, **kwargs):
             return _FakeResponse()
 
-    with patch.object(scout_agent.httpx, "AsyncClient", return_value=_FakeClient()):
+    with patch("httpx.AsyncClient", return_value=_FakeClient()):
         links = await scout_agent._fetch_candidate_links("https://example.com/whats-on")
 
     assert links == ["https://example.com/events/afrobeats-night"]
@@ -369,6 +370,7 @@ async def test_run_daily_scout_via_listing_page_fallback(db, bot_user):
     class _FakeResponse:
         text = html
         url = source.url
+        is_redirect = False
 
         def raise_for_status(self):
             pass
@@ -383,7 +385,7 @@ async def test_run_daily_scout_via_listing_page_fallback(db, bot_user):
         async def get(self, *args, **kwargs):
             return _FakeResponse()
 
-    with patch.object(scout_agent.httpx, "AsyncClient", return_value=_FakeClient()), \
+    with patch("httpx.AsyncClient", return_value=_FakeClient()), \
          patch.object(scout_agent, "draft_event", new=AsyncMock(return_value=draft)):
         summary = await scout_agent.run_daily_scout(db)
 

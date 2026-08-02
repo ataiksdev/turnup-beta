@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
-import httpx
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +15,7 @@ from app.models.user import User
 from app.routers.events import _slugify
 from app.schemas.admin import AIEventDraft
 from app.services.ai_agent import AIAgentError, draft_event
+from app.services.url_safety import fetch_safely
 
 _FEED_FETCH_TIMEOUT = 15
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
@@ -118,9 +118,11 @@ async def _fetch_candidate_links(url: str) -> list[str]:
     scraping <a href> links directly off the page — most public event listing pages in practice
     don't expose a feed at all.
     """
-    async with httpx.AsyncClient(follow_redirects=True, timeout=_FEED_FETCH_TIMEOUT) as client:
-        resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; TurnupScoutBot/1.0)"})
-        resp.raise_for_status()
+    resp = await fetch_safely(
+        url, timeout=_FEED_FETCH_TIMEOUT,
+        user_agent="Mozilla/5.0 (compatible; TurnupScoutBot/1.0)",
+    )
+    resp.raise_for_status()
 
     links = _parse_feed_links(resp.text)
     if links:

@@ -2,13 +2,15 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.middleware.auth import get_current_organizer, get_current_user
+from app.middleware.rate_limit import limiter
 from app.models.event import Event, EventAttendee
 from app.models.organizer import (
     EventCoHost, EventTemplate, OrganizerProfile, TicketOrder, TicketTier,
@@ -353,7 +355,9 @@ async def organizer_orders(
 
 
 @router.post("/orders/{order_id}/refund", response_model=TicketOrderOut)
+@limiter.limit(settings.rate_limit_refund)
 async def organizer_refund_order(
+    request: Request,
     order_id: str,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_organizer),

@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.database import get_db
 from app.middleware.auth import get_current_event_creator, get_current_organizer, get_current_user, get_optional_user
+from app.middleware.rate_limit import limiter
 from app.models.event import Category, Event, EventAttendee, EventSave
 from app.models.organizer import (
     EventCoHost, EventReview, EventView, EventWaitlist, TicketOrder, TicketTier,
@@ -978,7 +979,9 @@ async def delete_ticket_tier(
 
 
 @router.post("/{event_id}/tickets/checkout", response_model=CheckoutInitOut)
+@limiter.limit(settings.rate_limit_checkout)
 async def checkout_tickets(
+    request: Request,
     event_id: str,
     payload: CheckoutRequest,
     background_tasks: BackgroundTasks,
@@ -1421,7 +1424,9 @@ async def notify_waitlist(
 # ── Check-in ─────────────────────────────────────────────────────────────────
 
 @router.post("/{event_id}/checkin", response_model=CheckInResult)
+@limiter.limit(settings.rate_limit_checkin)
 async def check_in_ticket(
+    request: Request,
     event_id: str,
     payload: CheckInRequest,
     db: AsyncSession = Depends(get_db),
@@ -1524,7 +1529,9 @@ async def my_review(
 
 
 @router.post("/{event_id}/reviews", response_model=ReviewOut, status_code=201)
+@limiter.limit(settings.rate_limit_review)
 async def create_review(
+    request: Request,
     event_id: str,
     payload: ReviewCreate,
     db: AsyncSession = Depends(get_db),
