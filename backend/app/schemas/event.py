@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from app.schemas.user import UserSummary
 from app.schemas.types import WebUrl
 
@@ -20,17 +20,17 @@ class EventCreate(BaseModel):
     venue_name: str = Field(min_length=2, max_length=200)
     address: str = Field(min_length=5, max_length=300)
     city: str = Field(min_length=2, max_length=100)
-    country: str = "US"
+    country: str = "NG"
     latitude: float | None = None
     longitude: float | None = None
     start_date: datetime
     end_date: datetime
     timezone: str = "Africa/Lagos"
     is_free: bool = True
-    price_min: float | None = None
-    price_max: float | None = None
+    price_min: float | None = Field(None, ge=0)
+    price_max: float | None = Field(None, ge=0)
     currency: str = "NGN"
-    capacity: int | None = None
+    capacity: int | None = Field(None, ge=1)
     waitlist_enabled: bool = False
     category_id: str | None = None
     tags: str | None = None
@@ -40,6 +40,14 @@ class EventCreate(BaseModel):
     template_id: str | None = None  # optional: create from template
     created_via: str = Field("manual", pattern=r"^(manual|ai_agent)$")
     refund_policy: str | None = None
+
+    @model_validator(mode="after")
+    def _check_ranges(self):
+        if self.end_date < self.start_date:
+            raise ValueError("The event can't end before it starts")
+        if self.price_min is not None and self.price_max is not None and self.price_max < self.price_min:
+            raise ValueError("Maximum price can't be lower than minimum price")
+        return self
 
 
 class EventUpdate(BaseModel):
@@ -52,9 +60,9 @@ class EventUpdate(BaseModel):
     start_date: datetime | None = None
     end_date: datetime | None = None
     is_free: bool | None = None
-    price_min: float | None = None
-    price_max: float | None = None
-    capacity: int | None = None
+    price_min: float | None = Field(None, ge=0)
+    price_max: float | None = Field(None, ge=0)
+    capacity: int | None = Field(None, ge=1)
     waitlist_enabled: bool | None = None
     event_type: str | None = Field(None, pattern=r"^(physical|virtual|hybrid)$")
     meeting_url: WebUrl | None = None

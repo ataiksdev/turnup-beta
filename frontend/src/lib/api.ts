@@ -64,6 +64,13 @@ class ApiError extends Error {
   }
 }
 
+/** The server's explanation for a 4xx ("Event is at capacity", "This event needs a
+ *  ticket"...), or `fallback` for network/server errors whose text isn't meant for users. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.message) return err.message;
+  return fallback;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -325,6 +332,9 @@ export const eventsApi = {
     request<CheckoutInit>(`/events/${eventId}/tickets/checkout`, {
       method: "POST", body: JSON.stringify({ items, idempotency_key: idempotencyKey }),
     }, token),
+
+  recordView: (eventId: string, token?: string) =>
+    request<void>(`/events/${eventId}/views`, { method: "POST" }, token),
 
   verifyPayment: (token: string, eventId: string, reference: string) =>
     request<TicketOrder[]>(`/events/${eventId}/tickets/verify-payment`, {

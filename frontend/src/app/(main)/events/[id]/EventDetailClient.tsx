@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { eventsApi, socialApi, seriesApi, communitiesApi } from "@/lib/api";
+import { eventsApi, socialApi, seriesApi, communitiesApi, apiErrorMessage } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
@@ -71,6 +71,12 @@ export function EventDetailClient() {
     queryKey: ["event", id],
     queryFn: () => eventsApi.get(id, token ?? undefined),
   });
+
+  // Count a view once the event has loaded (the API de-duplicates repeat views).
+  const viewedEventId = event?.id;
+  useEffect(() => {
+    if (viewedEventId) eventsApi.recordView(viewedEventId, token ?? undefined).catch(() => {});
+  }, [viewedEventId, token]);
 
   // Use the real UUID for all subsequent API calls — the URL param may be a slug
   const eid = event?.id ?? "";
@@ -136,7 +142,7 @@ export function EventDetailClient() {
       setAttend(status);
       qc.invalidateQueries({ queryKey: ["event", id] });
     },
-    onError: () => flashError("Could not update RSVP. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not update RSVP. Please try again.")),
   });
 
   const removeAttendMutation = useMutation({
@@ -145,13 +151,13 @@ export function EventDetailClient() {
       setAttend(null);
       qc.invalidateQueries({ queryKey: ["event", id] });
     },
-    onError: () => flashError("Could not remove RSVP. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not remove RSVP. Please try again.")),
   });
 
   const saveMutation = useMutation({
     mutationFn: () => token ? eventsApi.save(token, eid) : Promise.reject(),
     onSuccess: (res) => setSaved(res.saved),
-    onError: () => flashError("Could not save event. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not save event. Please try again.")),
   });
 
   const commentMutation = useMutation({
@@ -163,7 +169,7 @@ export function EventDetailClient() {
       setComment("");
       qc.invalidateQueries({ queryKey: ["comments", eid] });
     },
-    onError: () => flashError("Could not post comment. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not post comment. Please try again.")),
   });
 
   function clearCart() {
@@ -242,7 +248,7 @@ export function EventDetailClient() {
         }
       }
     },
-    onError: () => flashError("Could not initiate payment. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not initiate payment. Please try again.")),
   });
 
   const waitlistJoinMutation = useMutation({
@@ -251,7 +257,7 @@ export function EventDetailClient() {
       setWaitlisted(true);
       setWaitlistPos(data.position);
     },
-    onError: () => flashError("Could not join waitlist. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not join waitlist. Please try again.")),
   });
 
   const waitlistLeaveMutation = useMutation({
@@ -260,7 +266,7 @@ export function EventDetailClient() {
       setWaitlisted(false);
       setWaitlistPos(null);
     },
-    onError: () => flashError("Could not leave waitlist. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not leave waitlist. Please try again.")),
   });
 
   const reviewMutation = useMutation({
@@ -282,7 +288,7 @@ export function EventDetailClient() {
       qc.invalidateQueries({ queryKey: ["reviews", eid] });
       qc.invalidateQueries({ queryKey: ["my-review", eid] });
     },
-    onError: () => flashError("Could not delete review. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not delete review. Please try again.")),
   });
 
   const { data: myCommunities } = useQuery({
@@ -294,7 +300,7 @@ export function EventDetailClient() {
   const shareMutation = useMutation({
     mutationFn: (slug: string) => communitiesApi.shareEvent(token!, slug, eid),
     onSuccess: (_, slug) => setSharedTo((prev) => [...prev, slug]),
-    onError: () => flashError("Could not share event. Try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not share event. Try again.")),
   });
 
   if (isLoading) return <EventDetailSkeleton />;

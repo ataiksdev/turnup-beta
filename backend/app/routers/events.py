@@ -42,6 +42,11 @@ from app.schemas.user import UserSummary
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
+def _as_utc(dt: datetime) -> datetime:
+    """SQLite hands back naive datetimes; treat those as UTC so comparisons work."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def _slugify(text: str, uid: str) -> str:
     s = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[\s_-]+", "-", s).strip("-") + f"-{uid[:8]}"
@@ -94,6 +99,20 @@ async def _user_state(event_id: str, user: User | None, db: AsyncSession):
         EventWaitlist.event_id == event_id, EventWaitlist.user_id == user.id,
         EventWaitlist.status.in_(["waiting", "notified"])))).scalar_one_or_none()
     return sv is not None, (at.status if at else None), wl is not None
+
+
+async def _user_states(event_ids: list[str], user: User | None, db: AsyncSession) -> dict:
+    """Batched _user_state for a list of events: 3 queries total instead of 3 per event."""
+    if not user or not event_ids:
+        return {}
+    saved = set((await db.execute(select(EventSave.event_id).where(
+        EventSave.user_id == user.id, EventSave.event_id.in_(event_ids)))).scalars().all())
+    attending = dict((await db.execute(select(EventAttendee.event_id, EventAttendee.status).where(
+        EventAttendee.user_id == user.id, EventAttendee.event_id.in_(event_ids)))).all())
+    waitlisted = set((await db.execute(select(EventWaitlist.event_id).where(
+        EventWaitlist.user_id == user.id, EventWaitlist.event_id.in_(event_ids),
+        EventWaitlist.status.in_(["waiting", "notified"])))).scalars().all())
+    return {eid: (eid in saved, attending.get(eid), eid in waitlisted) for eid in event_ids}
 
 
 async def _require_event_access(event_id: str, user: User, db: AsyncSession) -> Event:
@@ -187,11 +206,8 @@ async def list_events(
             pass
 
     events = (await db.execute(stmt.offset((page - 1) * limit).limit(limit))).scalars().all()
-    result = []
-    for e in events:
-        saved, att, waitlisted = await _user_state(e.id, user, db)
-        result.append(_serialize(e, saved, att, waitlisted))
-    return result
+    states = await _user_states([e.id for e in events], user, db)
+    return [_serialize(e, *states.get(e.id, (False, None, False))) for e in events]
 
 
 @router.get("/trending", response_model=list[EventOut])
@@ -356,7 +372,7 @@ async def for_you_events(
             score += 3.0
 
         if user_city:
-            e_city = e.city.lower()
+            e_city = (e.city or "").lower()
             if user_city in e_city or e_city in user_city:
                 score += 2.0
 
@@ -405,20 +421,15 @@ async def for_you_events(
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    result = []
-    for _, e in scored[:limit]:
-        sv, at, wl = await _user_state(e.id, user, db)
-        result.append(_serialize(e, sv, at, wl))
-
-    if len(result) < limit:
-        seen = {r["id"] for r in result} | excluded_ids
+    picked = [e for _, e in scored[:limit]]
+    if len(picked) < limit:
+        seen = {e.id for e in picked} | excluded_ids
         fallback = [e for e in candidates if e.id not in seen]
         fallback.sort(key=lambda e: (e.is_trending, e.attendees_count), reverse=True)
-        for e in fallback[: limit - len(result)]:
-            sv, at, wl = await _user_state(e.id, user, db)
-            result.append(_serialize(e, sv, at, wl))
+        picked += fallback[: limit - len(picked)]
 
-    return result
+    states = await _user_states([e.id for e in picked], user, db)
+    return [_serialize(e, *states.get(e.id, (False, None, False))) for e in picked]
 
 
 @router.get("/following", response_model=list[EventOut])
@@ -461,10 +472,10 @@ async def following_events(
     )
     events = (await db.execute(stmt)).scalars().all()
 
+    states = await _user_states([e.id for e in events], user, db)
     result = []
     for e in events:
-        saved, att, waitlisted = await _user_state(e.id, user, db)
-        data = _serialize(e, saved, att, waitlisted)
+        data = _serialize(e, *states.get(e.id, (False, None, False)))
         data["following_count"] = following_counts.get(e.id, 0)
         data["following_hosted"] = e.id in hosted_ids
         result.append(data)
@@ -609,6 +620,10 @@ async def create_event(
     return _serialize((await db.execute(stmt)).scalar_one())
 
 
+# Fields whose content a moderator approved; changing them needs another look.
+REVIEWED_FIELDS = {"title", "description", "cover_image", "meeting_url", "tags", "venue_name", "address"}
+
+
 @router.patch("/{event_id}", response_model=EventDetail)
 async def update_event(
     event_id: str,
@@ -630,6 +645,20 @@ async def update_event(
         if changes and event.review_status in ("pending", "rejected"):
             event.review_status = "pending"
             event.review_note = None
+        # Editing what attendees SEE on an approved event sends it back to the review queue,
+        # otherwise approval could be bypassed by publishing something harmless and then
+        # rewriting it. It stays live meanwhile (tickets may already be sold); an admin
+        # re-approves it, or rejects it, which takes it down.
+        elif event.review_status == "approved" and any(
+            k in REVIEWED_FIELDS and v != getattr(event, k) for k, v in changes.items()
+        ):
+            event.review_status = "pending"
+            event.review_note = "Edited after approval"
+
+    new_start = changes.get("start_date", event.start_date)
+    new_end = changes.get("end_date", event.end_date)
+    if new_start and new_end and _as_utc(new_end) < _as_utc(new_start):
+        raise HTTPException(422, "The event can't end before it starts")
 
     for k, v in changes.items():
         setattr(event, k, v)
@@ -689,6 +718,14 @@ async def delete_event(
         raise HTTPException(404, "Event not found")
     if event.host_id != user.id:
         raise HTTPException(403, "Only the host can delete this event")
+    # Deleting would also delete buyers' tickets and the payment records needed to refund them.
+    sold = (await db.execute(select(func.count(TicketOrder.id)).where(
+        TicketOrder.event_id == event_id,
+        TicketOrder.status.in_(["confirmed", "pending", "needs_refund"]),
+    ))).scalar() or 0
+    if sold:
+        raise HTTPException(409, "This event has ticket orders, so it can't be deleted. "
+                                 "Cancel it instead (attendees are notified), and refund orders from Orders.")
     await db.delete(event)
 
 
@@ -707,41 +744,69 @@ async def attend(
 
     existing = (await db.execute(select(EventAttendee).where(
         EventAttendee.event_id == event_id, EventAttendee.user_id == user.id))).scalar_one_or_none()
+    old_status = existing.status if existing else None
+    if old_status == payload.status:
+        return {"status": payload.status, "attendees_count": event.attendees_count,
+                "interested_count": event.interested_count}
 
-    # Capacity check for "going" RSVPs
-    if payload.status == "going" and not existing:
-        if event.capacity and event.attendees_count >= event.capacity:
+    becoming_going = payload.status == "going"
+    if becoming_going:
+        # Ticketed events: "going" means holding a ticket. Otherwise anyone could RSVP to a
+        # paid event for free (and then review it, take a capacity spot, etc.).
+        has_tiers = (await db.execute(select(TicketTier.id).where(
+            TicketTier.event_id == event_id, TicketTier.is_active == True).limit(1))).first()
+        if has_tiers and event.host_id != user.id:
+            has_ticket = (await db.execute(select(TicketOrder.id).where(
+                TicketOrder.event_id == event_id, TicketOrder.user_id == user.id,
+                TicketOrder.status == "confirmed").limit(1))).first()
+            if not has_ticket:
+                raise HTTPException(409, "This event needs a ticket. Get one to mark yourself as going.")
+
+        # Take a capacity spot atomically. This applies to switching from "interested" too,
+        # which previously skipped the check entirely.
+        claimed = await db.execute(
+            update(Event).where(
+                Event.id == event_id,
+                or_(Event.capacity.is_(None), Event.capacity <= 0, Event.attendees_count < Event.capacity),
+            ).values(attendees_count=Event.attendees_count + 1)
+        )
+        if claimed.rowcount == 0:
             if event.waitlist_enabled:
                 return await _join_waitlist_internal(event, user, db)
             raise HTTPException(409, "Event is at capacity")
+        await db.execute(update(User).where(User.id == user.id).values(
+            events_attended=User.events_attended + 1))
+    else:
+        await db.execute(update(Event).where(Event.id == event_id).values(
+            interested_count=Event.interested_count + 1))
+
+    # Undo the previous status's counters.
+    if old_status == "going":
+        await db.execute(update(Event).where(Event.id == event_id).values(
+            attendees_count=decrement_to_zero(Event.attendees_count)))
+        await db.execute(update(User).where(User.id == user.id).values(
+            events_attended=decrement_to_zero(User.events_attended)))
+    elif old_status == "interested":
+        await db.execute(update(Event).where(Event.id == event_id).values(
+            interested_count=decrement_to_zero(Event.interested_count)))
 
     if existing:
-        old_status = existing.status
-        if old_status == "going":
-            event.attendees_count = max(0, event.attendees_count - 1)
-        else:
-            event.interested_count = max(0, event.interested_count - 1)
         existing.status = payload.status
     else:
         db.add(EventAttendee(id=str(uuid.uuid4()), user_id=user.id,
                              event_id=event_id, status=payload.status))
-        await db.execute(update(User).where(User.id == user.id).values(
-            events_attended=User.events_attended + 1))
-
-    if payload.status == "going":
-        event.attendees_count += 1
-    else:
-        event.interested_count += 1
 
     # Notify host when someone RSVPs going (skip if user is the host)
-    if payload.status == "going" and event.host_id != user.id:
+    if becoming_going and event.host_id != user.id:
         db.add(Notification(
             id=str(uuid.uuid4()), user_id=event.host_id, type="going",
-            title=f"{user.full_name} is going to your event",
+            title=f"{user.display_name or user.full_name or user.username} is going to your event",
             body=event.title,
             reference_id=event_id, reference_type="event", actor_id=user.id,
         ))
 
+    await db.flush()
+    await db.refresh(event)
     return {"status": payload.status, "attendees_count": event.attendees_count,
             "interested_count": event.interested_count}
 
@@ -820,7 +885,16 @@ async def get_attendees(
     status: str | None = None,
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
 ):
+    # Only published events have a public guest list; drafts only to their host/co-hosts.
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.status != "published":
+        if not user:
+            raise HTTPException(404, "Event not found")
+        await _require_event_access(event_id, user, db)
     stmt = (select(EventAttendee).options(selectinload(EventAttendee.user))
             .where(EventAttendee.event_id == event_id))
     if status:
@@ -844,6 +918,14 @@ async def record_view(
     if not event:
         return
     ip = request.client.host if request.client else None
+    # One view per viewer (signed-in user, else IP) per event per 30 minutes, so refreshing
+    # or a script hammering this endpoint can't inflate an organizer's numbers.
+    since = datetime.now(timezone.utc) - timedelta(minutes=30)
+    viewer = (EventView.user_id == user.id) if user else (EventView.ip_address == ip)
+    recent = (await db.execute(select(EventView.id).where(
+        EventView.event_id == event_id, viewer, EventView.viewed_at >= since).limit(1))).first()
+    if recent:
+        return
     db.add(EventView(
         id=str(uuid.uuid4()),
         event_id=event_id,
@@ -955,7 +1037,11 @@ async def update_ticket_tier(
 ):
     await _require_event_access(event_id, user, db)
     t = await _get_tier(tier_id, event_id, db)
-    for k, v in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    if "quantity" in changes and changes["quantity"] < t.quantity_sold:
+        raise HTTPException(409, f"{t.quantity_sold} tickets are already sold or reserved; "
+                                 "the quantity can't go below that.")
+    for k, v in changes.items():
         setattr(t, k, v)
     await db.flush()
     return _tier_out(t)

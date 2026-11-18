@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.database import get_db
+from app.database import decrement_to_zero, get_db
 from app.middleware.auth import get_current_admin, get_current_moderator
 from app.middleware.rate_limit import limiter
 from app.models.event import Category, Event
@@ -346,6 +346,7 @@ async def approve_event(
     if ev.review_status == "approved":
         raise HTTPException(400, "Event is already approved")
 
+    was_published = ev.status == "published"
     ev.review_status = "approved"
     ev.review_note = None
     ev.reviewed_by_id = admin.id
@@ -364,8 +365,9 @@ async def approve_event(
     ))
     await db.flush()
     await db.refresh(ev)
-    await db.execute(update(User).where(User.id == ev.host_id).values(
-        events_hosted=User.events_hosted + 1))
+    if not was_published:  # re-approving an edited, still-live event isn't a new event
+        await db.execute(update(User).where(User.id == ev.host_id).values(
+            events_hosted=User.events_hosted + 1))
     return _admin_event_out(ev)
 
 
@@ -385,6 +387,9 @@ async def reject_event(
     if not ev:
         raise HTTPException(404, "Event not found")
 
+    if ev.status == "published":  # taking a live event down: undo its hosted-count
+        await db.execute(update(User).where(User.id == ev.host_id).values(
+            events_hosted=decrement_to_zero(User.events_hosted)))
     ev.review_status = "rejected"
     ev.review_note = body.note
     ev.reviewed_by_id = admin.id

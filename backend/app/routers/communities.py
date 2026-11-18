@@ -425,11 +425,21 @@ async def update_member_role(
 ):
     community = await _require_community(db, slug)
     my_membership = await _get_membership(db, community.id, me.id)
-    if not my_membership or my_membership.role not in ("admin", "moderator"):
-        raise HTTPException(403, "Only admins and moderators can change roles")
+    # Admins only: letting moderators assign roles let any moderator promote themselves to
+    # admin, or demote the actual admins.
+    if not my_membership or my_membership.role != "admin":
+        raise HTTPException(403, "Only community admins can change roles")
     target = await _get_membership(db, community.id, user_id)
     if not target:
         raise HTTPException(404, "User is not a member")
+    if user_id == community.creator_id and me.id != community.creator_id:
+        raise HTTPException(403, "The community's creator can't be demoted")
+    if target.role == "admin" and role != "admin":
+        admins = (await db.execute(select(func.count()).select_from(CommunityMember).where(
+            CommunityMember.community_id == community.id, CommunityMember.role == "admin",
+        ))).scalar()
+        if admins <= 1:
+            raise HTTPException(400, "A community needs at least one admin. Promote someone else first.")
     target.role = role
     await db.commit()
     return {"ok": True, "role": role}
@@ -449,6 +459,12 @@ async def remove_member(
     target = await _get_membership(db, community.id, user_id)
     if not target:
         raise HTTPException(404, "User is not a member")
+    if user_id == me.id:
+        raise HTTPException(400, "Use 'Leave community' to remove yourself")
+    if user_id == community.creator_id:
+        raise HTTPException(403, "The community's creator can't be removed")
+    if my_membership.role == "moderator" and target.role != "member":
+        raise HTTPException(403, "Moderators can only remove regular members")
     await db.delete(target)
     await db.execute(
         update(Community).where(Community.id == community.id).values(

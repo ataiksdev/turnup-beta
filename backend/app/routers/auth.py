@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -81,8 +81,12 @@ async def _create_session(
 
 
 async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(select(User).where(User.email == email))
-    return result.scalar_one_or_none()
+    # Case-insensitive: "Ada@Example.com" and "ada@example.com" are the same mailbox, and
+    # must not become two accounts (or let one person register a look-alike of another).
+    result = await db.execute(
+        select(User).where(func.lower(User.email) == email.strip().lower()).limit(1)
+    )
+    return result.scalars().first()
 
 
 async def _get_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
@@ -109,7 +113,7 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
 
     user = User(
         id=str(uuid.uuid4()),
-        email=payload.email,
+        email=payload.email.strip().lower(),
         username=payload.username.lower(),
         full_name=payload.full_name,
         hashed_password=hash_password(payload.password),
@@ -494,10 +498,11 @@ async def request_magic_link(
     db: AsyncSession = Depends(get_db),
 ):
     # Invalidate old magic links for this email
-    await db.execute(delete(MagicLink).where(MagicLink.email == payload.email))
+    email = payload.email.strip().lower()
+    await db.execute(delete(MagicLink).where(MagicLink.email == email))
     token = secrets.token_urlsafe(64)
     db.add(MagicLink(
-        email=payload.email,
+        email=email,
         token=token,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.magic_link_expire_minutes),
     ))
@@ -702,7 +707,7 @@ async def oauth_callback(
 
         user = User(
             id=str(uuid.uuid4()),
-            email=email,
+            email=email.strip().lower(),
             username=username,
             full_name=name,
             email_verified=True,
@@ -772,7 +777,7 @@ async def oauth_complete(
     # Unverified until the user clicks the emailed link -- the provider never vouched for it.
     user = User(
         id=str(uuid.uuid4()),
-        email=payload.email,
+        email=payload.email.strip().lower(),
         username=username,
         full_name=username_hint or payload.email.split("@")[0],
         email_verified=False,
