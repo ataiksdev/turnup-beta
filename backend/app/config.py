@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     rate_limit_magic_link: str = "3/minute"
     rate_limit_phone_otp: str = "3/minute"
     rate_limit_phone_verify: str = "5/minute"
+    rate_limit_2fa_verify: str = "5/minute"
     rate_limit_checkout: str = "10/minute"
     rate_limit_refund: str = "10/minute"
     rate_limit_checkin: str = "60/minute"    # high-volume door scanning at event entry

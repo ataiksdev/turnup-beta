@@ -78,6 +78,14 @@ async function request<T>(
   const res = await fetch(`${BASE}/api${path}`, { ...options, headers });
 
   if (!res.ok) {
+    // The session behind the stored token was revoked (logout elsewhere, password change or
+    // reset, "sign out other devices") or expired: drop it so the app stops acting logged in.
+    // Only when it's still the stored token, so a slow stale request can't log out a newer one.
+    if (res.status === 401 && token && typeof window !== "undefined") {
+      const { useAuthStore } = await import("@/store/auth");
+      const state = useAuthStore.getState();
+      if (state.token === token) state.logout();
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     // FastAPI validation errors (422) return `detail` as a list of {loc, msg}; flatten it to
     // readable text instead of letting it surface as "[object Object]".
@@ -89,7 +97,7 @@ async function request<T>(
             return field && typeof field === "string" ? `${field}: ${msg}` : msg;
           })
           .join("; ")
-      : err.detail;
+      : err.detail ?? (res.status === 429 ? "Too many attempts. Please wait a minute and try again." : err.error);
     throw new ApiError(res.status, detail ?? "Request failed");
   }
 
@@ -98,6 +106,23 @@ async function request<T>(
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
+
+export type LoginResult = Token | { requires_2fa: true; temp_token: string };
+
+export interface SessionInfo {
+  id: string;
+  device_name: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+  last_active: string;
+  expires_at: string;
+  is_current: boolean;
+}
+
+export interface TwoFactorSetup { secret: string; otpauth_uri: string; qr_svg: string; }
+
+type Message = { message: string };
 
 type OAuthCallbackResult = {
   access_token?: string;
@@ -112,7 +137,72 @@ export const authApi = {
     request<Token>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
 
   login: (identifier: string, password: string) =>
-    request<Token>("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password }) }),
+    request<LoginResult>("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password }) }),
+
+  logout: (token: string) =>
+    request<Message>("/auth/logout", { method: "POST" }, token),
+
+  // ── Password reset / email verification / magic link ──
+  forgotPassword: (email: string) =>
+    request<Message>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    request<Message>("/auth/reset-password", {
+      method: "POST", body: JSON.stringify({ token, new_password: newPassword }),
+    }),
+
+  verifyEmail: (token: string) =>
+    request<Message>(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+
+  resendVerification: (token: string) =>
+    request<Message>("/auth/resend-verification", { method: "POST" }, token),
+
+  requestMagicLink: (email: string) =>
+    request<Message>("/auth/magic-link", { method: "POST", body: JSON.stringify({ email }) }),
+
+  verifyMagicLink: (token: string) =>
+    request<LoginResult>(`/auth/magic-link/verify?token=${encodeURIComponent(token)}`),
+
+  // ── Two-factor auth ──
+  verify2fa: (tempToken: string, code: string) =>
+    request<Token>("/auth/2fa/verify", {
+      method: "POST", body: JSON.stringify({ token: tempToken, code }),
+    }),
+
+  setup2fa: (token: string) =>
+    request<TwoFactorSetup>("/auth/2fa/setup", { method: "POST" }, token),
+
+  enable2fa: (token: string, code: string) =>
+    request<{ backup_codes: string[] }>("/auth/2fa/enable", {
+      method: "POST", body: JSON.stringify({ code }),
+    }, token),
+
+  disable2fa: (token: string, code: string) =>
+    request<Message>("/auth/2fa/disable", { method: "POST", body: JSON.stringify({ code }) }, token),
+
+  regenerateBackupCodes: (token: string, code: string) =>
+    request<{ backup_codes: string[] }>("/auth/2fa/backup-codes", {
+      method: "POST", body: JSON.stringify({ code }),
+    }, token),
+
+  // ── Sessions / password / account ──
+  sessions: (token: string) =>
+    request<SessionInfo[]>("/auth/sessions", {}, token),
+
+  revokeSession: (token: string, sessionId: string) =>
+    request<Message>(`/auth/sessions/${sessionId}`, { method: "DELETE" }, token),
+
+  revokeOtherSessions: (token: string) =>
+    request<Message>("/auth/sessions", { method: "DELETE" }, token),
+
+  changePassword: (token: string, currentPassword: string, newPassword: string) =>
+    request<Message>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }, token),
+
+  deleteAccount: (token: string, confirm: { password?: string; confirm_username?: string }) =>
+    request<Message>("/auth/account", { method: "DELETE", body: JSON.stringify(confirm) }, token),
 
   me: (token: string) =>
     request<User>("/auth/me", {}, token),

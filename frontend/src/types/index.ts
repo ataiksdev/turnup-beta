@@ -24,6 +24,9 @@ export interface User {
   event_format_pref?: string | null;
   goes_out_when?: string | null;
   onboarding_completed?: boolean;
+  email_verified?: boolean;
+  two_factor_enabled?: boolean;
+  has_password?: boolean;
   created_at?: string;
   is_following?: boolean;
   organizer_profile?: OrganizerProfile | null;

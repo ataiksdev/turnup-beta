@@ -53,6 +53,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+    @property
+    def has_password(self) -> bool:
+        return bool(self.hashed_password)
+
     # Relationships — core
     events = relationship("Event", back_populates="host", foreign_keys="Event.host_id")
     attendances = relationship("EventAttendee", back_populates="user")

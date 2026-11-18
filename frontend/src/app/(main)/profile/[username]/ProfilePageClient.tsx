@@ -2,13 +2,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi, socialApi, communitiesApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { useLogout } from "@/lib/session";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount, displayName, safeHref } from "@/lib/utils";
-import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, Settings, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
@@ -18,7 +19,8 @@ type Tab = "events" | "attending" | "saved";
 
 export default function ProfilePage() {
   const { username } = useParams<{ username: string }>();
-  const { token, user: me, logout } = useAuthStore();
+  const { token, user: me } = useAuthStore();
+  const logoutEverywhere = useLogout();
   const router = useRouter();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("events");
@@ -159,8 +161,15 @@ export default function ProfilePage() {
           {isOwnProfile ? (
             <>
               <Link href="/profile/edit"><Button variant="secondary" size="sm">Edit Profile</Button></Link>
+              <Link
+                href="/settings"
+                aria-label="Account and security settings"
+                className="p-2 rounded border-2 border-border bg-bg-card hover:border-primary hover:text-primary transition-colors shadow-brutal-sm"
+              >
+                <Settings size={15} aria-hidden />
+              </Link>
               <button
-                onClick={() => { logout(); router.replace("/login"); }}
+                onClick={logoutEverywhere}
                 aria-label="Log out"
                 className="p-2 rounded border-2 border-border bg-bg-card hover:border-error hover:text-error transition-colors shadow-brutal-sm"
               >

@@ -51,6 +51,13 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _current_jti(request: Request) -> str | None:
+    """The session id (jti) of the bearer token on this request."""
+    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    payload = decode_token_full(token) if token else None
+    return payload.get("jti") if payload else None
+
+
 async def _create_session(
     db: AsyncSession,
     user: User,
@@ -143,16 +150,9 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
 
 @router.post("/logout", response_model=MessageResponse)
 async def logout(request: Request, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    from fastapi.security import OAuth2PasswordBearer
-    from app.services.auth import decode_token_full as dtf
-    # Extract jti from the current bearer token
-    auth_header = request.headers.get("authorization", "")
-    token = auth_header.removeprefix("Bearer ").strip()
-    payload = dtf(token)
-    if payload and payload.get("jti"):
-        await db.execute(
-            delete(UserSession).where(UserSession.jti == payload["jti"])
-        )
+    jti = _current_jti(request)
+    if jti:
+        await db.execute(delete(UserSession).where(UserSession.jti == jti, UserSession.user_id == user.id))
     return MessageResponse(message="Logged out")
 
 
@@ -265,7 +265,9 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
 
 
 @router.post("/change-password", response_model=MessageResponse)
+@limiter.limit(settings.rate_limit_login)
 async def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -273,13 +275,19 @@ async def change_password(
     if not user.hashed_password or not verify_password(payload.current_password, user.hashed_password):
         raise HTTPException(400, "Current password is incorrect")
     user.hashed_password = hash_password(payload.new_password)
+    # Sign out every other device: if the password changed because it leaked, any session
+    # an attacker already has must not survive the change.
+    await db.execute(delete(UserSession).where(
+        UserSession.user_id == user.id, UserSession.jti != (_current_jti(request) or ""),
+    ))
     await db.flush()
-    return MessageResponse(message="Password changed successfully")
+    return MessageResponse(message="Password changed. Other devices have been signed out.")
 
 
 # ── 2FA ───────────────────────────────────────────────────────────────────────
 
 @router.post("/2fa/verify", response_model=Token)
+@limiter.limit(settings.rate_limit_2fa_verify)
 async def verify_2fa(request: Request, payload: TwoFactorVerifyRequest, db: AsyncSession = Depends(get_db)):
     token_payload = decode_token_full(payload.token)
     if not token_payload or token_payload.get("type") != "temp":
@@ -401,7 +409,7 @@ async def regenerate_backup_codes(
 # ── Session management ────────────────────────────────────────────────────────
 
 @router.get("/sessions", response_model=list[SessionOut])
-async def list_sessions(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def list_sessions(request: Request, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
     result = await db.execute(
         select(UserSession).where(
@@ -410,7 +418,11 @@ async def list_sessions(user: User = Depends(get_current_user), db: AsyncSession
             UserSession.expires_at > now,
         ).order_by(UserSession.last_active.desc())
     )
-    return result.scalars().all()
+    current = _current_jti(request)
+    return [
+        SessionOut.model_validate(s).model_copy(update={"is_current": s.jti == current})
+        for s in result.scalars().all()
+    ]
 
 
 @router.delete("/sessions/{session_id}", response_model=MessageResponse)
@@ -437,20 +449,16 @@ async def revoke_all_sessions(
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke all sessions except the current one."""
-    auth_header = request.headers.get("authorization", "")
-    current_token = auth_header.removeprefix("Bearer ").strip()
-    from app.services.auth import decode_token_full as dtf
-    payload = dtf(current_token)
-    current_jti = payload.get("jti") if payload else None
-
+    current_jti = _current_jti(request)
     q = select(UserSession).where(UserSession.user_id == user.id, UserSession.is_active == True)
     result = await db.execute(q)
-    sessions = result.scalars().all()
-    for s in sessions:
+    revoked = 0
+    for s in result.scalars().all():
         if s.jti != current_jti:
             s.is_active = False
+            revoked += 1
     await db.flush()
-    return MessageResponse(message=f"Revoked {len(sessions) - 1} other sessions")
+    return MessageResponse(message=f"Signed out of {revoked} other device{'s' if revoked != 1 else ''}")
 
 
 # ── Account deletion ──────────────────────────────────────────────────────────
@@ -461,8 +469,11 @@ async def delete_account(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if not user.hashed_password or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(400, "Incorrect password")
+    if user.hashed_password:
+        if not payload.password or not verify_password(payload.password, user.hashed_password):
+            raise HTTPException(400, "Incorrect password")
+    elif (payload.confirm_username or "").strip().lstrip("@").lower() != user.username.lower():
+        raise HTTPException(400, "Type your username to confirm")
 
     user.is_deleted = True
     user.is_active = False
@@ -491,11 +502,14 @@ async def request_magic_link(
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.magic_link_expire_minutes),
     ))
     await db.flush()
-    await send_magic_link_email(payload.email, token)
-    return MessageResponse(message="Magic link sent if the email is registered")
+    try:
+        await send_magic_link_email(payload.email, token)
+    except Exception:
+        pass  # same non-committal response either way (no account enumeration)
+    return MessageResponse(message="If that email has an account, a login link is on its way")
 
 
-@router.get("/magic-link/verify", response_model=Token)
+@router.get("/magic-link/verify", response_model=Token | TwoFactorChallenge)
 async def verify_magic_link(token: str, request: Request, db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
     result = await db.execute(
@@ -522,6 +536,10 @@ async def verify_magic_link(token: str, request: Request, db: AsyncSession = Dep
         user.is_verified = True
 
     await db.flush()
+    # A magic link proves control of the inbox -- the same thing a password reset proves --
+    # so it replaces the password, not the second factor.
+    if user.two_factor_enabled:
+        return TwoFactorChallenge(temp_token=create_temp_token(user.id))
     return await _create_session(db, user, request, device_name="Magic Link")
 
 

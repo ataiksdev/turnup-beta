@@ -1,15 +1,16 @@
 "use client";
 import { Suspense } from "react";
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { authApi } from "@/lib/api";
-import { useAuthStore } from "@/store/auth";
+import { startOAuthRedirect, useFinishLogin } from "@/lib/session";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Mail, Lock, Phone } from "lucide-react";
+import { Mail, Lock, Phone, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 type Tab = "email" | "phone";
+type EmailStep = "password" | "2fa" | "magic" | "magic-sent";
 type PhoneStep = "number" | "otp";
 
 function GoogleIcon() {
@@ -43,14 +44,17 @@ function InstagramIcon() {
 }
 
 function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { setAuth } = useAuthStore();
+  const finishLogin = useFinishLogin();
+  const nextPath = searchParams.get("next") ?? undefined;
 
   const [tab, setTab] = useState<Tab>(
     (searchParams.get("tab") as Tab) === "phone" ? "phone" : "email"
   );
   const [phoneStep, setPhoneStep] = useState<PhoneStep>("number");
+  const [emailStep, setEmailStep] = useState<EmailStep>("password");
+  const [tempToken, setTempToken] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
 
   // Email / username fields
   const [identifier, setIdentifier] = useState("");
@@ -68,16 +72,49 @@ function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const token = await authApi.login(identifier, password);
-      const user = await authApi.me(token.access_token);
-      setAuth(token.access_token, user);
-      router.replace(
-        user.role === "admin" ? "/admin" :
-        user.role === "moderator" ? "/admin/events/new" :
-        user.role === "organizer" ? "/organizer/dashboard" : "/"
-      );
+      const result = await authApi.login(identifier, password);
+      if ("requires_2fa" in result) {
+        setTempToken(result.temp_token);
+        setEmailStep("2fa");
+        return;
+      }
+      await finishLogin(result.access_token, nextPath);
     } catch (err: any) {
       setError(err.message ?? "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerify2fa(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const token = await authApi.verify2fa(tempToken, twoFactorCode.trim());
+      await finishLogin(token.access_token, nextPath);
+    } catch (err: any) {
+      setError(err.status === 401 && /expired/i.test(err.message)
+        ? "That sign-in took too long. Enter your password again."
+        : err.message ?? "Invalid code");
+      if (err.status === 401 && /expired/i.test(err.message)) {
+        setEmailStep("password");
+        setTwoFactorCode("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await authApi.requestMagicLink(identifier.trim());
+      setEmailStep("magic-sent");
+    } catch (err: any) {
+      setError(err.message ?? "Could not send a login link");
     } finally {
       setLoading(false);
     }
@@ -103,13 +140,7 @@ function LoginPage() {
     setError("");
     try {
       const token = await authApi.phoneVerify(phone, otp);
-      const user = await authApi.me(token.access_token);
-      setAuth(token.access_token, user);
-      router.replace(
-        user.role === "admin" ? "/admin" :
-        user.role === "moderator" ? "/admin/events/new" :
-        user.role === "organizer" ? "/organizer/dashboard" : "/"
-      );
+      await finishLogin(token.access_token, nextPath);
     } catch (err: any) {
       setError(err.message ?? "Invalid OTP");
     } finally {
@@ -122,7 +153,7 @@ function LoginPage() {
     setError("");
     try {
       const { url } = await authApi.getOAuthUrl(provider);
-      window.location.href = url;
+      startOAuthRedirect(url);
     } catch (err: any) {
       setError(err.message ?? "OAuth unavailable");
       setLoading(false);
@@ -133,6 +164,7 @@ function LoginPage() {
     setTab(t);
     setError("");
     setPhoneStep("number");
+    setEmailStep("password");
   };
 
   return (
@@ -171,11 +203,12 @@ function LoginPage() {
         )}
 
         {/* Email tab */}
-        {tab === "email" && (
+        {tab === "email" && emailStep === "password" && (
           <form onSubmit={handleEmailLogin} className="space-y-3">
             <Input
               label="Email or username"
               type="text"
+              autoComplete="username"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder="name@example.com or @username"
@@ -185,16 +218,103 @@ function LoginPage() {
             <Input
               label="Password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               icon={<Lock size={16} />}
               required
             />
+            <div className="flex justify-between text-xs">
+              <Link href="/forgot-password" className="text-primary font-medium hover:underline">
+                Forgot password?
+              </Link>
+              <button
+                type="button"
+                onClick={() => { setEmailStep("magic"); setError(""); }}
+                className="text-primary font-medium hover:underline"
+              >
+                Email me a login link
+              </button>
+            </div>
             <Button type="submit" fullWidth size="lg" loading={loading} className="mt-2">
               Log In
             </Button>
           </form>
+        )}
+
+        {tab === "email" && emailStep === "2fa" && (
+          <form onSubmit={handleVerify2fa} className="space-y-3">
+            <p className="text-sm text-text-muted text-center">
+              Enter the 6-digit code from your authenticator app, or one of your backup codes.
+            </p>
+            <Input
+              label="Authentication code"
+              type="text"
+              inputMode="text"
+              autoComplete="one-time-code"
+              autoFocus
+              value={twoFactorCode}
+              onChange={(e) => setTwoFactorCode(e.target.value.slice(0, 9))}
+              placeholder="123456 or ABCD-EF12"
+              icon={<ShieldCheck size={16} />}
+              required
+            />
+            <Button type="submit" fullWidth size="lg" loading={loading}>
+              Verify & Log In
+            </Button>
+            <button
+              type="button"
+              onClick={() => { setEmailStep("password"); setTwoFactorCode(""); setError(""); }}
+              className="w-full text-sm text-text-muted hover:text-text text-center"
+            >
+              Back
+            </button>
+          </form>
+        )}
+
+        {tab === "email" && emailStep === "magic" && (
+          <form onSubmit={handleMagicLink} className="space-y-3">
+            <p className="text-sm text-text-muted text-center">
+              We&apos;ll email you a link that signs you in, no password needed.
+            </p>
+            <Input
+              label="Email"
+              type="email"
+              autoComplete="email"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="name@example.com"
+              icon={<Mail size={16} />}
+              required
+            />
+            <Button type="submit" fullWidth size="lg" loading={loading}>
+              Send login link
+            </Button>
+            <button
+              type="button"
+              onClick={() => { setEmailStep("password"); setError(""); }}
+              className="w-full text-sm text-text-muted hover:text-text text-center"
+            >
+              Use my password instead
+            </button>
+          </form>
+        )}
+
+        {tab === "email" && emailStep === "magic-sent" && (
+          <div className="space-y-3 text-center">
+            <p className="text-sm text-text">
+              If <span className="font-bold">{identifier}</span>{" "}has a Turnup account, a login link is on its way.
+              It expires in 15 minutes.
+            </p>
+            <button
+              type="button"
+              onClick={() => setEmailStep("password")}
+              className="text-sm text-primary font-medium hover:underline"
+            >
+              Back to log in
+            </button>
+          </div>
         )}
 
         {/* Phone tab */}
