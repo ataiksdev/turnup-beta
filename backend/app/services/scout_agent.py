@@ -141,12 +141,17 @@ def _parse_iso(value: str | None) -> datetime | None:
 
 
 async def _find_duplicate_event(db: AsyncSession, draft: AIEventDraft, start: datetime) -> Event | None:
+    # Same venue on the same calendar day, as a datetime range rather than DATE(col) = 'text':
+    # that comparison only works on SQLite (Postgres has no date = varchar operator).
+    day_start = datetime.combine(start.date(), datetime.min.time(), tzinfo=start.tzinfo)
+    day_end = day_start + timedelta(days=1)
     stmt = select(Event).where(
         or_(
             func.lower(Event.title) == draft.title.strip().lower(),
             and_(
                 Event.venue_name == draft.venue_name,
-                func.date(Event.start_date) == start.date().isoformat(),
+                Event.start_date >= day_start,
+                Event.start_date < day_end,
             ),
         )
     )

@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     app_name: str = "Turnup"
     app_version: str = "1.0.0"
     debug: bool = True
+    sql_echo: bool = False  # log every SQL statement (very noisy; was tied to DEBUG)
+    # Process roles (see app/scheduler.py and docker-compose.yml). Both default to true so a
+    # single `uvicorn app.main:app` works for local dev.
+    run_migrations_on_startup: bool = True
+    run_scheduler: bool = True
     frontend_url: str = "http://localhost:3000"
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 

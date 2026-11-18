@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.database import get_db
+from app.database import decrement_to_zero, get_db
 from app.middleware.auth import get_current_event_creator, get_current_organizer, get_current_user, get_optional_user
 from app.middleware.rate_limit import limiter
 from app.models.event import Category, Event, EventAttendee, EventSave
@@ -783,7 +783,7 @@ async def remove_attendance(
     if att.status == "going":
         event.attendees_count = max(0, event.attendees_count - 1)
         await db.execute(update(User).where(User.id == user.id).values(
-            events_attended=max(0, User.events_attended - 1)))
+            events_attended=decrement_to_zero(User.events_attended)))
     else:
         event.interested_count = max(0, event.interested_count - 1)
     await db.delete(att)

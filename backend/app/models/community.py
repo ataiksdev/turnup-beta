@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint,
+    Boolean, DateTime, ForeignKey, Integer, String, Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,7 +51,6 @@ class Community(Base):
 
 class CommunityMember(Base):
     __tablename__ = "community_members"
-    __table_args__ = (UniqueConstraint("community_id", "user_id"),)
 
     community_id: Mapped[str] = mapped_column(ForeignKey("communities.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
@@ -64,7 +63,6 @@ class CommunityMember(Base):
 
 class CommunityEvent(Base):
     __tablename__ = "community_events"
-    __table_args__ = (UniqueConstraint("community_id", "event_id"),)
 
     community_id: Mapped[str] = mapped_column(ForeignKey("communities.id", ondelete="CASCADE"), primary_key=True)
     event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), primary_key=True)

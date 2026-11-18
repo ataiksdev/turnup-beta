@@ -8,7 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import get_db
+from app.database import decrement_to_zero, get_db
 from app.middleware.auth import get_current_user, get_optional_user
 from app.models.community import Community, CommunityEvent, CommunityMember
 from app.models.event import Event
@@ -373,7 +373,7 @@ async def leave_community(
     await db.delete(membership)
     await db.execute(
         update(Community).where(Community.id == community.id).values(
-            member_count=func.greatest(Community.member_count - 1, 0)
+            member_count=decrement_to_zero(Community.member_count)
         )
     )
     await db.commit()
@@ -452,7 +452,7 @@ async def remove_member(
     await db.delete(target)
     await db.execute(
         update(Community).where(Community.id == community.id).values(
-            member_count=func.greatest(Community.member_count - 1, 0)
+            member_count=decrement_to_zero(Community.member_count)
         )
     )
     await db.commit()
@@ -586,7 +586,7 @@ async def remove_event(
     await db.delete(ce)
     await db.execute(
         update(Community).where(Community.id == community.id).values(
-            event_count=func.greatest(Community.event_count - 1, 0)
+            event_count=decrement_to_zero(Community.event_count)
         )
     )
     await db.commit()

@@ -1,38 +1,108 @@
-version: "3.9"
+# Production-style stack:
+#   db        Postgres 16
+#   migrate   one-off: upgrades the schema, then exits (API and worker wait for it)
+#   backend   the API; safe to scale (no migrations, no background jobs)
+#   worker    the ONLY process running background jobs (order expiry, daily AI scout)
+#   frontend  Next.js; proxies the browser's /api/* calls to the backend
+#
+# Required: SECRET_KEY (32+ random chars) and POSTGRES_PASSWORD, e.g. in a .env file next
+# to this one. Optional keys (Paystack, SMTP, OAuth, AI) are passed through when set.
+x-backend: &backend
+  build: ./backend
+  environment: &backend-env
+    DATABASE_URL: postgresql+asyncpg://turnup:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/turnup
+    SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY to a long random string}
+    DEBUG: "false"
+    FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+    EMAIL_CONSOLE: ${EMAIL_CONSOLE:-false}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-noreply@turnup.app}
+    PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+    PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+    GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
+    INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
+    TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+    TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+    TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+    AI_PROVIDER: ${AI_PROVIDER:-anthropic}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    RUN_MIGRATIONS_ON_STARTUP: "false"
+    RUN_SCHEDULER: "false"
+  restart: unless-stopped
 
 services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
+  db:
+    image: postgres:16-alpine
     environment:
-      DATABASE_URL: sqlite+aiosqlite:///./data/turnup.db
-      SECRET_KEY: ${SECRET_KEY:-turnup-dev-secret-key-min-32-chars-xK9}
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
-      FRONTEND_URL: http://localhost:3000
-      ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      DEBUG: "false"
+      POSTGRES_USER: turnup
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: turnup
     volumes:
-      - backend-data:/app/data
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U turnup -d turnup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: ["python", "-m", "app.cli", "migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--workers", "${API_WORKERS:-2}", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    # Not published: browsers (and Paystack webhooks) reach it only through the frontend's
+    # /api proxy. That's also what makes trusting X-Forwarded-For (for per-client rate
+    # limits) safe -- nobody outside the docker network can send a forged one.
+    expose:
+      - "8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').getcode() == 200 else 1)"]
       interval: 15s
       timeout: 5s
       retries: 3
 
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *backend-env
+      RUN_SCHEDULER: "true"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        API_PROXY_ORIGIN: http://backend:8000
+    environment:
+      API_PROXY_ORIGIN: http://backend:8000
     ports:
       - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      NODE_ENV: production
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  backend-data:
+  db-data:
