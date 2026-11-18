@@ -1,0 +1,30 @@
+# Front door for the docker-compose stack.
+#
+# SITE_ADDRESS: ":80" (default) serves plain HTTP on port 80. Set it to your domain
+# (e.g. "turnup.example.com") and Caddy obtains and renews an HTTPS certificate itself.
+#
+# /api/* goes straight to the backend. Caddy sets X-Forwarded-For to the real client IP
+# (and ignores any X-Forwarded-For a client sends, since clients aren't trusted proxies),
+# which the backend's per-client rate limits depend on. Next.js's own /api rewrite does
+# NOT forward the client IP, so without this every visitor would share one rate limit.
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	handle /api/* {
+		request_body {
+			max_size 10MB
+		}
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

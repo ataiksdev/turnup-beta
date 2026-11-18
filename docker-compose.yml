@@ -3,7 +3,10 @@
 #   migrate   one-off: upgrades the schema, then exits (API and worker wait for it)
 #   backend   the API; safe to scale (no migrations, no background jobs)
 #   worker    the ONLY process running background jobs (order expiry, daily AI scout)
-#   frontend  Next.js; proxies the browser's /api/* calls to the backend
+#   frontend  Next.js
+#   proxy     Caddy, the only public entry point: /api/* -> backend, everything else ->
+#             frontend, with the real client IP for rate limiting; HTTPS when SITE_ADDRESS
+#             is a domain (see deploy/Caddyfile)
 #
 # Required: SECRET_KEY (32+ random chars) and POSTGRES_PASSWORD, e.g. in a .env file next
 # to this one. Optional keys (Paystack, SMTP, OAuth, AI) are passed through when set.
@@ -13,8 +16,8 @@ x-backend: &backend
     DATABASE_URL: postgresql+asyncpg://turnup:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/turnup
     SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY to a long random string}
     DEBUG: "false"
-    FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-    ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+    FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+    ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
     EMAIL_CONSOLE: ${EMAIL_CONSOLE:-false}
     SMTP_HOST: ${SMTP_HOST:-}
     SMTP_PORT: ${SMTP_PORT:-587}
@@ -66,9 +69,9 @@ services:
     <<: *backend
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000",
               "--workers", "${API_WORKERS:-2}", "--proxy-headers", "--forwarded-allow-ips", "*"]
-    # Not published: browsers (and Paystack webhooks) reach it only through the frontend's
-    # /api proxy. That's also what makes trusting X-Forwarded-For (for per-client rate
-    # limits) safe -- nobody outside the docker network can send a forged one.
+    # Not published: browsers (and Paystack webhooks) reach it only through the Caddy proxy.
+    # That's what makes trusting X-Forwarded-For (--forwarded-allow-ips) safe: the only
+    # thing that can connect is Caddy, which sets the header to the real client IP.
     expose:
       - "8000"
     volumes:
@@ -101,13 +104,32 @@ services:
         API_PROXY_ORIGIN: http://backend:8000
     environment:
       API_PROXY_ORIGIN: http://backend:8000
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
 
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
 volumes:
   db-data:
   uploads:
+  caddy-data:
+  caddy-config:

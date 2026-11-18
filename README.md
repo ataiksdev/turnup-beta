@@ -62,14 +62,19 @@ Run **exactly one** process with the scheduler enabled; otherwise every job runs
 ## Deploying with Docker
 
 ```bash
-cp .env.example .env          # set SECRET_KEY, POSTGRES_PASSWORD, Paystack/SMTP keys
+cp .env.example .env          # set SECRET_KEY, POSTGRES_PASSWORD, SITE_ADDRESS, Paystack/SMTP keys
 docker compose up -d --build
 ```
 
 This starts Postgres, a one-off `migrate` job, the API (2 workers, no jobs), a single
-`worker`, and the frontend on port 3000. The API is not published. Browsers and Paystack
-webhooks reach it through the frontend's `/api` proxy, so point the Paystack webhook at
-`https://<your-site>/api/events/webhooks/paystack`.
+`worker`, the Next.js frontend, and **Caddy** as the only public entry point (ports 80/443).
+Caddy sends `/api/*` to the backend and everything else to the frontend, passes the real
+client IP (the backend's rate limits depend on it), and serves HTTPS automatically once
+`SITE_ADDRESS` is your domain. The API and frontend aren't published directly.
+
+- Paystack webhook: `https://<your-domain>/api/events/webhooks/paystack`
+- Uploaded images live in the `uploads` volume (single host). For several hosts use shared
+  storage or an object store; see `backend/app/routers/uploads.py`.
 
 ## Tests
 
