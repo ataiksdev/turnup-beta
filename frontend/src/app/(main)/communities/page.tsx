@@ -11,6 +11,7 @@ import { Search, Users, Lock, Plus, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { displayName } from "@/lib/utils";
+import { routes } from "@/lib/routes";
 
 function PlatformDots({ links }: { links: Record<string, string> }) {
   const platforms = Object.keys(links).filter((k) => !!links[k]);
@@ -37,7 +38,7 @@ function PlatformDots({ links }: { links: Record<string, string> }) {
 function CommunityCard({ community }: { community: Community }) {
   return (
     <Link
-      href={`/communities/${community.slug}`}
+      href={routes.community(community.slug)}
       className="flex flex-col gap-3 p-4 rounded border-2 border-border bg-bg-card hover:border-primary transition-all shadow-brutal-sm hover:shadow-brutal active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
     >
       {/* Cover / icon header */}

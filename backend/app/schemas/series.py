@@ -1,6 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import Literal
+from app.schemas.types import WebUrl
 
 
 class SeriesCreate(BaseModel):
@@ -13,9 +14,9 @@ class SeriesCreate(BaseModel):
     # First event fields (reused for all occurrences)
     event_title: str = Field(min_length=5, max_length=200)
     event_description: str = Field(min_length=20, max_length=2000)
-    cover_image: str | None = None
+    cover_image: WebUrl | None = None
     event_type: Literal["physical", "virtual", "hybrid"] = "physical"
-    meeting_url: str | None = None
+    meeting_url: WebUrl | None = None
     venue_name: str = Field(min_length=1, max_length=200)
     address: str = Field(min_length=1, max_length=300)
     city: str = Field(min_length=1, max_length=100)

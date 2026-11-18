@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { InputHTMLAttributes, forwardRef, ReactNode } from "react";
+import { InputHTMLAttributes, forwardRef, ReactNode, useId } from "react";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -9,10 +9,16 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, icon, iconRight, className, ...props }, ref) => (
+  ({ label, error, icon, iconRight, className, id, ...props }, ref) => {
+    // Tie the visible label to the input so screen readers announce it and tapping the
+    // label focuses the field.
+    const autoId = useId();
+    const inputId = id ?? autoId;
+    const errorId = `${inputId}-error`;
+    return (
     <div className="flex flex-col gap-1.5 w-full">
       {label && (
-        <label className="text-xs font-bold text-text-secondary uppercase tracking-wide">{label}</label>
+        <label htmlFor={inputId} className="text-xs font-bold text-text-secondary uppercase tracking-wide">{label}</label>
       )}
       <div className="relative">
         {icon && (
@@ -22,6 +28,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <input
           ref={ref}
+          id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
           className={cn(
             "w-full h-11 bg-bg-card border-2 border-border rounded",
             "px-4 text-sm text-text placeholder:text-text-muted font-medium",
@@ -40,9 +49,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           </span>
         )}
       </div>
-      {error && <p className="text-xs text-error">{error}</p>}
+      {error && <p id={errorId} className="text-xs text-error">{error}</p>}
     </div>
-  ),
+    );
+  },
 );
 
 Input.displayName = "Input";

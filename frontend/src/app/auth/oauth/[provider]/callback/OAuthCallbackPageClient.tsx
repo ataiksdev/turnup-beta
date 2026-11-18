@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { authApi } from "@/lib/api";
+import { consumeOAuthState } from "@/lib/session";
 import { useAuthStore } from "@/store/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -23,9 +24,18 @@ export default function OAuthCallbackPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  const started = useRef(false); // the code and state are single-use: run this once
+
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     if (!code) {
       setError("No authorization code received from provider.");
+      setStep("error");
+      return;
+    }
+    if (!consumeOAuthState(state)) {
+      setError("This sign-in didn't start from this browser, or it expired. Please try again.");
       setStep("error");
       return;
     }

@@ -1,6 +1,5 @@
 "use client";
 import { useEffect } from "react";
-import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
@@ -16,16 +15,19 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { publicOrigin, routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   confirmed: { icon: CheckCircle2, label: "Confirmed", cls: "text-success bg-success/10 border-success/30" },
   pending:   { icon: Clock,        label: "Pending",   cls: "text-info bg-info/10 border-info/30" },
   cancelled: { icon: XCircle,      label: "Cancelled", cls: "text-error bg-error/10 border-error/30" },
   refunded:  { icon: XCircle,      label: "Refunded",  cls: "text-text-muted bg-bg-elevated border-border" },
+  needs_refund: { icon: Clock,      label: "Refund pending", cls: "text-info bg-info/10 border-info/30" },
 };
 
 export default function TicketDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useRouteParam("id");
   const { token } = useAuthStore();
   const { tickets, setTicket } = useTicketCache();
 
@@ -118,7 +120,7 @@ export default function TicketDetailPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             {displayTicket!.event_slug ? (
-              <Link href={`/events/${displayTicket!.event_slug}`} className="text-lg font-black text-text hover:text-primary transition-colors leading-snug">
+              <Link href={routes.event(displayTicket!.event_slug)} className="text-lg font-black text-text hover:text-primary transition-colors leading-snug">
                 {displayTicket!.event_title ?? "Event"}
               </Link>
             ) : (
@@ -216,8 +218,8 @@ export default function TicketDetailPage() {
               title={displayTicket!.event_title ?? "Event on Turnup"}
               text={`I'm going to ${displayTicket!.event_title} — check it out on Turnup!`}
               url={typeof window !== "undefined"
-                ? `${window.location.origin}/events/${displayTicket!.event_slug}`
-                : `/events/${displayTicket!.event_slug}`}
+                ? `${publicOrigin()}/events/${displayTicket!.event_slug}`
+                : routes.event(displayTicket!.event_slug)}
               size={16}
             />
           </div>

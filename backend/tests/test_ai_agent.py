@@ -91,7 +91,7 @@ async def test_fetch_url_page_returns_text_and_cover_image():
     <script>ignoreMe()</script></head>
     <body><p>Afrobeats night this Saturday.</p></body></html>
     """
-    fake_resp = MagicMock(text=fake_html, url="https://example.com/event")
+    fake_resp = MagicMock(text=fake_html, url="https://example.com/event", is_redirect=False)
     fake_resp.raise_for_status = MagicMock()
     fake_client = MagicMock()
     fake_client.get = AsyncMock(return_value=fake_resp)

@@ -1,19 +1,21 @@
 "use client";
 import { useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import {useRouter} from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { communitiesApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { Users } from "lucide-react";
+import { routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 export default function JoinViaInvitePage() {
-  const { token: inviteToken } = useParams<{ token: string }>();
+  const inviteToken = useRouteParam("token");
   const router = useRouter();
   const { token } = useAuthStore();
 
   const joinMutation = useMutation({
     mutationFn: () => communitiesApi.joinViaInvite(token!, inviteToken),
-    onSuccess: (community) => router.replace(`/communities/${community.slug}`),
+    onSuccess: (community) => router.replace(routes.community(community.slug)),
     onError: () => router.replace("/communities"),
   });
 

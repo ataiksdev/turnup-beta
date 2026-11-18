@@ -7,14 +7,15 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
-import { formatEventDate, formatPrice, displayName } from "@/lib/utils";
+import { formatEventDate, formatPrice, displayName, safeHref } from "@/lib/utils";
 import {
   Users, Lock, CheckCircle2, Settings, Link2, Copy, Check,
   ExternalLink, Calendar, Ticket,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { cn, copyToClipboard } from "@/lib/utils";
+import { publicOrigin, routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 // ── Platform brand icons ───────────────────────────────────────────────────────
 
@@ -31,7 +32,9 @@ const PLATFORM_CONFIG: Record<string, { label: string; color: string; bg: string
 };
 
 function PlatformButtons({ links }: { links: Record<string, string | null | undefined> }) {
-  const entries = Object.entries(links).filter(([, v]) => !!v) as [string, string][];
+  const entries = Object.entries(links)
+    .map(([k, v]) => [k, safeHref(v)])
+    .filter(([, v]) => !!v) as [string, string][];
   if (!entries.length) return null;
   return (
     <div className="flex flex-wrap gap-2">
@@ -58,16 +61,19 @@ function PlatformButtons({ links }: { links: Record<string, string | null | unde
 type Tab = "events" | "members" | "about";
 
 export function CommunityDetailClient() {
-  const { slug } = useParams<{ slug: string }>();
-  const { token, user } = useAuthStore();
+  const slug = useRouteParam("slug");
+  const { token, user, hasHydrated } = useAuthStore();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("events");
   const [copied, setCopied] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const { data: community, isLoading } = useQuery({
-    queryKey: ["community", slug],
+  const { data: community, isPending: isLoading } = useQuery({
+    // Keyed on the session too: the saved session loads just after first render, and the
+    // anonymous response (no membership/role) must not stick around afterwards.
+    queryKey: ["community", slug, !!token],
     queryFn: () => communitiesApi.get(slug, token ?? undefined),
+    enabled: hasHydrated && !!slug,
   });
 
   const eventsQuery = useQuery({
@@ -96,7 +102,7 @@ export function CommunityDetailClient() {
 
   function copyInviteLink() {
     if (!community?.invite_token) return;
-    const url = `${window.location.origin}/communities/join/${community.invite_token}`;
+    const url = `${publicOrigin()}/communities/join/${community.invite_token}`;
     copyToClipboard(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -139,7 +145,7 @@ export function CommunityDetailClient() {
         title={community.name}
         actions={
           isAdmin && (
-            <Link href={`/communities/${slug}/settings`} className="p-2 rounded hover:bg-bg-elevated transition-colors">
+            <Link href={routes.communitySettings(slug)} className="p-2 rounded hover:bg-bg-elevated transition-colors">
               <Settings size={18} className="text-text-secondary" />
             </Link>
           )
@@ -264,7 +270,7 @@ export function CommunityDetailClient() {
               ) : eventsQuery.data?.length ? (
                 <div className="grid grid-cols-2 gap-3">
                   {eventsQuery.data.map((e: any) => (
-                    <Link key={e.id} href={`/events/${e.slug}`}
+                    <Link key={e.id} href={routes.event(e.slug)}
                       className="rounded border-2 border-border bg-bg-card overflow-hidden hover:border-primary transition-colors">
                       <div className="relative h-28 bg-bg-elevated">
                         {e.cover_image && <img src={e.cover_image} alt="" className="w-full h-full object-cover" />}
@@ -315,7 +321,7 @@ export function CommunityDetailClient() {
                   {membersQuery.data?.map((m: any) => (
                     <Link
                       key={m.user_id}
-                      href={`/profile/${m.username}`}
+                      href={routes.profile(m.username)}
                       className="flex items-center gap-3 p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
                     >
                       <Avatar src={m.avatar_url} name={m.full_name ?? m.username} size="sm" verified={m.is_verified} />
@@ -359,7 +365,7 @@ export function CommunityDetailClient() {
                 <div>
                   <p className="text-xs font-black text-text-muted uppercase tracking-widest mb-2">Created by</p>
                   <Link
-                    href={`/profile/${community.creator.username}`}
+                    href={routes.profile(community.creator.username)}
                     className="flex items-center gap-3 p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
                   >
                     <Avatar

@@ -6,7 +6,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { EventCard } from "@/components/events/EventCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
-import { CalendarPlus, TrendingUp, Users, DollarSign, FileText, Ticket } from "lucide-react";
+import { CalendarPlus, TrendingUp, Users, DollarSign, FileText, Ticket, BadgeCheck, Clock, ShieldQuestion } from "lucide-react";
 import Link from "next/link";
 import { cn, displayName } from "@/lib/utils";
 
@@ -92,6 +92,44 @@ export default function OrganizerDashboardPage() {
           </p>
         </div>
       )}
+
+      {/* Verification status */}
+      {(() => {
+        const profile = user?.organizer_profile;
+        if (profile?.is_verified_organizer) return null;
+        const status = profile?.verification_status ?? "none";
+        if (status === "pending") {
+          return (
+            <Link
+              href="/organizer/verification"
+              className="mx-4 mb-5 flex items-center justify-between p-4 rounded border-2 border-yellow-500/40 bg-yellow-500/10 shadow-brutal-sm"
+            >
+              <div className="flex items-center gap-3">
+                <Clock size={18} className="text-yellow-600 dark:text-yellow-400 shrink-0" />
+                <div>
+                  <p className="text-sm font-black text-text">Verification under review</p>
+                  <p className="text-xs text-text-muted">We'll notify you once it's decided</p>
+                </div>
+              </div>
+            </Link>
+          );
+        }
+        return (
+          <Link
+            href="/organizer/verification"
+            className="mx-4 mb-5 flex items-center justify-between p-4 rounded border-2 border-border bg-bg-card shadow-brutal-sm hover:border-primary transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <ShieldQuestion size={18} className="text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-black text-text">Get the verified badge</p>
+                <p className="text-xs text-text-muted">A trust signal on your profile, events, and communities</p>
+              </div>
+            </div>
+            <BadgeCheck size={18} className="text-text-muted shrink-0" />
+          </Link>
+        );
+      })()}
 
       {/* Draft events alert */}
       {stats && stats.draft_events > 0 && (

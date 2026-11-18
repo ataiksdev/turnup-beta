@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { routes } from "@/lib/routes";
 
 interface EventCardProps {
   event: Event;
@@ -38,7 +39,7 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
 
   return (
     <Link
-      href={`/events/${event.slug}`}
+      href={routes.event(event.slug)}
       className={cn(
         "group block bg-bg-card rounded overflow-hidden border-2 border-border",
         "shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg",

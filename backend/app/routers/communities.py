@@ -8,7 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database import get_db
+from app.database import decrement_to_zero, get_db
 from app.middleware.auth import get_current_user, get_optional_user
 from app.models.community import Community, CommunityEvent, CommunityMember
 from app.models.event import Event
@@ -28,7 +28,7 @@ def _slugify(name: str, uid: str) -> str:
 
 def _load_community():
     return [
-        selectinload(Community.creator),
+        selectinload(Community.creator).selectinload(User.organizer_profile),
         selectinload(Community.category),
         selectinload(Community.members).selectinload(CommunityMember.user),
     ]
@@ -58,7 +58,7 @@ def _serialize(
         "created_at": community.created_at,
         "is_member": my_membership is not None,
         "member_role": my_membership.role if my_membership else None,
-        "is_verified_community": community.creator.role == "organizer",
+        "is_verified_community": community.creator.is_verified_organizer,
         "invite_token": community.invite_token if (community.is_private and is_admin) else None,
     }
 
@@ -373,7 +373,7 @@ async def leave_community(
     await db.delete(membership)
     await db.execute(
         update(Community).where(Community.id == community.id).values(
-            member_count=func.greatest(Community.member_count - 1, 0)
+            member_count=decrement_to_zero(Community.member_count)
         )
     )
     await db.commit()
@@ -425,11 +425,21 @@ async def update_member_role(
 ):
     community = await _require_community(db, slug)
     my_membership = await _get_membership(db, community.id, me.id)
-    if not my_membership or my_membership.role not in ("admin", "moderator"):
-        raise HTTPException(403, "Only admins and moderators can change roles")
+    # Admins only: letting moderators assign roles let any moderator promote themselves to
+    # admin, or demote the actual admins.
+    if not my_membership or my_membership.role != "admin":
+        raise HTTPException(403, "Only community admins can change roles")
     target = await _get_membership(db, community.id, user_id)
     if not target:
         raise HTTPException(404, "User is not a member")
+    if user_id == community.creator_id and me.id != community.creator_id:
+        raise HTTPException(403, "The community's creator can't be demoted")
+    if target.role == "admin" and role != "admin":
+        admins = (await db.execute(select(func.count()).select_from(CommunityMember).where(
+            CommunityMember.community_id == community.id, CommunityMember.role == "admin",
+        ))).scalar()
+        if admins <= 1:
+            raise HTTPException(400, "A community needs at least one admin. Promote someone else first.")
     target.role = role
     await db.commit()
     return {"ok": True, "role": role}
@@ -449,10 +459,16 @@ async def remove_member(
     target = await _get_membership(db, community.id, user_id)
     if not target:
         raise HTTPException(404, "User is not a member")
+    if user_id == me.id:
+        raise HTTPException(400, "Use 'Leave community' to remove yourself")
+    if user_id == community.creator_id:
+        raise HTTPException(403, "The community's creator can't be removed")
+    if my_membership.role == "moderator" and target.role != "member":
+        raise HTTPException(403, "Moderators can only remove regular members")
     await db.delete(target)
     await db.execute(
         update(Community).where(Community.id == community.id).values(
-            member_count=func.greatest(Community.member_count - 1, 0)
+            member_count=decrement_to_zero(Community.member_count)
         )
     )
     await db.commit()
@@ -586,7 +602,7 @@ async def remove_event(
     await db.delete(ce)
     await db.execute(
         update(Community).where(Community.id == community.id).values(
-            event_count=func.greatest(Community.event_count - 1, 0)
+            event_count=decrement_to_zero(Community.event_count)
         )
     )
     await db.commit()

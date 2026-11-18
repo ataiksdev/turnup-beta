@@ -1,6 +1,6 @@
 import type {
   Category, Comment, Event, EventFilters, FeedItem,
-  Notification, Token, User,
+  Notification, OrganizerProfile, Token, User,
 } from "@/types";
 
 export interface TicketTierDetail {
@@ -31,6 +31,11 @@ export interface CheckoutInit {
   amount_kobo: number;
   email: string;
   is_free: boolean;
+}
+
+export interface WaitlistEntry {
+  id: string; user_id: string; username: string; full_name: string; avatar_url: string | null;
+  position: number; status: string; created_at: string; notified_at: string | null;
 }
 
 export interface DailyView { date: string; views: number; }
@@ -64,6 +69,13 @@ class ApiError extends Error {
   }
 }
 
+/** The server's explanation for a 4xx ("Event is at capacity", "This event needs a
+ *  ticket"...), or `fallback` for network/server errors whose text isn't meant for users. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.message) return err.message;
+  return fallback;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -78,15 +90,69 @@ async function request<T>(
   const res = await fetch(`${BASE}/api${path}`, { ...options, headers });
 
   if (!res.ok) {
+    // The session behind the stored token was revoked (logout elsewhere, password change or
+    // reset, "sign out other devices") or expired: drop it so the app stops acting logged in.
+    // Only when it's still the stored token, so a slow stale request can't log out a newer one.
+    if (res.status === 401 && token && typeof window !== "undefined") {
+      const { useAuthStore } = await import("@/store/auth");
+      const state = useAuthStore.getState();
+      if (state.token === token) state.logout();
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, err.detail ?? "Request failed");
+    // FastAPI validation errors (422) return `detail` as a list of {loc, msg}; flatten it to
+    // readable text instead of letting it surface as "[object Object]".
+    const detail = Array.isArray(err.detail)
+      ? err.detail
+          .map((d: { loc?: (string | number)[]; msg?: string }) => {
+            const field = d.loc?.[d.loc.length - 1];
+            const msg = (d.msg ?? "Invalid value").replace(/^Value error, /, "");
+            return field && typeof field === "string" ? `${field}: ${msg}` : msg;
+          })
+          .join("; ")
+      : err.detail ?? (res.status === 429 ? "Too many attempts. Please wait a minute and try again." : err.error);
+    throw new ApiError(res.status, detail ?? "Request failed");
   }
 
   if (res.status === 204) return undefined as T;
   return res.json();
 }
 
+// ── Uploads ────────────────────────────────────────────────────────────────────
+
+/** Upload an image (cover, avatar). Returns its public URL. Not via request(): multipart
+ *  bodies must let the browser set Content-Type (with the boundary) itself. */
+export async function uploadImage(token: string, file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${BASE}/api/uploads`, {
+    method: "POST", body, headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, typeof err.detail === "string" ? err.detail
+      : res.status === 413 ? "That image is too large." : "Upload failed. Please try again.");
+  }
+  return (await res.json()).url as string;
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────────
+
+export type LoginResult = Token | { requires_2fa: true; temp_token: string };
+
+export interface SessionInfo {
+  id: string;
+  device_name: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+  last_active: string;
+  expires_at: string;
+  is_current: boolean;
+}
+
+export interface TwoFactorSetup { secret: string; otpauth_uri: string; qr_svg: string; }
+
+type Message = { message: string };
 
 type OAuthCallbackResult = {
   access_token?: string;
@@ -101,7 +167,72 @@ export const authApi = {
     request<Token>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
 
   login: (identifier: string, password: string) =>
-    request<Token>("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password }) }),
+    request<LoginResult>("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password }) }),
+
+  logout: (token: string) =>
+    request<Message>("/auth/logout", { method: "POST" }, token),
+
+  // ── Password reset / email verification / magic link ──
+  forgotPassword: (email: string) =>
+    request<Message>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    request<Message>("/auth/reset-password", {
+      method: "POST", body: JSON.stringify({ token, new_password: newPassword }),
+    }),
+
+  verifyEmail: (token: string) =>
+    request<Message>(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+
+  resendVerification: (token: string) =>
+    request<Message>("/auth/resend-verification", { method: "POST" }, token),
+
+  requestMagicLink: (email: string) =>
+    request<Message>("/auth/magic-link", { method: "POST", body: JSON.stringify({ email }) }),
+
+  verifyMagicLink: (token: string) =>
+    request<LoginResult>(`/auth/magic-link/verify?token=${encodeURIComponent(token)}`),
+
+  // ── Two-factor auth ──
+  verify2fa: (tempToken: string, code: string) =>
+    request<Token>("/auth/2fa/verify", {
+      method: "POST", body: JSON.stringify({ token: tempToken, code }),
+    }),
+
+  setup2fa: (token: string) =>
+    request<TwoFactorSetup>("/auth/2fa/setup", { method: "POST" }, token),
+
+  enable2fa: (token: string, code: string) =>
+    request<{ backup_codes: string[] }>("/auth/2fa/enable", {
+      method: "POST", body: JSON.stringify({ code }),
+    }, token),
+
+  disable2fa: (token: string, code: string) =>
+    request<Message>("/auth/2fa/disable", { method: "POST", body: JSON.stringify({ code }) }, token),
+
+  regenerateBackupCodes: (token: string, code: string) =>
+    request<{ backup_codes: string[] }>("/auth/2fa/backup-codes", {
+      method: "POST", body: JSON.stringify({ code }),
+    }, token),
+
+  // ── Sessions / password / account ──
+  sessions: (token: string) =>
+    request<SessionInfo[]>("/auth/sessions", {}, token),
+
+  revokeSession: (token: string, sessionId: string) =>
+    request<Message>(`/auth/sessions/${sessionId}`, { method: "DELETE" }, token),
+
+  revokeOtherSessions: (token: string) =>
+    request<Message>("/auth/sessions", { method: "DELETE" }, token),
+
+  changePassword: (token: string, currentPassword: string, newPassword: string) =>
+    request<Message>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }, token),
+
+  deleteAccount: (token: string, confirm: { password?: string; confirm_username?: string }) =>
+    request<Message>("/auth/account", { method: "DELETE", body: JSON.stringify(confirm) }, token),
 
   me: (token: string) =>
     request<User>("/auth/me", {}, token),
@@ -171,6 +302,9 @@ export const eventsApi = {
   forYou: (limit = 20, token?: string) =>
     request<Event[]>(`/events/for-you?limit=${limit}`, {}, token),
 
+  following: (token: string, limit = 20) =>
+    request<Event[]>(`/events/following?limit=${limit}`, {}, token),
+
   get: (idOrSlug: string, token?: string) =>
     request<Event>(`/events/${idOrSlug}`, {}, token),
 
@@ -182,6 +316,20 @@ export const eventsApi = {
 
   tiers: (eventId: string) =>
     request<TicketTierDetail[]>(`/events/${eventId}/tickets`),
+
+  /** Host view: includes paused tiers. */
+  manageTiers: (token: string, eventId: string) =>
+    request<TicketTierDetail[]>(`/events/${eventId}/tickets?include_inactive=true`, {}, token),
+
+  updateTier: (token: string, eventId: string, tierId: string, data: {
+    name?: string; price?: number; quantity?: number | null; is_active?: boolean; max_per_order?: number;
+  }) =>
+    request<TicketTierDetail>(`/events/${eventId}/tickets/${tierId}`, {
+      method: "PATCH", body: JSON.stringify(data),
+    }, token),
+
+  deleteTier: (token: string, eventId: string, tierId: string) =>
+    request<void>(`/events/${eventId}/tickets/${tierId}`, { method: "DELETE" }, token),
 
   createTier: (token: string, eventId: string, data: {
     name: string; description?: string; price: number; currency?: string;
@@ -222,6 +370,9 @@ export const eventsApi = {
       method: "POST", body: JSON.stringify({ items, idempotency_key: idempotencyKey }),
     }, token),
 
+  recordView: (eventId: string, token?: string) =>
+    request<void>(`/events/${eventId}/views`, { method: "POST" }, token),
+
   verifyPayment: (token: string, eventId: string, reference: string) =>
     request<TicketOrder[]>(`/events/${eventId}/tickets/verify-payment`, {
       method: "POST", body: JSON.stringify({ reference }),
@@ -235,6 +386,20 @@ export const eventsApi = {
   waitlistJoin: (token: string, eventId: string) =>
     request<{ status: string; position: number; waitlist_count: number }>(
       `/events/${eventId}/waitlist`, { method: "POST" }, token),
+
+  waitlistStatus: (token: string, eventId: string) =>
+    request<{ position: number; status: string; total_ahead: number }>(
+      `/events/${eventId}/waitlist/status`, {}, token),
+
+  /** Host view of the waitlist. status: "waiting" | "notified" | undefined (all). */
+  waitlist: (token: string, eventId: string, status?: string) =>
+    request<WaitlistEntry[]>(
+      `/events/${eventId}/waitlist${status === undefined ? "?status=" : `?status=${status}`}`, {}, token),
+
+  notifyWaitlist: (token: string, eventId: string, count: number) =>
+    request<{ notified: string[]; count: number }>(`/events/${eventId}/waitlist/notify`, {
+      method: "POST", body: JSON.stringify({ count }),
+    }, token),
 
   waitlistLeave: (token: string, eventId: string) =>
     request<void>(`/events/${eventId}/waitlist`, { method: "DELETE" }, token),
@@ -318,6 +483,9 @@ export interface CoHost {
 }
 
 export const organizerApi = {
+  updateProfile: (token: string, data: { organization_name?: string; organizer_bio?: string; website?: string }) =>
+    request<OrganizerProfile>("/organizer/profile", { method: "PATCH", body: JSON.stringify(data) }, token),
+
   become: (token: string, data: { organization_name?: string; organizer_bio?: string; website?: string }) =>
     request<User>("/organizer/become", { method: "POST", body: JSON.stringify(data) }, token),
 
@@ -374,6 +542,11 @@ export const organizerApi = {
 
   removeCohost: (token: string, eventId: string, cohostUserId: string) =>
     request<void>(`/events/${eventId}/cohosts/${cohostUserId}`, { method: "DELETE" }, token),
+
+  requestVerification: (token: string, note?: string) =>
+    request<OrganizerProfile>("/organizer/verification/request", {
+      method: "POST", body: JSON.stringify({ note: note || undefined }),
+    }, token),
 };
 
 // ── Series ─────────────────────────────────────────────────────────────────────
@@ -513,10 +686,20 @@ export interface PlatformStats {
   published_events: number; total_orders: number; confirmed_revenue: number;
   platform_fee_revenue: number;
   total_attendees: number; new_users_this_week: number; new_events_this_week: number;
+  pending_verifications: number;
 }
 
 export interface PlatformFee {
   ticket_fee_percent: number;
+}
+
+export interface AdminOrganizerVerification {
+  user_id: string; username: string; full_name: string | null; avatar_url: string | null;
+  organization_name: string | null; organizer_bio: string | null; website: string | null;
+  events_hosted: number; is_verified_organizer: boolean;
+  verification_status: "none" | "pending" | "approved" | "rejected";
+  verification_note: string | null; verification_requested_at: string | null;
+  reviewed_at: string | null; profile_created_at: string;
 }
 
 export const adminApi = {
@@ -598,6 +781,17 @@ export const adminApi = {
 
   refundOrder: (token: string, orderId: string) =>
     request<AdminOrderOut>(`/admin/orders/${orderId}/refund`, { method: "POST" }, token),
+
+  verificationQueue: (token: string, status = "pending") =>
+    request<AdminOrganizerVerification[]>(`/admin/organizers/verification-queue?status=${status}`, {}, token),
+
+  approveVerification: (token: string, userId: string) =>
+    request<AdminOrganizerVerification>(`/admin/organizers/${userId}/verify`, { method: "POST" }, token),
+
+  rejectVerification: (token: string, userId: string, note: string) =>
+    request<AdminOrganizerVerification>(`/admin/organizers/${userId}/reject-verification`, {
+      method: "POST", body: JSON.stringify({ note }),
+    }, token),
 
   scoutSources: (token: string) =>
     request<ScoutSourceOut[]>("/admin/scout/sources", {}, token),
@@ -734,11 +928,19 @@ export const communitiesApi = {
   leave: (token: string, slug: string) =>
     request<void>(`/communities/${slug}/leave`, { method: "DELETE" }, token),
 
-  members: (slug: string, page?: number) => {
+  members: (slug: string, page?: number, token?: string) => {
     const qs = new URLSearchParams();
     if (page) qs.set("page", String(page));
-    return request<CommunityMember[]>(`/communities/${slug}/members?${qs}`);
+    // token: private communities only show their member list to members
+    return request<CommunityMember[]>(`/communities/${slug}/members?${qs}`, {}, token);
   },
+
+  setMemberRole: (token: string, slug: string, userId: string, role: "member" | "moderator" | "admin") =>
+    request<{ ok: boolean; role: string }>(
+      `/communities/${slug}/members/${userId}?role=${role}`, { method: "PATCH" }, token),
+
+  removeMember: (token: string, slug: string, userId: string) =>
+    request<void>(`/communities/${slug}/members/${userId}`, { method: "DELETE" }, token),
 
   events: (slug: string, page?: number) => {
     const qs = new URLSearchParams();

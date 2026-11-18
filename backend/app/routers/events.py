@@ -6,13 +6,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.database import get_db
+from app.database import decrement_to_zero, get_db
 from app.middleware.auth import get_current_event_creator, get_current_organizer, get_current_user, get_optional_user
+from app.middleware.rate_limit import limiter
 from app.models.event import Category, Event, EventAttendee, EventSave
 from app.models.organizer import (
     EventCoHost, EventReview, EventView, EventWaitlist, TicketOrder, TicketTier,
@@ -32,10 +34,17 @@ from app.schemas.organizer import (
 )
 from app.services.email import send_ticket_email
 from app.services.paystack import PaystackConfigError, initialize_transaction, verify_transaction
-from app.services.tickets import confirm_order, notify_buyer, reserve_inventory
+from app.services.tickets import (
+    auto_rsvp, confirm_order, notify_buyer, reserve_inventory, settle_paid_orders, to_kobo,
+)
 from app.schemas.user import UserSummary
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """SQLite hands back naive datetimes; treat those as UTC so comparisons work."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _slugify(text: str, uid: str) -> str:
@@ -44,7 +53,10 @@ def _slugify(text: str, uid: str) -> str:
 
 
 def _load():
-    return [selectinload(Event.host), selectinload(Event.category)]
+    return [
+        selectinload(Event.host).selectinload(User.organizer_profile),
+        selectinload(Event.category),
+    ]
 
 
 def _serialize(event: Event, is_saved: bool = False,
@@ -87,6 +99,20 @@ async def _user_state(event_id: str, user: User | None, db: AsyncSession):
         EventWaitlist.event_id == event_id, EventWaitlist.user_id == user.id,
         EventWaitlist.status.in_(["waiting", "notified"])))).scalar_one_or_none()
     return sv is not None, (at.status if at else None), wl is not None
+
+
+async def _user_states(event_ids: list[str], user: User | None, db: AsyncSession) -> dict:
+    """Batched _user_state for a list of events: 3 queries total instead of 3 per event."""
+    if not user or not event_ids:
+        return {}
+    saved = set((await db.execute(select(EventSave.event_id).where(
+        EventSave.user_id == user.id, EventSave.event_id.in_(event_ids)))).scalars().all())
+    attending = dict((await db.execute(select(EventAttendee.event_id, EventAttendee.status).where(
+        EventAttendee.user_id == user.id, EventAttendee.event_id.in_(event_ids)))).all())
+    waitlisted = set((await db.execute(select(EventWaitlist.event_id).where(
+        EventWaitlist.user_id == user.id, EventWaitlist.event_id.in_(event_ids),
+        EventWaitlist.status.in_(["waiting", "notified"])))).scalars().all())
+    return {eid: (eid in saved, attending.get(eid), eid in waitlisted) for eid in event_ids}
 
 
 async def _require_event_access(event_id: str, user: User, db: AsyncSession) -> Event:
@@ -180,11 +206,8 @@ async def list_events(
             pass
 
     events = (await db.execute(stmt.offset((page - 1) * limit).limit(limit))).scalars().all()
-    result = []
-    for e in events:
-        saved, att, waitlisted = await _user_state(e.id, user, db)
-        result.append(_serialize(e, saved, att, waitlisted))
-    return result
+    states = await _user_states([e.id for e in events], user, db)
+    return [_serialize(e, *states.get(e.id, (False, None, False))) for e in events]
 
 
 @router.get("/trending", response_model=list[EventOut])
@@ -349,7 +372,7 @@ async def for_you_events(
             score += 3.0
 
         if user_city:
-            e_city = e.city.lower()
+            e_city = (e.city or "").lower()
             if user_city in e_city or e_city in user_city:
                 score += 2.0
 
@@ -398,19 +421,64 @@ async def for_you_events(
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    result = []
-    for _, e in scored[:limit]:
-        sv, at, wl = await _user_state(e.id, user, db)
-        result.append(_serialize(e, sv, at, wl))
-
-    if len(result) < limit:
-        seen = {r["id"] for r in result} | excluded_ids
+    picked = [e for _, e in scored[:limit]]
+    if len(picked) < limit:
+        seen = {e.id for e in picked} | excluded_ids
         fallback = [e for e in candidates if e.id not in seen]
         fallback.sort(key=lambda e: (e.is_trending, e.attendees_count), reverse=True)
-        for e in fallback[: limit - len(result)]:
-            sv, at, wl = await _user_state(e.id, user, db)
-            result.append(_serialize(e, sv, at, wl))
+        picked += fallback[: limit - len(picked)]
 
+    states = await _user_states([e.id for e in picked], user, db)
+    return [_serialize(e, *states.get(e.id, (False, None, False))) for e in picked]
+
+
+@router.get("/following", response_model=list[EventOut])
+async def following_events(
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Network-based discovery: upcoming events that people you follow are
+    attending or hosting. A separate, unblended surface from /for-you — built
+    directly on the follow graph rather than any scoring model."""
+    now = datetime.now(timezone.utc)
+
+    following_ids = (await db.execute(
+        select(Follow.following_id).where(Follow.follower_id == user.id)
+    )).scalars().all()
+    if not following_ids:
+        return []
+
+    attendee_rows = (await db.execute(
+        select(EventAttendee.event_id, func.count(func.distinct(EventAttendee.user_id)))
+        .where(EventAttendee.user_id.in_(following_ids))
+        .group_by(EventAttendee.event_id)
+    )).all()
+    following_counts = {row[0]: row[1] for row in attendee_rows}
+
+    hosted_ids = set((await db.execute(
+        select(Event.id).where(Event.host_id.in_(following_ids), Event.status == "published")
+    )).scalars().all())
+
+    candidate_ids = set(following_counts) | hosted_ids
+    if not candidate_ids:
+        return []
+
+    stmt = (
+        select(Event).options(*_load())
+        .where(Event.id.in_(candidate_ids), Event.status == "published", Event.start_date > now)
+        .order_by(Event.start_date.asc())
+        .limit(limit)
+    )
+    events = (await db.execute(stmt)).scalars().all()
+
+    states = await _user_states([e.id for e in events], user, db)
+    result = []
+    for e in events:
+        data = _serialize(e, *states.get(e.id, (False, None, False)))
+        data["following_count"] = following_counts.get(e.id, 0)
+        data["following_hosted"] = e.id in hosted_ids
+        result.append(data)
     return result
 
 
@@ -441,24 +509,11 @@ async def paystack_webhook(
     if not orders:
         return {"status": "unknown_reference"}
 
-    channel = payload["data"].get("channel")
-    for order in orders:
-        row = await confirm_order(db, order.id, channel)
-        if not row:
-            continue  # already confirmed via the client's verify-payment call
-        event = (await db.execute(select(Event).where(Event.id == row.event_id))).scalar_one_or_none()
-        t = await _get_tier(row.tier_id, row.event_id, db)
-        buyer = (await db.execute(select(User).where(User.id == row.user_id))).scalar_one_or_none()
-        await _auto_rsvp(event, buyer, db)
-        await notify_buyer(db, row, event, kind="confirmed")
-        background_tasks.add_task(
-            send_ticket_email, to=(buyer.email if buyer else "") or "", order_id=row.id,
-            ticket_code=row.ticket_code, event_title=event.title,
-            event_date=event.start_date, event_venue=event.venue_name,
-            event_address=event.address, tier_name=t.name,
-            quantity=row.quantity, total_price=row.total_price,
-        )
-    return {"status": "ok"}
+    # Always 200 so Paystack stops retrying; a mismatch leaves the orders untouched (logged).
+    result = await settle_paid_orders(db, list(orders), payload["data"])
+    for job in result.emails:
+        background_tasks.add_task(job.fn, **job.kwargs)
+    return {"status": result.status}
 
 
 @router.get("/{event_id}", response_model=EventDetail)
@@ -507,6 +562,7 @@ async def get_event(
         "id": h.id, "username": h.username, "full_name": h.full_name,
         "display_name": h.display_name, "bio": h.bio,
         "avatar_url": h.avatar_url, "is_verified": h.is_verified,
+        "is_verified_organizer": h.is_verified_organizer,
         "role": h.role, "followers_count": h.followers_count,
         "events_hosted": host_events_hosted,
         "avg_rating": host_avg_rating, "review_count": host_review_count,
@@ -537,6 +593,13 @@ async def create_event(
             for k, v in defaults.items():
                 if k in data and data[k] is None:
                     data[k] = v
+            # Template data is a free-form dict stored without validation, so re-run the
+            # full EventCreate validation (URL fields included) on the merged result.
+            try:
+                data = EventCreate.model_validate(data).model_dump()
+            except ValidationError as e:
+                raise HTTPException(422, f"Template contains invalid data: {e.errors()[0]['msg']}")
+            data.pop("template_id", None)
 
     # Admins bypass approval; organizer/moderator submissions go to review as drafts.
     if user.role == "admin":
@@ -555,6 +618,10 @@ async def create_event(
             events_hosted=User.events_hosted + 1))
     stmt = select(Event).options(*_load()).where(Event.id == eid)
     return _serialize((await db.execute(stmt)).scalar_one())
+
+
+# Fields whose content a moderator approved; changing them needs another look.
+REVIEWED_FIELDS = {"title", "description", "cover_image", "meeting_url", "tags", "venue_name", "address"}
 
 
 @router.patch("/{event_id}", response_model=EventDetail)
@@ -578,6 +645,20 @@ async def update_event(
         if changes and event.review_status in ("pending", "rejected"):
             event.review_status = "pending"
             event.review_note = None
+        # Editing what attendees SEE on an approved event sends it back to the review queue,
+        # otherwise approval could be bypassed by publishing something harmless and then
+        # rewriting it. It stays live meanwhile (tickets may already be sold); an admin
+        # re-approves it, or rejects it, which takes it down.
+        elif event.review_status == "approved" and any(
+            k in REVIEWED_FIELDS and v != getattr(event, k) for k, v in changes.items()
+        ):
+            event.review_status = "pending"
+            event.review_note = "Edited after approval"
+
+    new_start = changes.get("start_date", event.start_date)
+    new_end = changes.get("end_date", event.end_date)
+    if new_start and new_end and _as_utc(new_end) < _as_utc(new_start):
+        raise HTTPException(422, "The event can't end before it starts")
 
     for k, v in changes.items():
         setattr(event, k, v)
@@ -637,6 +718,14 @@ async def delete_event(
         raise HTTPException(404, "Event not found")
     if event.host_id != user.id:
         raise HTTPException(403, "Only the host can delete this event")
+    # Deleting would also delete buyers' tickets and the payment records needed to refund them.
+    sold = (await db.execute(select(func.count(TicketOrder.id)).where(
+        TicketOrder.event_id == event_id,
+        TicketOrder.status.in_(["confirmed", "pending", "needs_refund"]),
+    ))).scalar() or 0
+    if sold:
+        raise HTTPException(409, "This event has ticket orders, so it can't be deleted. "
+                                 "Cancel it instead (attendees are notified), and refund orders from Orders.")
     await db.delete(event)
 
 
@@ -655,41 +744,69 @@ async def attend(
 
     existing = (await db.execute(select(EventAttendee).where(
         EventAttendee.event_id == event_id, EventAttendee.user_id == user.id))).scalar_one_or_none()
+    old_status = existing.status if existing else None
+    if old_status == payload.status:
+        return {"status": payload.status, "attendees_count": event.attendees_count,
+                "interested_count": event.interested_count}
 
-    # Capacity check for "going" RSVPs
-    if payload.status == "going" and not existing:
-        if event.capacity and event.attendees_count >= event.capacity:
+    becoming_going = payload.status == "going"
+    if becoming_going:
+        # Ticketed events: "going" means holding a ticket. Otherwise anyone could RSVP to a
+        # paid event for free (and then review it, take a capacity spot, etc.).
+        has_tiers = (await db.execute(select(TicketTier.id).where(
+            TicketTier.event_id == event_id, TicketTier.is_active == True).limit(1))).first()
+        if has_tiers and event.host_id != user.id:
+            has_ticket = (await db.execute(select(TicketOrder.id).where(
+                TicketOrder.event_id == event_id, TicketOrder.user_id == user.id,
+                TicketOrder.status == "confirmed").limit(1))).first()
+            if not has_ticket:
+                raise HTTPException(409, "This event needs a ticket. Get one to mark yourself as going.")
+
+        # Take a capacity spot atomically. This applies to switching from "interested" too,
+        # which previously skipped the check entirely.
+        claimed = await db.execute(
+            update(Event).where(
+                Event.id == event_id,
+                or_(Event.capacity.is_(None), Event.capacity <= 0, Event.attendees_count < Event.capacity),
+            ).values(attendees_count=Event.attendees_count + 1)
+        )
+        if claimed.rowcount == 0:
             if event.waitlist_enabled:
                 return await _join_waitlist_internal(event, user, db)
             raise HTTPException(409, "Event is at capacity")
+        await db.execute(update(User).where(User.id == user.id).values(
+            events_attended=User.events_attended + 1))
+    else:
+        await db.execute(update(Event).where(Event.id == event_id).values(
+            interested_count=Event.interested_count + 1))
+
+    # Undo the previous status's counters.
+    if old_status == "going":
+        await db.execute(update(Event).where(Event.id == event_id).values(
+            attendees_count=decrement_to_zero(Event.attendees_count)))
+        await db.execute(update(User).where(User.id == user.id).values(
+            events_attended=decrement_to_zero(User.events_attended)))
+    elif old_status == "interested":
+        await db.execute(update(Event).where(Event.id == event_id).values(
+            interested_count=decrement_to_zero(Event.interested_count)))
 
     if existing:
-        old_status = existing.status
-        if old_status == "going":
-            event.attendees_count = max(0, event.attendees_count - 1)
-        else:
-            event.interested_count = max(0, event.interested_count - 1)
         existing.status = payload.status
     else:
         db.add(EventAttendee(id=str(uuid.uuid4()), user_id=user.id,
                              event_id=event_id, status=payload.status))
-        await db.execute(update(User).where(User.id == user.id).values(
-            events_attended=User.events_attended + 1))
-
-    if payload.status == "going":
-        event.attendees_count += 1
-    else:
-        event.interested_count += 1
 
     # Notify host when someone RSVPs going (skip if user is the host)
-    if payload.status == "going" and event.host_id != user.id:
+    if becoming_going and event.host_id != user.id:
         db.add(Notification(
             id=str(uuid.uuid4()), user_id=event.host_id, type="going",
-            title=f"{user.full_name} is going to your event",
+            title=f"{user.display_name or user.full_name or user.username} is going to your event",
             body=event.title,
             reference_id=event_id, reference_type="event", actor_id=user.id,
         ))
 
+    await db.flush()
+    await db.refresh(event)
     return {"status": payload.status, "attendees_count": event.attendees_count,
             "interested_count": event.interested_count}
 
@@ -731,7 +848,7 @@ async def remove_attendance(
     if att.status == "going":
         event.attendees_count = max(0, event.attendees_count - 1)
         await db.execute(update(User).where(User.id == user.id).values(
-            events_attended=max(0, User.events_attended - 1)))
+            events_attended=decrement_to_zero(User.events_attended)))
     else:
         event.interested_count = max(0, event.interested_count - 1)
     await db.delete(att)
@@ -768,7 +885,16 @@ async def get_attendees(
     status: str | None = None,
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
 ):
+    # Only published events have a public guest list; drafts only to their host/co-hosts.
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.status != "published":
+        if not user:
+            raise HTTPException(404, "Event not found")
+        await _require_event_access(event_id, user, db)
     stmt = (select(EventAttendee).options(selectinload(EventAttendee.user))
             .where(EventAttendee.event_id == event_id))
     if status:
@@ -792,6 +918,14 @@ async def record_view(
     if not event:
         return
     ip = request.client.host if request.client else None
+    # One view per viewer (signed-in user, else IP) per event per 30 minutes, so refreshing
+    # or a script hammering this endpoint can't inflate an organizer's numbers.
+    since = datetime.now(timezone.utc) - timedelta(minutes=30)
+    viewer = (EventView.user_id == user.id) if user else (EventView.ip_address == ip)
+    recent = (await db.execute(select(EventView.id).where(
+        EventView.event_id == event_id, viewer, EventView.viewed_at >= since).limit(1))).first()
+    if recent:
+        return
     db.add(EventView(
         id=str(uuid.uuid4()),
         event_id=event_id,
@@ -868,13 +1002,19 @@ async def get_analytics(
 # ── Ticket tiers ──────────────────────────────────────────────────────────────────
 
 @router.get("/{event_id}/tickets", response_model=list[TicketTierOut])
-async def list_ticket_tiers(event_id: str, db: AsyncSession = Depends(get_db)):
-    now = datetime.now(timezone.utc)
-    result = await db.execute(
-        select(TicketTier)
-        .where(TicketTier.event_id == event_id, TicketTier.is_active == True)
-        .order_by(TicketTier.price.asc())
-    )
+async def list_ticket_tiers(
+    event_id: str,
+    include_inactive: bool = False,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    """Buyers see tiers on sale. Hosts/co-hosts can ask for paused ones too (to manage them)."""
+    stmt = select(TicketTier).where(TicketTier.event_id == event_id)
+    if include_inactive and user:
+        await _require_event_access(event_id, user, db)
+    else:
+        stmt = stmt.where(TicketTier.is_active == True)
+    result = await db.execute(stmt.order_by(TicketTier.price.asc()))
     tiers = result.scalars().all()
     return [_tier_out(t) for t in tiers]
 
@@ -903,7 +1043,11 @@ async def update_ticket_tier(
 ):
     await _require_event_access(event_id, user, db)
     t = await _get_tier(tier_id, event_id, db)
-    for k, v in payload.model_dump(exclude_none=True).items():
+    changes = payload.model_dump(exclude_none=True)
+    if "quantity" in changes and changes["quantity"] < t.quantity_sold:
+        raise HTTPException(409, f"{t.quantity_sold} tickets are already sold or reserved; "
+                                 "the quantity can't go below that.")
+    for k, v in changes.items():
         setattr(t, k, v)
     await db.flush()
     return _tier_out(t)
@@ -924,7 +1068,9 @@ async def delete_ticket_tier(
 
 
 @router.post("/{event_id}/tickets/checkout", response_model=CheckoutInitOut)
+@limiter.limit(settings.rate_limit_checkout)
 async def checkout_tickets(
+    request: Request,
     event_id: str,
     payload: CheckoutRequest,
     background_tasks: BackgroundTasks,
@@ -955,7 +1101,7 @@ async def checkout_tickets(
                 order_ids=[o.id for o in existing],
                 payment_reference=existing[0].payment_reference,
                 paystack_public_key=settings.paystack_public_key if total > 0 else "",
-                amount_kobo=int(total * 100),
+                amount_kobo=to_kobo(total),
                 email=user.email or "",
                 is_free=(total == 0),
             )
@@ -1005,14 +1151,14 @@ async def checkout_tickets(
                 event_address=event.address, tier_name=tiers_by_order[row.id].name,
                 quantity=row.quantity, total_price=0.0,
             )
-        await _auto_rsvp(event, user, db)
+        await auto_rsvp(event, user, db)
         return CheckoutInitOut(
             order_ids=[o.id for o in orders], payment_reference=reference,
             paystack_public_key="", amount_kobo=0, email=user.email or "", is_free=True,
         )
 
     # Paid — init one Paystack transaction for the summed total (amount in kobo)
-    amount_kobo = int(total * 100)
+    amount_kobo = to_kobo(total)
     email = user.email or f"{user.username}@turnup.app"
     try:
         await initialize_transaction(
@@ -1028,19 +1174,6 @@ async def checkout_tickets(
         order_ids=[o.id for o in orders], payment_reference=reference,
         paystack_public_key=settings.paystack_public_key, amount_kobo=amount_kobo, email=email,
     )
-
-
-async def _auto_rsvp(event: Event, user: User, db: AsyncSession) -> None:
-    existing = (await db.execute(select(EventAttendee).where(
-        EventAttendee.event_id == event.id,
-        EventAttendee.user_id == user.id,
-    ))).scalar_one_or_none()
-    if not existing:
-        db.add(EventAttendee(
-            id=str(uuid.uuid4()), user_id=user.id,
-            event_id=event.id, status="going",
-        ))
-        event.attendees_count += 1
 
 
 def _order_out(order: TicketOrder, tier_name: str) -> TicketOrderOut:
@@ -1061,50 +1194,47 @@ async def verify_payment(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Verify a Paystack payment and confirm every pending order sharing this reference
-    (a checkout may have created several, one per tier line)."""
+    """Verify a Paystack payment and settle every order sharing this reference (a checkout
+    may have created several, one per tier line). Returns this payment's confirmed orders.
+
+    Safe to call after the webhook already confirmed them (returns them instead of an error),
+    and after the orders expired (they're revived if tickets remain, refunded if not)."""
     orders = (await db.execute(select(TicketOrder).where(
         TicketOrder.payment_reference == payload.reference,
         TicketOrder.user_id == user.id,
-        TicketOrder.status == "pending",
+        TicketOrder.event_id == event_id,
     ))).scalars().all()
     if not orders:
-        raise HTTPException(404, "Order not found or already processed")
+        raise HTTPException(404, "Order not found")
 
-    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
-    if not event:
-        raise HTTPException(404, "Event not found")
+    if any(o.status in ("pending", "cancelled") for o in orders):
+        try:
+            ps_resp = await verify_transaction(payload.reference)
+        except PaystackConfigError as e:
+            raise HTTPException(503, str(e))
+        except Exception:
+            raise HTTPException(502, "Could not verify payment. Please contact support.")
 
-    try:
-        ps_resp = await verify_transaction(payload.reference)
-    except PaystackConfigError as e:
-        raise HTTPException(503, str(e))
-    except Exception:
-        raise HTTPException(502, "Could not verify payment. Please contact support.")
+        ps_data = ps_resp.get("data", {})
+        if ps_data.get("status") != "success":
+            raise HTTPException(402, "Payment not completed")
 
-    ps_data = ps_resp.get("data", {})
-    if ps_data.get("status") != "success":
-        raise HTTPException(402, "Payment not completed")
+        result = await settle_paid_orders(db, list(orders), ps_data)
+        if result.status == "amount_mismatch":
+            raise HTTPException(402, "Payment amount does not match your order. Please contact support.")
+        for job in result.emails:
+            background_tasks.add_task(job.fn, **job.kwargs)
 
-    confirmed: list[TicketOrderOut] = []
-    for order in orders:
-        row = await confirm_order(db, order.id, ps_data.get("channel"))
-        if not row:
-            continue  # already confirmed by the webhook -- no-op, avoids double email/notify
-        t = await _get_tier(row.tier_id, event_id, db)
-        await notify_buyer(db, row, event, kind="confirmed")
-        background_tasks.add_task(
-            send_ticket_email, to=user.email or "", order_id=row.id,
-            ticket_code=row.ticket_code, event_title=event.title,
-            event_date=event.start_date, event_venue=event.venue_name,
-            event_address=event.address, tier_name=t.name,
-            quantity=row.quantity, total_price=row.total_price,
-        )
-        confirmed.append(_order_out(row, t.name))
-
-    if confirmed:
-        await _auto_rsvp(event, user, db)
-    return confirmed
+    # An empty list means the payment went through but every ticket in it had sold out by
+    # the time it cleared; the buyer has been refunded (or the refund is queued) and notified.
+    tier_names = {t.id: t.name for t in (await db.execute(select(TicketTier).where(
+        TicketTier.id.in_({o.tier_id for o in orders})))).scalars().all()}
+    confirmed = (await db.execute(select(TicketOrder).where(
+        TicketOrder.payment_reference == payload.reference,
+        TicketOrder.user_id == user.id,
+        TicketOrder.status == "confirmed",
+    ))).scalars().all()
+    return [_order_out(o, tier_names.get(o.tier_id, "")) for o in confirmed]
 
 
 def _tier_out(t: TicketTier) -> TicketTierOut:
@@ -1367,7 +1497,9 @@ async def notify_waitlist(
 # ── Check-in ─────────────────────────────────────────────────────────────────
 
 @router.post("/{event_id}/checkin", response_model=CheckInResult)
+@limiter.limit(settings.rate_limit_checkin)
 async def check_in_ticket(
+    request: Request,
     event_id: str,
     payload: CheckInRequest,
     db: AsyncSession = Depends(get_db),
@@ -1470,7 +1602,9 @@ async def my_review(
 
 
 @router.post("/{event_id}/reviews", response_model=ReviewOut, status_code=201)
+@limiter.limit(settings.rate_limit_review)
 async def create_review(
+    request: Request,
     event_id: str,
     payload: ReviewCreate,
     db: AsyncSession = Depends(get_db),

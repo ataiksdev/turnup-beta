@@ -2,13 +2,15 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.middleware.auth import get_current_organizer, get_current_user
+from app.middleware.rate_limit import limiter
 from app.models.event import Event, EventAttendee
 from app.models.organizer import (
     EventCoHost, EventTemplate, OrganizerProfile, TicketOrder, TicketTier,
@@ -16,7 +18,7 @@ from app.models.organizer import (
 from app.models.user import User
 from app.schemas.organizer import (
     DashboardOut, OrganizerBecomeRequest, OrganizerProfileOut, OrganizerProfileUpdate,
-    TemplateCreate, TemplateOut, TemplateUpdate, TicketOrderOut,
+    TemplateCreate, TemplateOut, TemplateUpdate, TicketOrderOut, VerificationRequest,
 )
 from app.schemas.user import UserMe
 from app.services.email import send_refund_email
@@ -74,12 +76,47 @@ async def update_organizer_profile(
     user: User = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ):
-    if not user.organizer_profile:
-        raise HTTPException(404, "Organizer profile not found")
+    profile = user.organizer_profile
+    if not profile:
+        # Organizers made by an admin role change (or seed data) never went through
+        # /organizer/become, so they have no profile row yet: create it on first edit.
+        profile = OrganizerProfile(user_id=user.id)
+        db.add(profile)
     for field, val in payload.model_dump(exclude_none=True).items():
-        setattr(user.organizer_profile, field, val)
+        setattr(profile, field, val)
     await db.flush()
-    return user.organizer_profile
+    await db.refresh(profile)
+    return profile
+
+
+# ── Verification (self-serve application → admin review queue) ───────────────
+
+@router.post("/verification/request", response_model=OrganizerProfileOut)
+async def request_verification(
+    payload: VerificationRequest,
+    user: User = Depends(get_current_organizer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply for the verified-organizer trust badge.
+
+    Purely cosmetic once approved — does not change what the organizer can do;
+    they still go through the normal event-review queue either way.
+    """
+    profile = user.organizer_profile
+    if not profile:
+        raise HTTPException(404, "Organizer profile not found")
+    if profile.is_verified_organizer:
+        raise HTTPException(400, "Already verified")
+    if profile.verification_status == "pending":
+        raise HTTPException(400, "A verification request is already pending review")
+
+    profile.verification_status = "pending"
+    profile.verification_note = payload.note
+    profile.verification_requested_at = datetime.now(timezone.utc)
+    profile.reviewed_by_id = None
+    profile.reviewed_at = None
+    await db.flush()
+    return profile
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -323,7 +360,9 @@ async def organizer_orders(
 
 
 @router.post("/orders/{order_id}/refund", response_model=TicketOrderOut)
+@limiter.limit(settings.rate_limit_refund)
 async def organizer_refund_order(
+    request: Request,
     order_id: str,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_organizer),

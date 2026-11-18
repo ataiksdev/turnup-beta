@@ -1,12 +1,14 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
 import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { formatPrice } from "@/lib/utils";
 import { BarChart2, Eye, Heart, Bookmark, Ticket, TrendingUp, Users, Clock, ScanLine } from "lucide-react";
 import Link from "next/link";
+import { routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
+import { WaitlistPanel } from "@/components/organizer/WaitlistPanel";
 
 function StatCard({ icon, label, value, sub }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string;
@@ -24,7 +26,7 @@ function StatCard({ icon, label, value, sub }: {
 }
 
 export default function EventAnalyticsPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useRouteParam("id");
   const { token } = useAuthStore();
 
   const { data: event } = useQuery({
@@ -59,7 +61,7 @@ export default function EventAnalyticsPage() {
           Could not load analytics
         </p>
         <p className="text-xs text-text-muted">Check your connection and try again</p>
-        <Link href={`/organizer/events/${id}/edit`} className="text-primary text-sm font-medium hover:underline">
+        <Link href={routes.organizerEvent(id, "edit")} className="text-primary text-sm font-medium hover:underline">
           ← Back to event
         </Link>
       </div>
@@ -74,7 +76,7 @@ export default function EventAnalyticsPage() {
           No analytics yet
         </p>
         <p className="text-xs text-text-muted">Data will appear once your event has views</p>
-        <Link href={`/organizer/events/${id}/edit`} className="text-primary text-sm font-medium hover:underline">
+        <Link href={routes.organizerEvent(id, "edit")} className="text-primary text-sm font-medium hover:underline">
           ← Back to event
         </Link>
       </div>
@@ -93,19 +95,19 @@ export default function EventAnalyticsPage() {
         {/* Quick actions */}
         <div className="flex gap-2">
           <Link
-            href={`/organizer/events/${id}/edit`}
+            href={routes.organizerEvent(id, "edit")}
             className="flex-1 py-2.5 text-center text-[10px] font-black uppercase tracking-widest rounded border-2 border-border bg-bg-card hover:border-primary transition-colors shadow-brutal-sm"
           >
             Edit Event
           </Link>
           <Link
-            href={`/events/${id}`}
+            href={routes.event(id)}
             className="flex-1 py-2.5 text-center text-[10px] font-black uppercase tracking-widest rounded border-2 border-border bg-bg-card hover:border-primary transition-colors shadow-brutal-sm"
           >
             View Page
           </Link>
           <Link
-            href={`/organizer/events/${id}/checkin`}
+            href={routes.organizerEvent(id, "checkin")}
             className="flex items-center gap-1 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest rounded border-2 border-primary bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors shadow-brutal-sm"
           >
             <ScanLine size={12} /> Scan
@@ -171,6 +173,8 @@ export default function EventAnalyticsPage() {
             </div>
           </div>
         )}
+
+        <WaitlistPanel eventId={id} />
 
         {/* Engagement summary */}
         <div className="bg-bg-card border-2 border-border rounded p-4 shadow-brutal-sm space-y-3">

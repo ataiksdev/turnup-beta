@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { organizerApi, eventsApi } from "@/lib/api";
 import type { CoHost } from "@/lib/api";
@@ -10,6 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 import { UserPlus, X } from "lucide-react";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 const STATUS_BADGE: Record<string, string> = {
   accepted: "bg-success/15 text-success border-success/40",
@@ -85,7 +85,7 @@ function CoHostRow({
 }
 
 export default function CoHostsPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useRouteParam("id");
   const { token } = useAuthStore();
   const queryClient = useQueryClient();
 

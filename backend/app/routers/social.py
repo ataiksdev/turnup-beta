@@ -1,11 +1,13 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.middleware.auth import get_current_user
+from app.middleware.rate_limit import limiter
 from app.models.event import Event, EventAttendee
 from app.models.social import Comment, Follow, Notification
 from app.models.user import User
@@ -17,7 +19,9 @@ router = APIRouter(prefix="/api/social", tags=["social"])
 # ── Follow ────────────────────────────────────────────────────────────────────
 
 @router.post("/follow/{username}")
+@limiter.limit(settings.rate_limit_follow)
 async def follow_user(
+    request: Request,
     username: str,
     db: AsyncSession = Depends(get_db),
     me: User = Depends(get_current_user),
@@ -82,7 +86,9 @@ async def get_comments(
 
 
 @router.post("/events/{event_id}/comments", response_model=CommentOut, status_code=201)
+@limiter.limit(settings.rate_limit_comment)
 async def add_comment(
+    request: Request,
     event_id: str,
     payload: CommentCreate,
     db: AsyncSession = Depends(get_db),

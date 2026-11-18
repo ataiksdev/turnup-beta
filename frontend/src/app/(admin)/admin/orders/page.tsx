@@ -24,6 +24,7 @@ function StatusBadge({ status }: { status: string }) {
     pending: "border-yellow-400 text-yellow-700 bg-yellow-50",
     cancelled: "border-red-400 text-red-700 bg-red-50",
     refunded: "border-blue-400 text-blue-700 bg-blue-50",
+    needs_refund: "border-orange-400 text-orange-700 bg-orange-50",
   };
   return (
     <span className={cn("text-xs font-bold px-2 py-0.5 rounded border-2", colors[status] ?? "border-border text-text-muted bg-bg-elevated")}>
@@ -56,7 +57,7 @@ function OrderRow({ order, onRefunded }: { order: AdminOrderOut; onRefunded: (or
       </div>
       <div className="flex items-center justify-between">
         <p className="text-xs text-text-muted">{timeAgo(order.created_at)}</p>
-        {order.status === "confirmed" && (
+        {(order.status === "confirmed" || order.status === "needs_refund") && (
           confirming ? (
             <div className="flex items-center gap-2">
               <Button size="sm" variant="danger" loading={refundMutation.isPending} onClick={() => refundMutation.mutate()}>

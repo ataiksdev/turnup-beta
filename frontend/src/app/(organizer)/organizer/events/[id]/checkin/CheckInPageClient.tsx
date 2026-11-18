@@ -1,6 +1,5 @@
 "use client";
 import { useRef, useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { eventsApi, type CheckInResult } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
@@ -11,6 +10,7 @@ import {
   Camera, CameraOff, CheckCircle2, XCircle, Keyboard, RefreshCw, Users,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ interface ScanRecord {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function CheckInPage() {
-  const { id: eventId } = useParams<{ id: string }>();
+  const eventId = useRouteParam("id");
   const { token } = useAuthStore();
 
   const videoRef = useRef<HTMLVideoElement>(null);

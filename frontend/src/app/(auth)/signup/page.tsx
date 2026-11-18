@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api";
+import { startOAuthRedirect } from "@/lib/session";
 import { useAuthStore } from "@/store/auth";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -92,7 +93,7 @@ export default function SignupPage() {
     setError("");
     try {
       const { url } = await authApi.getOAuthUrl(provider);
-      window.location.href = url;
+      startOAuthRedirect(url);
     } catch (err: any) {
       setError(err.message ?? "OAuth unavailable");
       setLoading(false);
@@ -213,7 +214,7 @@ export default function SignupPage() {
           <Input label="Email" type="email" value={form.email} onChange={set("email")}
             placeholder="you@example.com" icon={<Mail size={16} />} required />
           <Input label="Password" type="password" value={form.password} onChange={set("password")}
-            placeholder="Min. 6 characters" icon={<Lock size={16} />} minLength={6} required />
+            placeholder="Min. 8 characters" icon={<Lock size={16} />} minLength={8} required />
           <Button type="submit" fullWidth size="lg" loading={loading} className="mt-2">
             {role === "organizer" ? "Create Organizer Account" : "Create Account"}
           </Button>

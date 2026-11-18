@@ -8,7 +8,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     username: str = Field(min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
     full_name: str = Field(min_length=2, max_length=120)
-    password: str = Field(min_length=6, max_length=100)
+    password: str = Field(min_length=8, max_length=100)
 
 
 class LoginRequest(BaseModel):
@@ -30,12 +30,12 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(min_length=6, max_length=100)
+    new_password: str = Field(min_length=8, max_length=100)
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(min_length=6, max_length=100)
+    new_password: str = Field(min_length=8, max_length=100)
 
 
 class MagicLinkRequest(BaseModel):
@@ -56,7 +56,10 @@ class TwoFactorDisableRequest(BaseModel):
 
 
 class DeleteAccountRequest(BaseModel):
-    password: str    # require password confirmation
+    # Accounts with a password confirm with it. Passwordless accounts (Google, Instagram,
+    # phone sign-in) confirm by typing their username instead.
+    password: str | None = None
+    confirm_username: str | None = None
 
 
 class PhoneLoginRequest(BaseModel):
@@ -105,6 +108,7 @@ class SessionOut(BaseModel):
     created_at: datetime
     last_active: datetime
     expires_at: datetime
+    is_current: bool = False
 
     model_config = {"from_attributes": True}
 

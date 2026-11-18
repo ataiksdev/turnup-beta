@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import {useRouter} from "next/navigation";
 import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
@@ -14,6 +14,9 @@ import {
   Ticket, Trash2, ToggleLeft, ToggleRight, Users, Globe,
   ChevronRight, ChevronLeft, Monitor, Video, Blend,
 } from "lucide-react";
+import { useRouteParam } from "@/lib/useRouteParam";
+import { ImageUploadButton } from "@/components/ui/ImageUploadButton";
+import { TierManager } from "@/components/organizer/TierManager";
 
 type EventType = "physical" | "virtual" | "hybrid";
 
@@ -136,7 +139,7 @@ function Toggle({ value, onChange, label, description }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function EditEventPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useRouteParam("id");
   const router = useRouter();
   const { token } = useAuthStore();
 
@@ -334,9 +337,10 @@ export default function EditEventPage() {
       </FieldWrap>
 
       <FieldWrap>
-        <Label>Cover Image URL</Label>
+        <Label>Cover Image</Label>
         <Input value={form.cover_image} onChange={(e) => set("cover_image")(e.target.value)}
-          placeholder="https://..." icon={<Image size={16} />} />
+          placeholder="Paste an image link, or upload one" icon={<Image size={16} />} />
+        <div className="mt-2"><ImageUploadButton onUploaded={(url) => set("cover_image")(url)} /></div>
         {form.cover_image && (
           <div className="mt-2 h-32 w-full rounded border-2 border-border overflow-hidden bg-bg-elevated">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -441,28 +445,9 @@ export default function EditEventPage() {
       <Toggle value={form.is_free} onChange={set("is_free")}
         label="This event is free" description="No payment required to attend" />
 
-      {/* Existing tiers — read only */}
-      {existingTiers && existingTiers.length > 0 && (
-        <div className="space-y-2">
-          <Label>Existing Tiers</Label>
-          {existingTiers.map((t) => (
-            <div key={t.id} className={cn(
-              "flex items-center justify-between p-3 rounded border-2 border-border bg-bg-card",
-              !t.is_active && "opacity-50",
-            )}>
-              <div>
-                <p className="text-sm font-black text-text">{t.name}</p>
-                <p className="text-xs text-text-muted">
-                  {t.quantity !== null ? `${t.quantity - t.quantity_sold} left` : "Unlimited"}
-                  {!t.is_active && " · Inactive"}
-                </p>
-              </div>
-              <span className="text-sm font-black text-primary">${t.price.toFixed(2)}</span>
-            </div>
-          ))}
-          <p className="text-[10px] text-text-muted">Existing tiers are view-only. Add new tiers below.</p>
-        </div>
-      )}
+      {/* Existing tiers — editable */}
+      {/* Shown whenever tiers exist, including when every tier is paused */}
+      <TierManager eventId={id} />
 
       {/* New tiers */}
       {!form.is_free && (

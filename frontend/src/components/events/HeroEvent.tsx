@@ -5,11 +5,12 @@ import { Calendar, MapPin, Users, Flame } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
+import { routes } from "@/lib/routes";
 
 export function HeroEvent({ event }: { event: Event }) {
   return (
     <Link
-      href={`/events/${event.slug}`}
+      href={routes.event(event.slug)}
       className="block relative h-[500px] overflow-hidden border-y-2 border-border"
     >
       {event.cover_image ? (

@@ -1,5 +1,4 @@
 import json
-import random
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -8,7 +7,7 @@ from pydantic import BaseModel
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -52,6 +51,13 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _current_jti(request: Request) -> str | None:
+    """The session id (jti) of the bearer token on this request."""
+    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    payload = decode_token_full(token) if token else None
+    return payload.get("jti") if payload else None
+
+
 async def _create_session(
     db: AsyncSession,
     user: User,
@@ -75,8 +81,12 @@ async def _create_session(
 
 
 async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(select(User).where(User.email == email))
-    return result.scalar_one_or_none()
+    # Case-insensitive: "Ada@Example.com" and "ada@example.com" are the same mailbox, and
+    # must not become two accounts (or let one person register a look-alike of another).
+    result = await db.execute(
+        select(User).where(func.lower(User.email) == email.strip().lower()).limit(1)
+    )
+    return result.scalars().first()
 
 
 async def _get_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
@@ -103,7 +113,7 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
 
     user = User(
         id=str(uuid.uuid4()),
-        email=payload.email,
+        email=payload.email.strip().lower(),
         username=payload.username.lower(),
         full_name=payload.full_name,
         hashed_password=hash_password(payload.password),
@@ -144,16 +154,9 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
 
 @router.post("/logout", response_model=MessageResponse)
 async def logout(request: Request, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    from fastapi.security import OAuth2PasswordBearer
-    from app.services.auth import decode_token_full as dtf
-    # Extract jti from the current bearer token
-    auth_header = request.headers.get("authorization", "")
-    token = auth_header.removeprefix("Bearer ").strip()
-    payload = dtf(token)
-    if payload and payload.get("jti"):
-        await db.execute(
-            delete(UserSession).where(UserSession.jti == payload["jti"])
-        )
+    jti = _current_jti(request)
+    if jti:
+        await db.execute(delete(UserSession).where(UserSession.jti == jti, UserSession.user_id == user.id))
     return MessageResponse(message="Logged out")
 
 
@@ -266,7 +269,9 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
 
 
 @router.post("/change-password", response_model=MessageResponse)
+@limiter.limit(settings.rate_limit_login)
 async def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -274,13 +279,19 @@ async def change_password(
     if not user.hashed_password or not verify_password(payload.current_password, user.hashed_password):
         raise HTTPException(400, "Current password is incorrect")
     user.hashed_password = hash_password(payload.new_password)
+    # Sign out every other device: if the password changed because it leaked, any session
+    # an attacker already has must not survive the change.
+    await db.execute(delete(UserSession).where(
+        UserSession.user_id == user.id, UserSession.jti != (_current_jti(request) or ""),
+    ))
     await db.flush()
-    return MessageResponse(message="Password changed successfully")
+    return MessageResponse(message="Password changed. Other devices have been signed out.")
 
 
 # ── 2FA ───────────────────────────────────────────────────────────────────────
 
 @router.post("/2fa/verify", response_model=Token)
+@limiter.limit(settings.rate_limit_2fa_verify)
 async def verify_2fa(request: Request, payload: TwoFactorVerifyRequest, db: AsyncSession = Depends(get_db)):
     token_payload = decode_token_full(payload.token)
     if not token_payload or token_payload.get("type") != "temp":
@@ -402,7 +413,7 @@ async def regenerate_backup_codes(
 # ── Session management ────────────────────────────────────────────────────────
 
 @router.get("/sessions", response_model=list[SessionOut])
-async def list_sessions(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def list_sessions(request: Request, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
     result = await db.execute(
         select(UserSession).where(
@@ -411,7 +422,11 @@ async def list_sessions(user: User = Depends(get_current_user), db: AsyncSession
             UserSession.expires_at > now,
         ).order_by(UserSession.last_active.desc())
     )
-    return result.scalars().all()
+    current = _current_jti(request)
+    return [
+        SessionOut.model_validate(s).model_copy(update={"is_current": s.jti == current})
+        for s in result.scalars().all()
+    ]
 
 
 @router.delete("/sessions/{session_id}", response_model=MessageResponse)
@@ -438,20 +453,16 @@ async def revoke_all_sessions(
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke all sessions except the current one."""
-    auth_header = request.headers.get("authorization", "")
-    current_token = auth_header.removeprefix("Bearer ").strip()
-    from app.services.auth import decode_token_full as dtf
-    payload = dtf(current_token)
-    current_jti = payload.get("jti") if payload else None
-
+    current_jti = _current_jti(request)
     q = select(UserSession).where(UserSession.user_id == user.id, UserSession.is_active == True)
     result = await db.execute(q)
-    sessions = result.scalars().all()
-    for s in sessions:
+    revoked = 0
+    for s in result.scalars().all():
         if s.jti != current_jti:
             s.is_active = False
+            revoked += 1
     await db.flush()
-    return MessageResponse(message=f"Revoked {len(sessions) - 1} other sessions")
+    return MessageResponse(message=f"Signed out of {revoked} other device{'s' if revoked != 1 else ''}")
 
 
 # ── Account deletion ──────────────────────────────────────────────────────────
@@ -462,8 +473,11 @@ async def delete_account(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if not user.hashed_password or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(400, "Incorrect password")
+    if user.hashed_password:
+        if not payload.password or not verify_password(payload.password, user.hashed_password):
+            raise HTTPException(400, "Incorrect password")
+    elif (payload.confirm_username or "").strip().lstrip("@").lower() != user.username.lower():
+        raise HTTPException(400, "Type your username to confirm")
 
     user.is_deleted = True
     user.is_active = False
@@ -484,19 +498,23 @@ async def request_magic_link(
     db: AsyncSession = Depends(get_db),
 ):
     # Invalidate old magic links for this email
-    await db.execute(delete(MagicLink).where(MagicLink.email == payload.email))
+    email = payload.email.strip().lower()
+    await db.execute(delete(MagicLink).where(MagicLink.email == email))
     token = secrets.token_urlsafe(64)
     db.add(MagicLink(
-        email=payload.email,
+        email=email,
         token=token,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=settings.magic_link_expire_minutes),
     ))
     await db.flush()
-    await send_magic_link_email(payload.email, token)
-    return MessageResponse(message="Magic link sent if the email is registered")
+    try:
+        await send_magic_link_email(payload.email, token)
+    except Exception:
+        pass  # same non-committal response either way (no account enumeration)
+    return MessageResponse(message="If that email has an account, a login link is on its way")
 
 
-@router.get("/magic-link/verify", response_model=Token)
+@router.get("/magic-link/verify", response_model=Token | TwoFactorChallenge)
 async def verify_magic_link(token: str, request: Request, db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
     result = await db.execute(
@@ -523,6 +541,10 @@ async def verify_magic_link(token: str, request: Request, db: AsyncSession = Dep
         user.is_verified = True
 
     await db.flush()
+    # A magic link proves control of the inbox -- the same thing a password reset proves --
+    # so it replaces the password, not the second factor.
+    if user.two_factor_enabled:
+        return TwoFactorChallenge(temp_token=create_temp_token(user.id))
     return await _create_session(db, user, request, device_name="Magic Link")
 
 
@@ -644,8 +666,10 @@ async def oauth_callback(
         oa.access_token = access_token
         user_result = await db.execute(select(User).where(User.id == oa.user_id))
         user = user_result.scalar_one_or_none()
-        if not user:
+        if not user or user.is_deleted:
             raise HTTPException(401, "Account no longer exists")
+        if not user.is_active:
+            raise HTTPException(403, "Account disabled")
         await db.flush()
         token = await _create_session(db, user, request, device_name=f"{provider.title()} OAuth")
         return OAuthCallbackResponse(
@@ -662,8 +686,16 @@ async def oauth_callback(
         partial = create_partial_oauth_token(provider, provider_user_id, username_candidate)
         return OAuthCallbackResponse(requires_email=True, partial_token=partial)
 
-    # Provider returned email — find or create user
+    # Provider returned an email. Only trust it -- to create a pre-verified account or to link
+    # onto an existing account with that email -- if the provider says it verified it.
+    # Otherwise an attacker could register an unverified provider account using a victim's
+    # email address and be logged straight into the victim's Turnup account.
+    if userinfo.get("email_verified") not in (True, "true"):
+        raise HTTPException(400, f"Your {provider.title()} email address is not verified.")
+
     user = await _get_user_by_email(db, email)
+    if user and (user.is_deleted or not user.is_active):
+        raise HTTPException(403, "Account disabled")
     if not user:
         username_base = name.lower().replace(" ", "_")
         username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
@@ -675,7 +707,7 @@ async def oauth_callback(
 
         user = User(
             id=str(uuid.uuid4()),
-            email=email,
+            email=email.strip().lower(),
             username=username,
             full_name=name,
             email_verified=True,
@@ -725,27 +757,46 @@ async def oauth_complete(
     if oa_result.scalar_one_or_none():
         raise HTTPException(400, "Account already linked")
 
-    # Find or create user by email
-    user = await _get_user_by_email(db, payload.email)
-    if not user:
-        username_base = username_hint or payload.email.split("@")[0].lower()
-        username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
-        username = username_base
-        suffix = 1
-        while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
-            username = f"{username_base}{suffix}"
-            suffix += 1
-
-        user = User(
-            id=str(uuid.uuid4()),
-            email=payload.email,
-            username=username,
-            full_name=username_hint or payload.email.split("@")[0],
-            email_verified=True,
-            is_verified=True,
+    # The email here is typed by the user and has NOT been proven to belong to them, so it
+    # must never be used to attach this OAuth identity to an existing account -- doing so
+    # would let anyone with an Instagram account log in as any user by entering their email.
+    if await _get_user_by_email(db, payload.email):
+        raise HTTPException(
+            409,
+            "An account with this email already exists. Log in with your email or username instead.",
         )
-        db.add(user)
-        await db.flush()
+
+    username_base = username_hint or payload.email.split("@")[0].lower()
+    username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
+    username = username_base
+    suffix = 1
+    while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
+        username = f"{username_base}{suffix}"
+        suffix += 1
+
+    # Unverified until the user clicks the emailed link -- the provider never vouched for it.
+    user = User(
+        id=str(uuid.uuid4()),
+        email=payload.email.strip().lower(),
+        username=username,
+        full_name=username_hint or payload.email.split("@")[0],
+        email_verified=False,
+        is_verified=False,
+    )
+    db.add(user)
+    await db.flush()
+
+    ev_token = secrets.token_urlsafe(64)
+    db.add(EmailVerification(
+        user_id=user.id,
+        token=ev_token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.email_verify_expire_hours),
+    ))
+    await db.flush()
+    try:
+        await send_verification_email(user.email, ev_token)
+    except Exception:
+        pass  # non-fatal, same as /register; the user can request a resend
 
     db.add(OAuthAccount(
         user_id=user.id,
@@ -768,7 +819,7 @@ async def phone_send_otp(
 ):
     # Invalidate old OTPs for this number
     await db.execute(delete(PhoneOTP).where(PhoneOTP.phone_number == payload.phone_number))
-    otp_code = str(random.randint(100000, 999999))
+    otp_code = f"{secrets.randbelow(1_000_000):06d}"
     db.add(PhoneOTP(
         phone_number=payload.phone_number,
         otp_code=otp_code,
@@ -801,13 +852,16 @@ async def phone_verify(
     if not otp:
         raise HTTPException(400, "No active OTP for this number. Request a new one.")
 
+    # Commit the attempt count BEFORE raising: get_db rolls back on any exception, so a
+    # flush alone would be undone and the attempt limit would never actually take effect.
     otp.attempts += 1
     if otp.attempts > 3:
-        await db.flush()
+        otp.is_used = True  # burn it; the user must request a fresh code
+        await db.commit()
         raise HTTPException(400, "Too many attempts. Request a new OTP.")
 
-    if otp.otp_code != payload.otp_code:
-        await db.flush()
+    if not secrets.compare_digest(otp.otp_code, payload.otp_code):
+        await db.commit()
         raise HTTPException(400, "Invalid OTP code")
 
     otp.is_used = True

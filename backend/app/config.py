@@ -1,5 +1,8 @@
 from functools import lru_cache
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SECRET_KEY = "changeme"
 
 
 class Settings(BaseSettings):
@@ -8,14 +11,24 @@ class Settings(BaseSettings):
     app_name: str = "Turnup"
     app_version: str = "1.0.0"
     debug: bool = True
+    sql_echo: bool = False  # log every SQL statement (very noisy; was tied to DEBUG)
+    # Process roles (see app/scheduler.py and docker-compose.yml). Both default to true so a
+    # single `uvicorn app.main:app` works for local dev.
+    run_migrations_on_startup: bool = True
+    run_scheduler: bool = True
     frontend_url: str = "http://localhost:3000"
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    # Uploaded images (see app/routers/uploads.py). PUBLIC_BASE_URL is the public origin that
+    # serves /api/* (defaults to FRONTEND_URL, since the frontend proxies /api to the backend).
+    upload_dir: str = "data/uploads"
+    public_base_url: str = ""
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/turnup.db"
 
     # JWT
-    secret_key: str = "changeme"
+    secret_key: str = DEFAULT_SECRET_KEY
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 10080       # 7 days
     temp_token_expire_minutes: int = 10            # 2FA pending token
@@ -78,6 +91,14 @@ class Settings(BaseSettings):
     rate_limit_magic_link: str = "3/minute"
     rate_limit_phone_otp: str = "3/minute"
     rate_limit_phone_verify: str = "5/minute"
+    rate_limit_2fa_verify: str = "5/minute"
+    rate_limit_upload: str = "20/minute"
+    rate_limit_checkout: str = "10/minute"
+    rate_limit_refund: str = "10/minute"
+    rate_limit_checkin: str = "60/minute"    # high-volume door scanning at event entry
+    rate_limit_comment: str = "20/minute"
+    rate_limit_review: str = "10/minute"
+    rate_limit_follow: str = "30/minute"
 
     @property
     def origins(self) -> list[str]:
@@ -90,6 +111,17 @@ class Settings(BaseSettings):
             "openai": self.openai_api_key,
             "gemini": self.gemini_api_key,
         }.get(self.ai_provider, "")
+
+    @model_validator(mode="after")
+    def _forbid_default_secret_outside_debug(self) -> "Settings":
+        if not self.debug and self.secret_key == DEFAULT_SECRET_KEY:
+            raise RuntimeError(
+                "SECRET_KEY is still the default 'changeme' value while DEBUG=False. "
+                "Refusing to start: anyone who knows this default could forge a valid "
+                "auth token for any user, including admins. Set a real SECRET_KEY in "
+                "the environment before running outside debug mode."
+            )
+        return self
 
 
 @lru_cache

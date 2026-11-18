@@ -1,16 +1,24 @@
 from datetime import datetime
-from pydantic import BaseModel, EmailStr, Field
+from typing import Annotated
+
+from pydantic import BaseModel, BeforeValidator, EmailStr, Field
 from app.schemas.organizer import OrganizerProfileOut
+from app.schemas.types import WebUrl
+
+# Phone-OTP sign-ups have no name yet; serialize that as "" rather than failing validation
+# (a None here used to make /auth/me -- and so every phone login -- return a 500).
+NameStr = Annotated[str, BeforeValidator(lambda v: v or "")]
 
 
 class UserSummary(BaseModel):
     id: str
     username: str
-    full_name: str
+    full_name: NameStr
     display_name: str | None = None
     bio: str | None = None
     avatar_url: str | None
     is_verified: bool
+    is_verified_organizer: bool = False
     role: str
     followers_count: int
     events_hosted: int = 0
@@ -22,7 +30,7 @@ class UserSummary(BaseModel):
 class UserPublic(BaseModel):
     id: str
     username: str
-    full_name: str
+    full_name: NameStr
     display_name: str | None = None
     bio: str | None
     avatar_url: str | None
@@ -45,9 +53,9 @@ class UserPublic(BaseModel):
 
 class UserMe(BaseModel):
     id: str
-    email: EmailStr
+    email: EmailStr | None = None
     username: str
-    full_name: str
+    full_name: NameStr
     display_name: str | None = None
     bio: str | None
     avatar_url: str | None
@@ -56,6 +64,7 @@ class UserMe(BaseModel):
     is_verified: bool
     email_verified: bool
     two_factor_enabled: bool
+    has_password: bool = False
     role: str
     is_active: bool
     followers_count: int
@@ -78,5 +87,5 @@ class UserUpdate(BaseModel):
     display_name: str | None = Field(None, max_length=80)
     bio: str | None = Field(None, max_length=500)
     location: str | None = Field(None, max_length=120)
-    website: str | None = Field(None, max_length=255)
-    avatar_url: str | None = None
+    website: WebUrl | None = Field(None, max_length=255)
+    avatar_url: WebUrl | None = None

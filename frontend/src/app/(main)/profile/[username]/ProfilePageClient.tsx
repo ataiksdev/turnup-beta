@@ -2,23 +2,27 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi, socialApi, communitiesApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { useLogout } from "@/lib/session";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
-import { parsePreferences, formatCount, displayName } from "@/lib/utils";
-import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, type LucideIcon } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { parsePreferences, formatCount, displayName, safeHref } from "@/lib/utils";
+import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, Settings, type LucideIcon } from "lucide-react";
+import {useRouter} from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 type Tab = "events" | "attending" | "saved";
 
 export default function ProfilePage() {
-  const { username } = useParams<{ username: string }>();
-  const { token, user: me, logout } = useAuthStore();
+  const username = useRouteParam("username");
+  const { token, user: me } = useAuthStore();
+  const logoutEverywhere = useLogout();
   const router = useRouter();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("events");
@@ -116,7 +120,12 @@ export default function ProfilePage() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute -bottom-10 left-4">
           <div className="border-4 border-bg rounded-full shadow-brutal">
-            <Avatar src={profile.avatar_url} name={displayName(profile)} size="xl" verified={profile.is_verified} />
+            <Avatar
+              src={profile.avatar_url}
+              name={displayName(profile)}
+              size="xl"
+              verified={profile.is_verified || !!profile.organizer_profile?.is_verified_organizer}
+            />
           </div>
         </div>
       </div>
@@ -127,8 +136,11 @@ export default function ProfilePage() {
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-black text-text">{displayName(profile)}</h1>
             {profile.role === "organizer" && (
-              <span className="px-2 py-0.5 rounded border border-primary/40 bg-primary/10 text-[10px] font-black text-primary uppercase tracking-widest">
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-primary/40 bg-primary/10 text-[10px] font-black text-primary uppercase tracking-widest">
                 Organizer
+                {profile.organizer_profile?.is_verified_organizer && (
+                  <CheckCircle2 size={11} className="fill-primary text-white" aria-hidden />
+                )}
               </span>
             )}
           </div>
@@ -151,8 +163,15 @@ export default function ProfilePage() {
           {isOwnProfile ? (
             <>
               <Link href="/profile/edit"><Button variant="secondary" size="sm">Edit Profile</Button></Link>
+              <Link
+                href="/settings"
+                aria-label="Account and security settings"
+                className="p-2 rounded border-2 border-border bg-bg-card hover:border-primary hover:text-primary transition-colors shadow-brutal-sm"
+              >
+                <Settings size={15} aria-hidden />
+              </Link>
               <button
-                onClick={() => { logout(); router.replace("/login"); }}
+                onClick={logoutEverywhere}
                 aria-label="Log out"
                 className="p-2 rounded border-2 border-border bg-bg-card hover:border-error hover:text-error transition-colors shadow-brutal-sm"
               >
@@ -188,10 +207,10 @@ export default function ProfilePage() {
               <MapPin size={12} className="text-primary" /> {profile.location}
             </span>
           )}
-          {profile.website && (
-            <a href={profile.website} target="_blank" rel="noopener noreferrer"
+          {safeHref(profile.website) && (
+            <a href={safeHref(profile.website)} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1 text-primary">
-              <Globe size={12} /> {profile.website.replace(/^https?:\/\//, "")}
+              <Globe size={12} /> {(profile.website ?? "").replace(/^https?:\/\//, "")}
             </a>
           )}
         </div>
@@ -253,7 +272,7 @@ export default function ProfilePage() {
             {communitiesQuery.data.slice(0, 5).map((c) => (
               <Link
                 key={c.id}
-                href={`/communities/${c.slug}`}
+                href={routes.community(c.slug)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
               >
                 {c.icon && <span className="text-sm">{c.icon}</span>}
@@ -396,7 +415,7 @@ export default function ProfilePage() {
                 followListQuery.data.map((u) => (
                   <Link
                     key={u.id}
-                    href={`/profile/${u.username}`}
+                    href={routes.profile(u.username)}
                     onClick={() => setFollowListModal(null)}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated transition-colors"
                   >

@@ -1,9 +1,19 @@
+import html as _html
 import logging
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 # ── HTML helpers ──────────────────────────────────────────────────────────────
+
+def _esc(value) -> str:
+    return _html.escape(str(value or ""), quote=True)
+
+
+def _subject(text: str) -> str:
+    """One line, so organizer-supplied titles can't smuggle extra headers into the email."""
+    return " ".join(str(text).split())[:200]
+
 
 def _base(title: str, body: str) -> str:
     return f"""<!DOCTYPE html>
@@ -57,6 +67,12 @@ def _ticket_html(
     ticket_code: str,
     ticket_url: str,
 ) -> str:
+    # Event title/venue/address/tier names are typed by organizers: escape them so an event
+    # called "<a href=...>Claim refund</a>" can't put its own links/markup into our emails.
+    event_title, event_date, event_venue, event_address, tier_name, ticket_url = (
+        _esc(event_title), _esc(event_date), _esc(event_venue), _esc(event_address),
+        _esc(tier_name), _esc(ticket_url),
+    )
     price_line = "Free" if total_price == 0 else f"₦{total_price:,.0f}"
     return _base(f"Your ticket: {event_title}", f"""
 <p>You're going! Here are your ticket details.</p>
@@ -80,6 +96,7 @@ def _ticket_html(
 
 
 def _refund_html(event_title: str, tier_name: str, quantity: int, total_price: float) -> str:
+    event_title, tier_name = _esc(event_title), _esc(tier_name)
     price_line = "Free" if total_price == 0 else f"₦{total_price:,.0f}"
     return _base(f"Your ticket for {event_title} was refunded", f"""
 <p>Your order has been refunded by the organizer or Turnup support.</p>
@@ -189,7 +206,7 @@ async def send_ticket_email(
         ticket_code=ticket_code,
         ticket_url=ticket_url,
     )
-    await _send(to, f"Your ticket for {event_title}", html)
+    await _send(to, _subject(f"Your ticket for {event_title}"), html)
 
 
 async def send_refund_email(
@@ -202,4 +219,4 @@ async def send_refund_email(
     if not to:
         return
     html = _refund_html(event_title or "Event", tier_name, quantity, total_price)
-    await _send(to, f"Your ticket for {event_title} was refunded", html)
+    await _send(to, _subject(f"Your ticket for {event_title} was refunded"), html)

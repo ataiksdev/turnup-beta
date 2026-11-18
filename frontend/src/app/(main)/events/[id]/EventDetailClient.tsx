@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { eventsApi, socialApi, seriesApi, communitiesApi } from "@/lib/api";
+import { eventsApi, socialApi, seriesApi, communitiesApi, apiErrorMessage } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ShareButton } from "@/components/ui/ShareButton";
 import { EventDetailSkeleton } from "@/components/ui/Skeleton";
-import { formatEventDate, formatPrice, parseTags, timeAgo, displayName } from "@/lib/utils";
+import { formatEventDate, formatPrice, parseTags, timeAgo, displayName, safeHref } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
@@ -17,9 +17,12 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { publicOrigin, routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
+import { EventMap } from "@/components/events/EventMap";
 
 function SeriesSection({ seriesId, currentEventId }: { seriesId: string; currentEventId: string }) {
   const { data: series } = useQuery({
@@ -36,7 +39,7 @@ function SeriesSection({ seriesId, currentEventId }: { seriesId: string; current
       </h2>
       <div className="space-y-2">
         {others.slice(0, 5).map((e) => (
-          <Link key={e.id} href={`/events/${e.slug}`}
+          <Link key={e.id} href={routes.event(e.slug)}
             className="flex items-center gap-3 p-3 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors">
             <span className="w-6 h-6 rounded bg-primary/10 border border-primary/30 flex items-center justify-center text-[10px] font-black text-primary shrink-0">
               {series.events.findIndex((ev) => ev.id === e.id) + 1}
@@ -59,14 +62,25 @@ function SeriesSection({ seriesId, currentEventId }: { seriesId: string; current
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-export function EventDetailClient({ id }: { id: string }) {
-  const { token, user } = useAuthStore();
+export function EventDetailClient() {
+  // Path segment on the web build, ?id= in the Capacitor build (see lib/routes.ts).
+  const id = useRouteParam("id");
+  const { token, user, hasHydrated } = useAuthStore();
   const qc = useQueryClient();
 
-  const { data: event, isLoading } = useQuery({
-    queryKey: ["event", id],
+  const { data: event, isPending: isLoading } = useQuery({
+    // Keyed on the session too, so the anonymous response (no saved/going state) is replaced
+    // once the saved session has loaded.
+    queryKey: ["event", id, !!token],
     queryFn: () => eventsApi.get(id, token ?? undefined),
+    enabled: hasHydrated && !!id,
   });
+
+  // Count a view once the event has loaded (the API de-duplicates repeat views).
+  const viewedEventId = event?.id;
+  useEffect(() => {
+    if (viewedEventId) eventsApi.recordView(viewedEventId, token ?? undefined).catch(() => {});
+  }, [viewedEventId, token]);
 
   // Use the real UUID for all subsequent API calls — the URL param may be a slug
   const eid = event?.id ?? "";
@@ -110,6 +124,14 @@ export function EventDetailClient({ id }: { id: string }) {
   // Waitlist state
   const [waitlisted, setWaitlisted] = useState(event?.is_waitlisted ?? false);
   const [waitlistPos, setWaitlistPos] = useState<number | null>(null);
+  // Returning visitors: look up their place in line (it's only in the join response otherwise).
+  const { data: waitlistInfo } = useQuery({
+    queryKey: ["waitlist-status", eid],
+    queryFn: () => eventsApi.waitlistStatus(token!, eid),
+    enabled: !!token && !!eid && waitlisted,
+    retry: false,
+  });
+  const shownWaitlistPos = waitlistPos ?? (waitlistInfo ? waitlistInfo.total_ahead + 1 : null);
 
   // Review state
   const [reviewRating, setReviewRating] = useState(myReview?.rating ?? 0);
@@ -132,7 +154,7 @@ export function EventDetailClient({ id }: { id: string }) {
       setAttend(status);
       qc.invalidateQueries({ queryKey: ["event", id] });
     },
-    onError: () => flashError("Could not update RSVP. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not update RSVP. Please try again.")),
   });
 
   const removeAttendMutation = useMutation({
@@ -141,13 +163,13 @@ export function EventDetailClient({ id }: { id: string }) {
       setAttend(null);
       qc.invalidateQueries({ queryKey: ["event", id] });
     },
-    onError: () => flashError("Could not remove RSVP. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not remove RSVP. Please try again.")),
   });
 
   const saveMutation = useMutation({
     mutationFn: () => token ? eventsApi.save(token, eid) : Promise.reject(),
     onSuccess: (res) => setSaved(res.saved),
-    onError: () => flashError("Could not save event. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not save event. Please try again.")),
   });
 
   const commentMutation = useMutation({
@@ -159,7 +181,7 @@ export function EventDetailClient({ id }: { id: string }) {
       setComment("");
       qc.invalidateQueries({ queryKey: ["comments", eid] });
     },
-    onError: () => flashError("Could not post comment. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not post comment. Please try again.")),
   });
 
   function clearCart() {
@@ -180,9 +202,15 @@ export function EventDetailClient({ id }: { id: string }) {
       onClose: () => setPaymentPending(false),
       callback: async () => {
         try {
-          await eventsApi.verifyPayment(token!, eid, reference);
-          setPurchaseSuccess(true);
+          const confirmed = await eventsApi.verifyPayment(token!, eid, reference);
           clearCart();
+          if (confirmed.length === 0) {
+            // Paid, but the tickets sold out before the payment cleared; the backend has
+            // refunded the buyer (or queued the refund) and sent a notification.
+            flashError("These tickets sold out before your payment cleared. You'll be refunded — check your notifications.");
+          } else {
+            setPurchaseSuccess(true);
+          }
           qc.invalidateQueries({ queryKey: ["tiers", eid] });
           qc.invalidateQueries({ queryKey: ["event", id] });
           qc.invalidateQueries({ queryKey: ["my-tickets"] });
@@ -232,7 +260,7 @@ export function EventDetailClient({ id }: { id: string }) {
         }
       }
     },
-    onError: () => flashError("Could not initiate payment. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not initiate payment. Please try again.")),
   });
 
   const waitlistJoinMutation = useMutation({
@@ -241,7 +269,7 @@ export function EventDetailClient({ id }: { id: string }) {
       setWaitlisted(true);
       setWaitlistPos(data.position);
     },
-    onError: () => flashError("Could not join waitlist. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not join waitlist. Please try again.")),
   });
 
   const waitlistLeaveMutation = useMutation({
@@ -250,7 +278,7 @@ export function EventDetailClient({ id }: { id: string }) {
       setWaitlisted(false);
       setWaitlistPos(null);
     },
-    onError: () => flashError("Could not leave waitlist. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not leave waitlist. Please try again.")),
   });
 
   const reviewMutation = useMutation({
@@ -272,7 +300,7 @@ export function EventDetailClient({ id }: { id: string }) {
       qc.invalidateQueries({ queryKey: ["reviews", eid] });
       qc.invalidateQueries({ queryKey: ["my-review", eid] });
     },
-    onError: () => flashError("Could not delete review. Please try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not delete review. Please try again.")),
   });
 
   const { data: myCommunities } = useQuery({
@@ -284,7 +312,7 @@ export function EventDetailClient({ id }: { id: string }) {
   const shareMutation = useMutation({
     mutationFn: (slug: string) => communitiesApi.shareEvent(token!, slug, eid),
     onSuccess: (_, slug) => setSharedTo((prev) => [...prev, slug]),
-    onError: () => flashError("Could not share event. Try again."),
+    onError: (err) => flashError(apiErrorMessage(err, "Could not share event. Try again.")),
   });
 
   if (isLoading) return <EventDetailSkeleton />;
@@ -303,7 +331,7 @@ export function EventDetailClient({ id }: { id: string }) {
   const isGoing = attendance === "going";
   const isInterested = attendance === "interested";
   const shareUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/events/${id}`
+    ? `${publicOrigin()}/events/${id}`
     : `${SITE}/events/${id}`;
 
   return (
@@ -414,9 +442,9 @@ export function EventDetailClient({ id }: { id: string }) {
         </div>
 
         {/* Meeting link for virtual/hybrid events */}
-        {event.meeting_url && (attendance === "going") && (
+        {safeHref(event.meeting_url) && (attendance === "going") && (
           <a
-            href={event.meeting_url}
+            href={safeHref(event.meeting_url)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between p-4 rounded border-2 border-primary/30 bg-primary/10 hover:border-primary transition-colors"
@@ -470,12 +498,17 @@ export function EventDetailClient({ id }: { id: string }) {
 
         {/* Host */}
         <Link
-          href={`/profile/${event.host.username}`}
+          href={routes.profile(event.host.username)}
           className="flex flex-col gap-3 p-4 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors"
           aria-label={`View ${displayName(event.host)}'s profile`}
         >
           <div className="flex items-center gap-3">
-            <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="md" verified={event.host.is_verified} />
+            <Avatar
+              src={event.host.avatar_url}
+              name={displayName(event.host)}
+              size="md"
+              verified={event.host.is_verified || !!event.host.is_verified_organizer}
+            />
             <div className="flex-1 min-w-0">
               <p className="text-xs text-text-muted">Hosted by</p>
               <p className="text-sm font-semibold text-text">{displayName(event.host)}</p>
@@ -544,16 +577,10 @@ export function EventDetailClient({ id }: { id: string }) {
           </section>
         )}
 
-        {/* Map placeholder */}
-        {event.latitude && event.longitude && (
-          <div className="rounded border-2 border-border overflow-hidden h-40 bg-bg-card flex items-center justify-center"
-            role="img" aria-label={`Map showing ${event.venue_name}, ${event.city}`}>
-            <div className="text-center space-y-1">
-              <MapPin size={24} className="text-primary mx-auto" aria-hidden />
-              <p className="text-xs text-text-muted">{event.venue_name}</p>
-              <p className="text-xs text-text-muted">{event.city}</p>
-            </div>
-          </div>
+        {/* Venue map + directions (physical and hybrid events) */}
+        {event.event_type !== "virtual" && (
+          <EventMap venue={event.venue_name} address={event.address} city={event.city}
+            latitude={event.latitude} longitude={event.longitude} />
         )}
 
         {/* Ticket tiers */}
@@ -679,7 +706,7 @@ export function EventDetailClient({ id }: { id: string }) {
             {waitlisted ? (
               <>
                 <p className="text-sm text-text-secondary">
-                  You're on the waitlist{waitlistPos ? ` at position #${waitlistPos}` : ""}. We'll notify you if a spot opens up.
+                  You're on the waitlist{shownWaitlistPos ? ` at position #${shownWaitlistPos}` : ""}. We'll notify you if a spot opens up.
                 </p>
                 <Button
                   variant="secondary"

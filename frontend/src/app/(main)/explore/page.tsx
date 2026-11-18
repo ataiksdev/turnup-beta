@@ -8,9 +8,10 @@ import { formatEventDate, formatPrice, cn } from "@/lib/utils";
 import {
   Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf,
   MapPin, Flame, Star, ArrowRight, Tag, Clock,
-  CalendarDays,
+  CalendarDays, Users,
 } from "lucide-react";
 import Link from "next/link";
+import { routes } from "@/lib/routes";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -53,10 +54,19 @@ function HScrollRow({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MiniEventCard({ event }: { event: any }) {
+function networkNote(event: any): string | null {
+  if (event.following_count > 0) {
+    return `${event.following_count} you follow ${event.following_count === 1 ? "is" : "are"} going`;
+  }
+  if (event.following_hosted) return "Hosted by someone you follow";
+  return null;
+}
+
+function MiniEventCard({ event, showNetworkNote }: { event: any; showNetworkNote?: boolean }) {
+  const note = showNetworkNote ? networkNote(event) : null;
   return (
     <Link
-      href={`/events/${event.slug}`}
+      href={routes.event(event.slug)}
       className="shrink-0 w-44 rounded border-2 border-border bg-bg-card overflow-hidden hover:border-primary transition-colors shadow-brutal-sm"
     >
       <div className="relative h-28 bg-bg-elevated">
@@ -81,6 +91,12 @@ function MiniEventCard({ event }: { event: any }) {
           <CalendarDays size={9} />
           {formatEventDate(event.start_date)}
         </p>
+        {note && (
+          <p className="text-[10px] text-primary font-bold flex items-center gap-1">
+            <Users size={9} />
+            {note}
+          </p>
+        )}
         <p className="text-[10px] font-bold text-primary">
           {formatPrice(event.is_free, event.price_min, event.price_max)}
         </p>
@@ -106,6 +122,13 @@ export default function ExplorePage() {
     staleTime: 60_000,
   });
 
+  const { data: following } = useQuery({
+    queryKey: ["explore-following"],
+    queryFn: () => eventsApi.following(token!, 12),
+    enabled: !!token,
+    staleTime: 30_000,
+  });
+
   const { data: free } = useQuery({
     queryKey: ["explore-free"],
     queryFn: () => eventsApi.list({ free: true, sort: "popular", limit: 10 }),
@@ -127,7 +150,7 @@ export default function ExplorePage() {
 
       {/* ── Hero featured event ─────────────────────────────────────── */}
       {hero && (
-        <Link href={`/events/${hero.slug}`} className="relative mx-4 mt-3 h-52 rounded border-2 border-border overflow-hidden shadow-brutal block hover:border-primary transition-colors">
+        <Link href={routes.event(hero.slug)} className="relative mx-4 mt-3 h-52 rounded border-2 border-border overflow-hidden shadow-brutal block hover:border-primary transition-colors">
           {hero.cover_image
             ? <img src={hero.cover_image} alt={hero.title} className="w-full h-full object-cover" />
             : <div className="w-full h-full bg-gradient-to-br from-primary/30 to-bg-elevated" />
@@ -153,6 +176,16 @@ export default function ExplorePage() {
           <SectionHeader title="Trending Now" href="/search?trending=true" icon={Flame} />
           <HScrollRow>
             {trending!.map((e: any) => <MiniEventCard key={e.id} event={e} />)}
+          </HScrollRow>
+        </section>
+      )}
+
+      {/* ── From your network ────────────────────────────────────────── */}
+      {(following?.length ?? 0) > 0 && (
+        <section className="mt-5">
+          <SectionHeader title="From Your Network" icon={Users} />
+          <HScrollRow>
+            {following!.map((e: any) => <MiniEventCard key={e.id} event={e} showNetworkNote />)}
           </HScrollRow>
         </section>
       )}

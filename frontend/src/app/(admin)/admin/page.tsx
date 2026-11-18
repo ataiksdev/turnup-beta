@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import Link from "next/link";
 import {
   Users, Briefcase, CalendarDays, CheckCircle,
-  ShoppingBag, TrendingUp, UserPlus, CalendarPlus, Percent, Wallet,
+  ShoppingBag, TrendingUp, UserPlus, CalendarPlus, Percent, Wallet, BadgeCheck,
 } from "lucide-react";
 
 function KpiCard({
@@ -139,6 +139,7 @@ export default function AdminDashboardPage() {
             <KpiCard icon={ShoppingBag} label="Total Orders"      value={stats.total_orders.toLocaleString("en-NG")}      iconClass="text-orange-500" />
             <KpiCard icon={TrendingUp}  label="Ticket Sales"      value={`₦${stats.confirmed_revenue.toLocaleString("en-NG")}`} iconClass="text-yellow-500" />
             <KpiCard icon={Wallet}      label="Turnup Fee Revenue" value={`₦${stats.platform_fee_revenue.toLocaleString("en-NG")}`} iconClass="text-amber-500" />
+            <KpiCard icon={BadgeCheck}  label="Pending Verifications" value={stats.pending_verifications.toLocaleString("en-NG")} iconClass="text-cyan-500" />
             <KpiCard icon={Users}       label="Total Attendees"   value={stats.total_attendees.toLocaleString("en-NG")}   iconClass="text-pink-500" />
             <KpiCard icon={UserPlus}    label="New Users (7d)"    value={stats.new_users_this_week.toLocaleString("en-NG")} iconClass="text-indigo-500" />
             <KpiCard icon={CalendarPlus} label="New Events (7d)"  value={stats.new_events_this_week.toLocaleString("en-NG")} iconClass="text-teal-500" />
@@ -156,6 +157,7 @@ export default function AdminDashboardPage() {
           {[
             { href: "/admin/users",         label: "Manage Users"       },
             { href: "/admin/events",        label: "Moderate Events"    },
+            { href: "/admin/organizers",    label: "Verify Organizers"  },
             { href: "/admin/events/new",    label: "Create Event"       },
             { href: "/admin/events/ai-new", label: "AI Draft Event"     },
             { href: "/admin/scout/sources", label: "Manage AI Scout"    },

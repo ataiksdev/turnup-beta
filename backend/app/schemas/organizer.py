@@ -1,5 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.types import WebUrl
 
 
 # ── Organizer profile ─────────────────────────────────────────────────────────
@@ -7,7 +8,7 @@ from pydantic import BaseModel, Field
 class OrganizerBecomeRequest(BaseModel):
     organization_name: str | None = Field(None, max_length=200)
     organizer_bio: str | None = Field(None, max_length=1000)
-    website: str | None = Field(None, max_length=255)
+    website: WebUrl | None = Field(None, max_length=255)
 
 
 class OrganizerProfileOut(BaseModel):
@@ -16,6 +17,10 @@ class OrganizerProfileOut(BaseModel):
     organizer_bio: str | None
     website: str | None
     is_verified_organizer: bool
+    verification_status: str
+    verification_note: str | None = None
+    verification_requested_at: datetime | None = None
+    reviewed_at: datetime | None = None
     created_at: datetime
     model_config = {"from_attributes": True}
 
@@ -23,7 +28,11 @@ class OrganizerProfileOut(BaseModel):
 class OrganizerProfileUpdate(BaseModel):
     organization_name: str | None = Field(None, max_length=200)
     organizer_bio: str | None = Field(None, max_length=1000)
-    website: str | None = Field(None, max_length=255)
+    website: WebUrl | None = Field(None, max_length=255)
+
+
+class VerificationRequest(BaseModel):
+    note: str | None = Field(None, max_length=1000)
 
 
 # ── Ticket tiers ──────────────────────────────────────────────────────────────

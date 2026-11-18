@@ -177,6 +177,7 @@ class PlatformStats(BaseModel):
     total_attendees: int
     new_users_this_week: int
     new_events_this_week: int
+    pending_verifications: int = 0
 
 
 class PlatformFeeOut(BaseModel):
@@ -185,3 +186,24 @@ class PlatformFeeOut(BaseModel):
 
 class PlatformFeeUpdate(BaseModel):
     ticket_fee_percent: float = Field(ge=0, le=100)
+
+
+class AdminOrganizerVerificationOut(BaseModel):
+    user_id: str
+    username: str
+    full_name: str | None
+    avatar_url: str | None
+    organization_name: str | None
+    organizer_bio: str | None
+    website: str | None
+    events_hosted: int
+    is_verified_organizer: bool
+    verification_status: str
+    verification_note: str | None
+    verification_requested_at: datetime | None
+    reviewed_at: datetime | None
+    profile_created_at: datetime
+
+
+class AdminOrganizerReject(BaseModel):
+    note: str = Field(min_length=3, max_length=1000)

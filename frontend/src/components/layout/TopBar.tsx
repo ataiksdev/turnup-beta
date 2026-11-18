@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { routes } from "@/lib/routes";
 
 interface TopBarProps {
   title?: string;
@@ -77,7 +78,7 @@ export function TopBar({ title, back, transparent, actions, className }: TopBarP
         )}
         <ThemeToggle />
         {!back && user && (
-          <Link href={`/profile/${user.username}`} aria-label={`${displayName(user)}'s profile`}>
+          <Link href={routes.profile(user.username)} aria-label={`${displayName(user)}'s profile`}>
             <Avatar src={user.avatar_url} name={displayName(user)} size="sm" verified={user.is_verified} />
           </Link>
         )}
