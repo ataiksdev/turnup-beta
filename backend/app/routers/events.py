@@ -35,7 +35,7 @@ from app.schemas.organizer import (
 from app.services.email import send_ticket_email
 from app.services.paystack import PaystackConfigError, initialize_transaction, verify_transaction
 from app.services.tickets import (
-    confirm_order, notify_buyer, payment_matches_orders, reserve_inventory, to_kobo,
+    auto_rsvp, confirm_order, notify_buyer, reserve_inventory, settle_paid_orders, to_kobo,
 )
 from app.schemas.user import UserSummary
 
@@ -498,29 +498,11 @@ async def paystack_webhook(
     if not orders:
         return {"status": "unknown_reference"}
 
-    # Return 200 on a mismatch so Paystack doesn't keep retrying; the orders stay pending
-    # (and will expire) and the mismatch is logged for manual follow-up.
-    if not await payment_matches_orders(db, payload["data"], list(orders)):
-        return {"status": "amount_mismatch"}
-
-    channel = payload["data"].get("channel")
-    for order in orders:
-        row = await confirm_order(db, order.id, channel)
-        if not row:
-            continue  # already confirmed via the client's verify-payment call
-        event = (await db.execute(select(Event).where(Event.id == row.event_id))).scalar_one_or_none()
-        t = await _get_tier(row.tier_id, row.event_id, db)
-        buyer = (await db.execute(select(User).where(User.id == row.user_id))).scalar_one_or_none()
-        await _auto_rsvp(event, buyer, db)
-        await notify_buyer(db, row, event, kind="confirmed")
-        background_tasks.add_task(
-            send_ticket_email, to=(buyer.email if buyer else "") or "", order_id=row.id,
-            ticket_code=row.ticket_code, event_title=event.title,
-            event_date=event.start_date, event_venue=event.venue_name,
-            event_address=event.address, tier_name=t.name,
-            quantity=row.quantity, total_price=row.total_price,
-        )
-    return {"status": "ok"}
+    # Always 200 so Paystack stops retrying; a mismatch leaves the orders untouched (logged).
+    result = await settle_paid_orders(db, list(orders), payload["data"])
+    for job in result.emails:
+        background_tasks.add_task(job.fn, **job.kwargs)
+    return {"status": result.status}
 
 
 @router.get("/{event_id}", response_model=EventDetail)
@@ -1077,7 +1059,7 @@ async def checkout_tickets(
                 event_address=event.address, tier_name=tiers_by_order[row.id].name,
                 quantity=row.quantity, total_price=0.0,
             )
-        await _auto_rsvp(event, user, db)
+        await auto_rsvp(event, user, db)
         return CheckoutInitOut(
             order_ids=[o.id for o in orders], payment_reference=reference,
             paystack_public_key="", amount_kobo=0, email=user.email or "", is_free=True,
@@ -1102,19 +1084,6 @@ async def checkout_tickets(
     )
 
 
-async def _auto_rsvp(event: Event, user: User, db: AsyncSession) -> None:
-    existing = (await db.execute(select(EventAttendee).where(
-        EventAttendee.event_id == event.id,
-        EventAttendee.user_id == user.id,
-    ))).scalar_one_or_none()
-    if not existing:
-        db.add(EventAttendee(
-            id=str(uuid.uuid4()), user_id=user.id,
-            event_id=event.id, status="going",
-        ))
-        event.attendees_count += 1
-
-
 def _order_out(order: TicketOrder, tier_name: str) -> TicketOrderOut:
     return TicketOrderOut(
         id=order.id, event_id=order.event_id, tier_id=order.tier_id, tier_name=tier_name,
@@ -1133,52 +1102,47 @@ async def verify_payment(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Verify a Paystack payment and confirm every pending order sharing this reference
-    (a checkout may have created several, one per tier line)."""
+    """Verify a Paystack payment and settle every order sharing this reference (a checkout
+    may have created several, one per tier line). Returns this payment's confirmed orders.
+
+    Safe to call after the webhook already confirmed them (returns them instead of an error),
+    and after the orders expired (they're revived if tickets remain, refunded if not)."""
     orders = (await db.execute(select(TicketOrder).where(
         TicketOrder.payment_reference == payload.reference,
         TicketOrder.user_id == user.id,
-        TicketOrder.status == "pending",
+        TicketOrder.event_id == event_id,
     ))).scalars().all()
     if not orders:
-        raise HTTPException(404, "Order not found or already processed")
+        raise HTTPException(404, "Order not found")
 
-    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
-    if not event:
-        raise HTTPException(404, "Event not found")
+    if any(o.status in ("pending", "cancelled") for o in orders):
+        try:
+            ps_resp = await verify_transaction(payload.reference)
+        except PaystackConfigError as e:
+            raise HTTPException(503, str(e))
+        except Exception:
+            raise HTTPException(502, "Could not verify payment. Please contact support.")
 
-    try:
-        ps_resp = await verify_transaction(payload.reference)
-    except PaystackConfigError as e:
-        raise HTTPException(503, str(e))
-    except Exception:
-        raise HTTPException(502, "Could not verify payment. Please contact support.")
+        ps_data = ps_resp.get("data", {})
+        if ps_data.get("status") != "success":
+            raise HTTPException(402, "Payment not completed")
 
-    ps_data = ps_resp.get("data", {})
-    if ps_data.get("status") != "success":
-        raise HTTPException(402, "Payment not completed")
-    if not await payment_matches_orders(db, ps_data, list(orders)):
-        raise HTTPException(402, "Payment amount does not match your order. Please contact support.")
+        result = await settle_paid_orders(db, list(orders), ps_data)
+        if result.status == "amount_mismatch":
+            raise HTTPException(402, "Payment amount does not match your order. Please contact support.")
+        for job in result.emails:
+            background_tasks.add_task(job.fn, **job.kwargs)
 
-    confirmed: list[TicketOrderOut] = []
-    for order in orders:
-        row = await confirm_order(db, order.id, ps_data.get("channel"))
-        if not row:
-            continue  # already confirmed by the webhook -- no-op, avoids double email/notify
-        t = await _get_tier(row.tier_id, event_id, db)
-        await notify_buyer(db, row, event, kind="confirmed")
-        background_tasks.add_task(
-            send_ticket_email, to=user.email or "", order_id=row.id,
-            ticket_code=row.ticket_code, event_title=event.title,
-            event_date=event.start_date, event_venue=event.venue_name,
-            event_address=event.address, tier_name=t.name,
-            quantity=row.quantity, total_price=row.total_price,
-        )
-        confirmed.append(_order_out(row, t.name))
-
-    if confirmed:
-        await _auto_rsvp(event, user, db)
-    return confirmed
+    # An empty list means the payment went through but every ticket in it had sold out by
+    # the time it cleared; the buyer has been refunded (or the refund is queued) and notified.
+    tier_names = {t.id: t.name for t in (await db.execute(select(TicketTier).where(
+        TicketTier.id.in_({o.tier_id for o in orders})))).scalars().all()}
+    confirmed = (await db.execute(select(TicketOrder).where(
+        TicketOrder.payment_reference == payload.reference,
+        TicketOrder.user_id == user.id,
+        TicketOrder.status == "confirmed",
+    ))).scalars().all()
+    return [_order_out(o, tier_names.get(o.tier_id, "")) for o in confirmed]
 
 
 def _tier_out(t: TicketTier) -> TicketTierOut:

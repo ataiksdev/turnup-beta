@@ -180,9 +180,15 @@ export function EventDetailClient({ id }: { id: string }) {
       onClose: () => setPaymentPending(false),
       callback: async () => {
         try {
-          await eventsApi.verifyPayment(token!, eid, reference);
-          setPurchaseSuccess(true);
+          const confirmed = await eventsApi.verifyPayment(token!, eid, reference);
           clearCart();
+          if (confirmed.length === 0) {
+            // Paid, but the tickets sold out before the payment cleared; the backend has
+            // refunded the buyer (or queued the refund) and sent a notification.
+            flashError("These tickets sold out before your payment cleared. You'll be refunded — check your notifications.");
+          } else {
+            setPurchaseSuccess(true);
+          }
           qc.invalidateQueries({ queryKey: ["tiers", eid] });
           qc.invalidateQueries({ queryKey: ["event", id] });
           qc.invalidateQueries({ queryKey: ["my-tickets"] });

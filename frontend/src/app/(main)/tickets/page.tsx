@@ -16,6 +16,7 @@ const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; 
   pending:   { icon: Clock,        label: "Pending",    cls: "text-info bg-info/10 border-info/30" },
   cancelled: { icon: XCircle,      label: "Cancelled",  cls: "text-error bg-error/10 border-error/30" },
   refunded:  { icon: XCircle,      label: "Refunded",   cls: "text-text-muted bg-bg-elevated border-border" },
+  needs_refund: { icon: Clock,      label: "Refund pending", cls: "text-info bg-info/10 border-info/30" },
 };
 
 export default function TicketsPage() {

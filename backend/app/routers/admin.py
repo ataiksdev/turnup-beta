@@ -528,7 +528,7 @@ async def admin_refund_order(
     order = (await db.execute(stmt)).scalar_one_or_none()
     if not order:
         raise HTTPException(404, "Order not found")
-    if order.status != "confirmed":
+    if order.status not in ("confirmed", "needs_refund"):
         raise HTTPException(400, f"Cannot refund an order with status '{order.status}'")
 
     if not await refund_order(db, order):
