@@ -21,6 +21,24 @@ function readDevServerUrl(): string | undefined {
 
 const devServerUrl = readDevServerUrl();
 
+// Say which mode this sync produces: a stray CAPACITOR_DEV_SERVER_URL silently turns the app
+// into a live-reload shell that shows "Web page not available" when the server isn't reachable.
+if (devServerUrl) {
+  let host = '';
+  try { host = new URL(devServerUrl).hostname; } catch { /* reported by Capacitor */ }
+  console.log(`[capacitor] LIVE RELOAD: the app will load ${devServerUrl} (from CAPACITOR_DEV_SERVER_URL).`);
+  if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)) {
+    console.warn(
+      `[capacitor] WARNING: "${host}" is the phone itself, not your computer, so the app will show\n` +
+      `  "Web page not available". Use your computer's LAN IP (e.g. http://192.168.1.20:3003),\n` +
+      `  or run "adb reverse tcp:3003 tcp:3003" first. For the bundled build, unset\n` +
+      `  CAPACITOR_DEV_SERVER_URL (shell, .env.local, .env) and run "npx cap sync android" again.`,
+    );
+  }
+} else {
+  console.log("[capacitor] Bundled build: the app loads the static export in out/ (no dev server).");
+}
+
 const config: CapacitorConfig = {
   appId: 'com.turnupp.app',
   appName: 'turnup',
