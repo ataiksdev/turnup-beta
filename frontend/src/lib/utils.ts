@@ -2,6 +2,22 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, formatDistanceToNow, isToday, isTomorrow } from "date-fns";
 
+/**
+ * Returns `url` only if it is an absolute http(s) URL, otherwise undefined. Use for every
+ * href built from user-supplied data: React 18 renders `javascript:` hrefs as-is, so an
+ * unchecked profile website or meeting link is a click-to-run XSS. The backend validates
+ * new input too; this also covers anything already stored before that validation existed.
+ */
+export function safeHref(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

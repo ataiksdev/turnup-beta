@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ShareButton } from "@/components/ui/ShareButton";
 import { EventDetailSkeleton } from "@/components/ui/Skeleton";
-import { formatEventDate, formatPrice, parseTags, timeAgo, displayName } from "@/lib/utils";
+import { formatEventDate, formatPrice, parseTags, timeAgo, displayName, safeHref } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
@@ -414,9 +414,9 @@ export function EventDetailClient({ id }: { id: string }) {
         </div>
 
         {/* Meeting link for virtual/hybrid events */}
-        {event.meeting_url && (attendance === "going") && (
+        {safeHref(event.meeting_url) && (attendance === "going") && (
           <a
-            href={event.meeting_url}
+            href={safeHref(event.meeting_url)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between p-4 rounded border-2 border-primary/30 bg-primary/10 hover:border-primary transition-colors"

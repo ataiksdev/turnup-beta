@@ -1,3 +1,4 @@
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -11,11 +12,51 @@ from app.models.organizer import TicketOrder, TicketTier
 from app.models.social import Notification
 from app.services.settings import get_platform_settings
 
+logger = logging.getLogger(__name__)
+
 _NOTIFICATION_TITLES = {
     "confirmed": "You're going to {title}!",
     "refunded": "Your ticket for {title} was refunded",
     "cancelled": "Your order for {title} was cancelled",
 }
+
+
+def to_kobo(amount: float) -> int:
+    """Naira -> kobo. round(), not int(): int(19.99 * 100) is 1998 because of float error."""
+    return int(round(amount * 100))
+
+
+async def payment_matches_orders(
+    db: AsyncSession, ps_data: dict, orders: list[TicketOrder],
+) -> bool:
+    """True only if Paystack says it collected exactly what these orders cost, in the right
+    currency. A "success" status alone proves nothing about HOW MUCH was paid: the amount is
+    chosen in the buyer's browser when the Paystack popup opens, so a tampered client could
+    pay N1 against a reference for a N50,000 order. Both verify-payment and the webhook must
+    pass this check before confirming anything."""
+    if ps_data.get("mock"):
+        return True  # dev-only mock verify (paystack.py refuses mock mode outside debug)
+
+    expected_kobo = to_kobo(sum(o.total_price for o in orders))
+    tier_ids = {o.tier_id for o in orders}
+    currencies = set((await db.execute(
+        select(TicketTier.currency).where(TicketTier.id.in_(tier_ids))
+    )).scalars().all())
+    expected_currency = currencies.pop().upper() if len(currencies) == 1 else None
+
+    try:
+        paid_kobo = int(ps_data.get("amount"))
+    except (TypeError, ValueError):
+        paid_kobo = None
+    paid_currency = str(ps_data.get("currency") or "").upper()
+
+    ok = paid_kobo == expected_kobo and expected_currency is not None and paid_currency == expected_currency
+    if not ok:
+        logger.warning(
+            "Paystack amount mismatch for reference %s: paid %s %s, expected %s %s",
+            ps_data.get("reference"), paid_kobo, paid_currency, expected_kobo, expected_currency,
+        )
+    return ok
 
 
 async def reserve_inventory(db: AsyncSession, tier: TicketTier, qty: int) -> None:
@@ -90,14 +131,33 @@ async def cancel_order(db: AsyncSession, order: TicketOrder, reason: str) -> boo
 
 
 async def refund_order(db: AsyncSession, order: TicketOrder) -> bool:
-    """confirmed -> refunded, releasing its reservation. Returns False if the order wasn't
-    confirmed (caller should have already checked, this is the race-safe backstop)."""
+    """confirmed -> refunded, returning the buyer's money through Paystack and releasing the
+    reservation. Returns False if the order wasn't confirmed (race-safe backstop).
+
+    Order of operations matters: the status flip happens first (claiming the refund so two
+    concurrent requests can't both pay out), then Paystack is called. If Paystack fails we
+    raise, and get_db's rollback-on-exception undoes the flip -- so an order is never marked
+    refunded, nor the buyer told so, unless Paystack actually accepted the refund."""
+    from app.services.paystack import PaystackConfigError, refund_transaction
+
     result = await db.execute(
         update(TicketOrder).where(TicketOrder.id == order.id, TicketOrder.status == "confirmed")
         .values(status="refunded")
     )
     if result.rowcount == 0:
         return False
+
+    if order.total_price > 0:
+        if not order.payment_reference:
+            raise HTTPException(409, "Order has no payment reference; refund it manually in Paystack.")
+        try:
+            await refund_transaction(order.payment_reference, to_kobo(order.total_price))
+        except PaystackConfigError as e:
+            raise HTTPException(503, str(e))
+        except Exception:
+            logger.exception("Paystack refund failed for order %s", order.id)
+            raise HTTPException(502, "Payment provider could not process the refund. Nothing was changed; try again.")
+
     await release_inventory(db, order.tier_id, order.quantity)
     return True
 

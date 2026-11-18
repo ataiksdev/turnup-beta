@@ -66,7 +66,7 @@ async def verify_transaction(reference: str) -> dict:
         # Dev mode: treat any reference as successful
         return {
             "status": True,
-            "data": {"status": "success", "reference": reference, "amount": 0},
+            "data": {"status": "success", "reference": reference, "amount": 0, "mock": True},
         }
     async with httpx.AsyncClient() as client:
         r = await client.get(
@@ -76,3 +76,29 @@ async def verify_transaction(reference: str) -> dict:
         )
         r.raise_for_status()
         return r.json()
+
+
+async def refund_transaction(reference: str, amount_kobo: int) -> dict:
+    """Refund (part of) a Paystack transaction. `amount_kobo` may be less than the transaction
+    total -- one cart checkout is a single transaction covering several orders, so refunding
+    one order is a partial refund of that transaction. Paystack processes refunds
+    asynchronously; an accepted request comes back with data.status "pending"/"processing"."""
+    if not settings.paystack_secret_key:
+        _require_debug_for_mock("refund")
+        logger.warning(
+            "PAYSTACK MOCK MODE (debug=True): faking refund of %s kobo for %s -- NO money moved",
+            amount_kobo, reference,
+        )
+        return {"status": True, "data": {"status": "processed", "mock": True}}
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{_BASE}/refund",
+            json={"transaction": reference, "amount": amount_kobo},
+            headers={"Authorization": f"Bearer {settings.paystack_secret_key}"},
+            timeout=15,
+        )
+        r.raise_for_status()
+        body = r.json()
+        if not body.get("status"):
+            raise RuntimeError(body.get("message") or "Paystack refused the refund")
+        return body

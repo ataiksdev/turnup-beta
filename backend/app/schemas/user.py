@@ -1,6 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 from app.schemas.organizer import OrganizerProfileOut
+from app.schemas.types import WebUrl
 
 
 class UserSummary(BaseModel):
@@ -79,5 +80,5 @@ class UserUpdate(BaseModel):
     display_name: str | None = Field(None, max_length=80)
     bio: str | None = Field(None, max_length=500)
     location: str | None = Field(None, max_length=120)
-    website: str | None = Field(None, max_length=255)
-    avatar_url: str | None = None
+    website: WebUrl | None = Field(None, max_length=255)
+    avatar_url: WebUrl | None = None

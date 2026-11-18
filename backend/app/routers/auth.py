@@ -1,5 +1,4 @@
 import json
-import random
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -644,8 +643,10 @@ async def oauth_callback(
         oa.access_token = access_token
         user_result = await db.execute(select(User).where(User.id == oa.user_id))
         user = user_result.scalar_one_or_none()
-        if not user:
+        if not user or user.is_deleted:
             raise HTTPException(401, "Account no longer exists")
+        if not user.is_active:
+            raise HTTPException(403, "Account disabled")
         await db.flush()
         token = await _create_session(db, user, request, device_name=f"{provider.title()} OAuth")
         return OAuthCallbackResponse(
@@ -662,8 +663,16 @@ async def oauth_callback(
         partial = create_partial_oauth_token(provider, provider_user_id, username_candidate)
         return OAuthCallbackResponse(requires_email=True, partial_token=partial)
 
-    # Provider returned email — find or create user
+    # Provider returned an email. Only trust it -- to create a pre-verified account or to link
+    # onto an existing account with that email -- if the provider says it verified it.
+    # Otherwise an attacker could register an unverified provider account using a victim's
+    # email address and be logged straight into the victim's Turnup account.
+    if userinfo.get("email_verified") not in (True, "true"):
+        raise HTTPException(400, f"Your {provider.title()} email address is not verified.")
+
     user = await _get_user_by_email(db, email)
+    if user and (user.is_deleted or not user.is_active):
+        raise HTTPException(403, "Account disabled")
     if not user:
         username_base = name.lower().replace(" ", "_")
         username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
@@ -725,27 +734,46 @@ async def oauth_complete(
     if oa_result.scalar_one_or_none():
         raise HTTPException(400, "Account already linked")
 
-    # Find or create user by email
-    user = await _get_user_by_email(db, payload.email)
-    if not user:
-        username_base = username_hint or payload.email.split("@")[0].lower()
-        username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
-        username = username_base
-        suffix = 1
-        while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
-            username = f"{username_base}{suffix}"
-            suffix += 1
-
-        user = User(
-            id=str(uuid.uuid4()),
-            email=payload.email,
-            username=username,
-            full_name=username_hint or payload.email.split("@")[0],
-            email_verified=True,
-            is_verified=True,
+    # The email here is typed by the user and has NOT been proven to belong to them, so it
+    # must never be used to attach this OAuth identity to an existing account -- doing so
+    # would let anyone with an Instagram account log in as any user by entering their email.
+    if await _get_user_by_email(db, payload.email):
+        raise HTTPException(
+            409,
+            "An account with this email already exists. Log in with your email or username instead.",
         )
-        db.add(user)
-        await db.flush()
+
+    username_base = username_hint or payload.email.split("@")[0].lower()
+    username_base = "".join(c for c in username_base if c.isalnum() or c == "_")[:30] or "user"
+    username = username_base
+    suffix = 1
+    while (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
+        username = f"{username_base}{suffix}"
+        suffix += 1
+
+    # Unverified until the user clicks the emailed link -- the provider never vouched for it.
+    user = User(
+        id=str(uuid.uuid4()),
+        email=payload.email,
+        username=username,
+        full_name=username_hint or payload.email.split("@")[0],
+        email_verified=False,
+        is_verified=False,
+    )
+    db.add(user)
+    await db.flush()
+
+    ev_token = secrets.token_urlsafe(64)
+    db.add(EmailVerification(
+        user_id=user.id,
+        token=ev_token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.email_verify_expire_hours),
+    ))
+    await db.flush()
+    try:
+        await send_verification_email(user.email, ev_token)
+    except Exception:
+        pass  # non-fatal, same as /register; the user can request a resend
 
     db.add(OAuthAccount(
         user_id=user.id,
@@ -768,7 +796,7 @@ async def phone_send_otp(
 ):
     # Invalidate old OTPs for this number
     await db.execute(delete(PhoneOTP).where(PhoneOTP.phone_number == payload.phone_number))
-    otp_code = str(random.randint(100000, 999999))
+    otp_code = f"{secrets.randbelow(1_000_000):06d}"
     db.add(PhoneOTP(
         phone_number=payload.phone_number,
         otp_code=otp_code,
@@ -801,13 +829,16 @@ async def phone_verify(
     if not otp:
         raise HTTPException(400, "No active OTP for this number. Request a new one.")
 
+    # Commit the attempt count BEFORE raising: get_db rolls back on any exception, so a
+    # flush alone would be undone and the attempt limit would never actually take effect.
     otp.attempts += 1
     if otp.attempts > 3:
-        await db.flush()
+        otp.is_used = True  # burn it; the user must request a fresh code
+        await db.commit()
         raise HTTPException(400, "Too many attempts. Request a new OTP.")
 
-    if otp.otp_code != payload.otp_code:
-        await db.flush()
+    if not secrets.compare_digest(otp.otp_code, payload.otp_code):
+        await db.commit()
         raise HTTPException(400, "Invalid OTP code")
 
     otp.is_used = True

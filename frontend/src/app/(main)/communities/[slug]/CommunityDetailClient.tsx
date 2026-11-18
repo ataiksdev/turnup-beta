@@ -7,7 +7,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
-import { formatEventDate, formatPrice, displayName } from "@/lib/utils";
+import { formatEventDate, formatPrice, displayName, safeHref } from "@/lib/utils";
 import {
   Users, Lock, CheckCircle2, Settings, Link2, Copy, Check,
   ExternalLink, Calendar, Ticket,
@@ -31,7 +31,9 @@ const PLATFORM_CONFIG: Record<string, { label: string; color: string; bg: string
 };
 
 function PlatformButtons({ links }: { links: Record<string, string | null | undefined> }) {
-  const entries = Object.entries(links).filter(([, v]) => !!v) as [string, string][];
+  const entries = Object.entries(links)
+    .map(([k, v]) => [k, safeHref(v)])
+    .filter(([, v]) => !!v) as [string, string][];
   if (!entries.length) return null;
   return (
     <div className="flex flex-wrap gap-2">

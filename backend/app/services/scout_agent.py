@@ -16,6 +16,7 @@ from app.routers.events import _slugify
 from app.schemas.admin import AIEventDraft
 from app.services.ai_agent import AIAgentError, draft_event
 from app.services.url_safety import fetch_safely
+from app.schemas.types import safe_web_url_or_none
 
 _FEED_FETCH_TIMEOUT = 15
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
@@ -191,7 +192,7 @@ async def _process_item(
         slug=_slugify(draft.title, eid),
         title=draft.title.strip(),
         description=draft.description.strip(),
-        cover_image=draft.cover_image or None,
+        cover_image=safe_web_url_or_none(draft.cover_image),
         venue_name=draft.venue_name.strip() or "Venue TBA",
         address=draft.address.strip() or "Address TBA",
         city=draft.city.strip() or "Unknown",

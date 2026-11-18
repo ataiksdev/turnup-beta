@@ -1,6 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 from app.schemas.user import UserSummary
+from app.schemas.types import WebUrl
 
 
 class CategoryOut(BaseModel):
@@ -15,7 +16,7 @@ class CategoryOut(BaseModel):
 class EventCreate(BaseModel):
     title: str = Field(min_length=5, max_length=200)
     description: str = Field(min_length=20)
-    cover_image: str | None = None
+    cover_image: WebUrl | None = None
     venue_name: str = Field(min_length=2, max_length=200)
     address: str = Field(min_length=5, max_length=300)
     city: str = Field(min_length=2, max_length=100)
@@ -34,7 +35,7 @@ class EventCreate(BaseModel):
     category_id: str | None = None
     tags: str | None = None
     event_type: str = Field("physical", pattern=r"^(physical|virtual|hybrid)$")
-    meeting_url: str | None = None
+    meeting_url: WebUrl | None = None
     status: str = Field("published", pattern=r"^(draft|published)$")
     template_id: str | None = None  # optional: create from template
     created_via: str = Field("manual", pattern=r"^(manual|ai_agent)$")
@@ -44,7 +45,7 @@ class EventCreate(BaseModel):
 class EventUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
-    cover_image: str | None = None
+    cover_image: WebUrl | None = None
     venue_name: str | None = None
     address: str | None = None
     city: str | None = None
@@ -56,7 +57,7 @@ class EventUpdate(BaseModel):
     capacity: int | None = None
     waitlist_enabled: bool | None = None
     event_type: str | None = Field(None, pattern=r"^(physical|virtual|hybrid)$")
-    meeting_url: str | None = None
+    meeting_url: WebUrl | None = None
     status: str | None = Field(None, pattern=r"^(draft|published|cancelled|completed)$")
     tags: str | None = None
     refund_policy: str | None = None

@@ -175,7 +175,8 @@ async def test_checkout_multi_tier_cart_paid_then_verify(db, client, buyer_auth,
     assert len(orders) == 2
     assert all(o.status == "pending" for o in orders)
 
-    fake_verify = {"status": True, "data": {"status": "success", "channel": "card"}}
+    fake_verify = {"status": True, "data": {"status": "success", "channel": "card",
+                                            "amount": (1000 * 2 + 2500 * 1) * 100, "currency": "NGN"}}
     with patch.object(events_router, "verify_transaction", new=AsyncMock(return_value=fake_verify)):
         verify_resp = await client.post(
             f"/api/events/{event_id}/tickets/verify-payment",
@@ -243,7 +244,9 @@ async def test_webhook_reconciles_pending_order_and_is_idempotent(db, client, bu
             )
         reference = checkout_resp.json()["payment_reference"]
 
-        body = json.dumps({"event": "charge.success", "data": {"reference": reference, "channel": "card"}}).encode()
+        body = json.dumps({"event": "charge.success", "data": {
+            "reference": reference, "channel": "card", "amount": 50000, "currency": "NGN",
+        }}).encode()
         sig = _sign(body)
 
         resp1 = await client.post(

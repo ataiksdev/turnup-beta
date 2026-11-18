@@ -79,7 +79,18 @@ async function request<T>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, err.detail ?? "Request failed");
+    // FastAPI validation errors (422) return `detail` as a list of {loc, msg}; flatten it to
+    // readable text instead of letting it surface as "[object Object]".
+    const detail = Array.isArray(err.detail)
+      ? err.detail
+          .map((d: { loc?: (string | number)[]; msg?: string }) => {
+            const field = d.loc?.[d.loc.length - 1];
+            const msg = (d.msg ?? "Invalid value").replace(/^Value error, /, "");
+            return field && typeof field === "string" ? `${field}: ${msg}` : msg;
+          })
+          .join("; ")
+      : err.detail;
+    throw new ApiError(res.status, detail ?? "Request failed");
   }
 
   if (res.status === 204) return undefined as T;

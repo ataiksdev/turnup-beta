@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -33,7 +34,9 @@ from app.schemas.organizer import (
 )
 from app.services.email import send_ticket_email
 from app.services.paystack import PaystackConfigError, initialize_transaction, verify_transaction
-from app.services.tickets import confirm_order, notify_buyer, reserve_inventory
+from app.services.tickets import (
+    confirm_order, notify_buyer, payment_matches_orders, reserve_inventory, to_kobo,
+)
 from app.schemas.user import UserSummary
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -495,6 +498,11 @@ async def paystack_webhook(
     if not orders:
         return {"status": "unknown_reference"}
 
+    # Return 200 on a mismatch so Paystack doesn't keep retrying; the orders stay pending
+    # (and will expire) and the mismatch is logged for manual follow-up.
+    if not await payment_matches_orders(db, payload["data"], list(orders)):
+        return {"status": "amount_mismatch"}
+
     channel = payload["data"].get("channel")
     for order in orders:
         row = await confirm_order(db, order.id, channel)
@@ -592,6 +600,13 @@ async def create_event(
             for k, v in defaults.items():
                 if k in data and data[k] is None:
                     data[k] = v
+            # Template data is a free-form dict stored without validation, so re-run the
+            # full EventCreate validation (URL fields included) on the merged result.
+            try:
+                data = EventCreate.model_validate(data).model_dump()
+            except ValidationError as e:
+                raise HTTPException(422, f"Template contains invalid data: {e.errors()[0]['msg']}")
+            data.pop("template_id", None)
 
     # Admins bypass approval; organizer/moderator submissions go to review as drafts.
     if user.role == "admin":
@@ -1012,7 +1027,7 @@ async def checkout_tickets(
                 order_ids=[o.id for o in existing],
                 payment_reference=existing[0].payment_reference,
                 paystack_public_key=settings.paystack_public_key if total > 0 else "",
-                amount_kobo=int(total * 100),
+                amount_kobo=to_kobo(total),
                 email=user.email or "",
                 is_free=(total == 0),
             )
@@ -1069,7 +1084,7 @@ async def checkout_tickets(
         )
 
     # Paid — init one Paystack transaction for the summed total (amount in kobo)
-    amount_kobo = int(total * 100)
+    amount_kobo = to_kobo(total)
     email = user.email or f"{user.username}@turnup.app"
     try:
         await initialize_transaction(
@@ -1142,6 +1157,8 @@ async def verify_payment(
     ps_data = ps_resp.get("data", {})
     if ps_data.get("status") != "success":
         raise HTTPException(402, "Payment not completed")
+    if not await payment_matches_orders(db, ps_data, list(orders)):
+        raise HTTPException(402, "Payment amount does not match your order. Please contact support.")
 
     confirmed: list[TicketOrderOut] = []
     for order in orders:

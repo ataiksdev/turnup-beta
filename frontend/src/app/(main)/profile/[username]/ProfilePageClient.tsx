@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
-import { parsePreferences, formatCount, displayName } from "@/lib/utils";
+import { parsePreferences, formatCount, displayName, safeHref } from "@/lib/utils";
 import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -196,10 +196,10 @@ export default function ProfilePage() {
               <MapPin size={12} className="text-primary" /> {profile.location}
             </span>
           )}
-          {profile.website && (
-            <a href={profile.website} target="_blank" rel="noopener noreferrer"
+          {safeHref(profile.website) && (
+            <a href={safeHref(profile.website)} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1 text-primary">
-              <Globe size={12} /> {profile.website.replace(/^https?:\/\//, "")}
+              <Globe size={12} /> {(profile.website ?? "").replace(/^https?:\/\//, "")}
             </a>
           )}
         </div>

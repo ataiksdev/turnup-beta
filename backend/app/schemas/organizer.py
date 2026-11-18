@@ -1,5 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.types import WebUrl
 
 
 # ── Organizer profile ─────────────────────────────────────────────────────────
@@ -7,7 +8,7 @@ from pydantic import BaseModel, Field
 class OrganizerBecomeRequest(BaseModel):
     organization_name: str | None = Field(None, max_length=200)
     organizer_bio: str | None = Field(None, max_length=1000)
-    website: str | None = Field(None, max_length=255)
+    website: WebUrl | None = Field(None, max_length=255)
 
 
 class OrganizerProfileOut(BaseModel):
@@ -27,7 +28,7 @@ class OrganizerProfileOut(BaseModel):
 class OrganizerProfileUpdate(BaseModel):
     organization_name: str | None = Field(None, max_length=200)
     organizer_bio: str | None = Field(None, max_length=1000)
-    website: str | None = Field(None, max_length=255)
+    website: WebUrl | None = Field(None, max_length=255)
 
 
 class VerificationRequest(BaseModel):

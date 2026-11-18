@@ -1,20 +1,21 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
+from app.schemas.types import WebUrl
 
 
 ALLOWED_PLATFORMS = {"whatsapp", "instagram", "discord", "telegram", "twitter", "facebook", "tiktok", "youtube", "website"}
 
 
 class SocialLinks(BaseModel):
-    whatsapp: str | None = None
-    instagram: str | None = None
-    discord: str | None = None
-    telegram: str | None = None
-    twitter: str | None = None
-    facebook: str | None = None
-    tiktok: str | None = None
-    youtube: str | None = None
-    website: str | None = None
+    whatsapp: WebUrl | None = None
+    instagram: WebUrl | None = None
+    discord: WebUrl | None = None
+    telegram: WebUrl | None = None
+    twitter: WebUrl | None = None
+    facebook: WebUrl | None = None
+    tiktok: WebUrl | None = None
+    youtube: WebUrl | None = None
+    website: WebUrl | None = None
 
 
 class CategoryMini(BaseModel):
@@ -75,7 +76,7 @@ class CommunityOut(BaseModel):
 class CommunityCreate(BaseModel):
     name: str = Field(min_length=3, max_length=100)
     description: str | None = Field(None, max_length=2000)
-    cover_image: str | None = None
+    cover_image: WebUrl | None = None
     icon: str | None = Field(None, max_length=10)
     category_id: str | None = None
     city: str | None = Field(None, max_length=100)
@@ -86,7 +87,7 @@ class CommunityCreate(BaseModel):
 class CommunityUpdate(BaseModel):
     name: str | None = Field(None, min_length=3, max_length=100)
     description: str | None = Field(None, max_length=2000)
-    cover_image: str | None = None
+    cover_image: WebUrl | None = None
     icon: str | None = Field(None, max_length=10)
     category_id: str | None = None
     city: str | None = Field(None, max_length=100)

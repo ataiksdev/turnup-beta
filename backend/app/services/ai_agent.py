@@ -9,6 +9,7 @@ import httpx
 
 from app.config import settings
 from app.services.url_safety import UnsafeURLError, fetch_safely
+from app.schemas.types import safe_web_url_or_none
 
 _URL_FETCH_TIMEOUT = 15
 _MAX_HTML_CHARS = 20000
@@ -348,4 +349,6 @@ async def draft_event(
     # of markup). Only fill it in if the model didn't already return one of its own.
     if cover_image_url and not result.get("cover_image"):
         result["cover_image"] = cover_image_url
+    # Scraped/model-generated, so never trusted: keep only a plain http(s) URL.
+    result["cover_image"] = safe_web_url_or_none(result.get("cover_image"))
     return result
