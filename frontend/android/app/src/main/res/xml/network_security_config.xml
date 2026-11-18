@@ -1,6 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release builds: HTTPS only. The one exception is "localhost", the app's own origin
+  (Capacitor serves the bundled web app at http://localhost inside the WebView; nothing
+  leaves the phone). So for a release build NEXT_PUBLIC_API_URL must be an https:// URL.
+
+  Debug builds use src/debug/res/xml/network_security_config.xml instead, which allows
+  plain http to any host for LAN development (live reload, a local API on your PC).
+-->
 <network-security-config>
+  <base-config cleartextTrafficPermitted="false" />
   <domain-config cleartextTrafficPermitted="true">
-    <domain includeSubdomains="true">10.111.125.187</domain>
+    <domain includeSubdomains="false">localhost</domain>
   </domain-config>
 </network-security-config>

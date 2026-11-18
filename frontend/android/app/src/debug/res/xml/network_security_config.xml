@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only (overrides src/main/res/xml/network_security_config.xml): allow plain
+  http to any host, so live reload and a dev API on your PC's LAN address work whatever
+  that address is today. Release builds stay HTTPS-only.
+
+  Note: this can't make "localhost" reach your PC. On a phone, localhost is the phone.
+  Use your PC's LAN IP (e.g. http://192.168.1.20:3003), or `adb reverse tcp:3003 tcp:3003`.
+-->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
