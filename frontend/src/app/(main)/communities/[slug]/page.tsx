@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { CommunityDetailClient } from "./CommunityDetailClient";
 
@@ -13,17 +14,18 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata(
-  { params }: { params: { slug: string } },
+  { params }: { params: Promise<{ slug: string }> },
 ): Promise<Metadata> {
+  const { slug } = await params; // a Promise in Next 16
   try {
-    const res = await fetch(`${API}/api/communities/${params.slug}`, {
+    const res = await fetch(`${API}/api/communities/${encodeURIComponent(slug)}`, {
       next: { revalidate: 60 },
     });
     if (!res.ok) return { title: "Community · Turnup" };
     const c = await res.json();
     const desc = c.description?.slice(0, 160)
       ?? `Join ${c.name} on Turnup — ${c.member_count} members.`;
-    const url = `${SITE}/communities/${params.slug}`;
+    const url = `${SITE}/communities/${slug}`;
     const images = c.cover_image
       ? [{ url: c.cover_image, width: 1200, height: 630 }]
       : [];
@@ -53,5 +55,5 @@ export async function generateMetadata(
 }
 
 export default function CommunityPage() {
-  return <CommunityDetailClient />;
+  return <Suspense><CommunityDetailClient /></Suspense>;
 }

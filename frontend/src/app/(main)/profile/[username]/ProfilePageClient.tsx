@@ -10,15 +10,17 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
 import { parsePreferences, formatCount, displayName, safeHref } from "@/lib/utils";
 import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, Settings, type LucideIcon } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import {useRouter} from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 type Tab = "events" | "attending" | "saved";
 
 export default function ProfilePage() {
-  const { username } = useParams<{ username: string }>();
+  const username = useRouteParam("username");
   const { token, user: me } = useAuthStore();
   const logoutEverywhere = useLogout();
   const router = useRouter();
@@ -270,7 +272,7 @@ export default function ProfilePage() {
             {communitiesQuery.data.slice(0, 5).map((c) => (
               <Link
                 key={c.id}
-                href={`/communities/${c.slug}`}
+                href={routes.community(c.slug)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
               >
                 {c.icon && <span className="text-sm">{c.icon}</span>}
@@ -413,7 +415,7 @@ export default function ProfilePage() {
                 followListQuery.data.map((u) => (
                   <Link
                     key={u.id}
-                    href={`/profile/${u.username}`}
+                    href={routes.profile(u.username)}
                     onClick={() => setFollowListModal(null)}
                     className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated transition-colors"
                   >

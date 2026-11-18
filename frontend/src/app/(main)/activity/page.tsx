@@ -10,6 +10,7 @@ import Link from "next/link";
 import { Bell, Check, UserPlus, PartyPopper, MessageCircle, Clock, Megaphone, Mail, Eye, Zap, Ticket, RotateCcw, BadgeCheck, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { routes } from "@/lib/routes";
 
 type ActivityTab = "feed" | "notifications";
 
@@ -98,26 +99,26 @@ export default function ActivityPage() {
           ) : feed && feed.length > 0 ? (
             feed.map((item, i) => (
               <div key={i} className="flex items-start gap-3 px-4 py-3.5">
-                <Link href={`/profile/${item.actor.username}`}>
+                <Link href={routes.profile(item.actor.username)}>
                   <Avatar src={item.actor.avatar_url} name={displayName(item.actor)} size="md" />
                 </Link>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-text-secondary leading-snug">
-                    <Link href={`/profile/${item.actor.username}`}
+                    <Link href={routes.profile(item.actor.username)}
                       className="font-semibold text-text hover:text-primary">
                       @{item.actor.username}
                     </Link>
                     {" "}
                     {item.type === "attendance" && (
                       <>is <span className="text-primary font-medium">{item.status}</span> {" "}
-                        <Link href={`/events/${item.event?.slug}`} className="font-semibold text-text hover:text-primary">
+                        <Link href={routes.event(item.event?.slug)} className="font-semibold text-text hover:text-primary">
                           {item.event?.title}
                         </Link>
                       </>
                     )}
                     {item.type === "follow" && (
                       <>started following {" "}
-                        <Link href={`/profile/${item.target_user?.username}`}
+                        <Link href={routes.profile(item.target_user?.username)}
                           className="font-semibold text-text hover:text-primary">
                           @{item.target_user?.username}
                         </Link>
@@ -127,7 +128,7 @@ export default function ActivityPage() {
                   <p className="text-[11px] text-text-muted mt-0.5">{timeAgo(item.created_at)}</p>
                 </div>
                 {item.type === "attendance" && item.event?.cover_image && (
-                  <Link href={`/events/${item.event.slug}`}>
+                  <Link href={routes.event(item.event.slug)}>
                     <div className="w-12 h-12 rounded overflow-hidden shrink-0 bg-bg-elevated border-2 border-border">
                       <img src={item.event.cover_image} alt="" className="w-full h-full object-cover" />
                     </div>
@@ -168,9 +169,9 @@ export default function ActivityPage() {
             ) : notifications && notifications.length > 0 ? (
               notifications.map((n) => {
                 const href =
-                  n.reference_type === "event"       ? `/events/${n.reference_id}` :
-                  n.reference_type === "user"        ? `/profile/${n.actor?.username}` :
-                  n.reference_type === "ticket_order" ? `/tickets/${n.reference_id}` :
+                  n.reference_type === "event"       ? routes.event(n.reference_id) :
+                  n.reference_type === "user"        ? routes.profile(n.actor?.username) :
+                  n.reference_type === "ticket_order" ? routes.ticket(n.reference_id) :
                   n.reference_type === "organizer_verification" ? "/organizer/verification" :
                   null;
 

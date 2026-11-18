@@ -2,6 +2,7 @@
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { routes } from "@/lib/routes";
 
 // Redirect /profile → /profile/:username.
 // Uses router.replace() (not next/navigation's redirect(), which only works during
@@ -14,7 +15,7 @@ export default function ProfileRedirect() {
   useEffect(() => {
     if (!hasHydrated) return;
     if (user?.username) {
-      router.replace(`/profile/${user.username}`);
+      router.replace(routes.profile(user.username));
     } else {
       router.replace("/login");
     }

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Lock, Globe, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { routes } from "@/lib/routes";
 
 const PLATFORM_META: { key: keyof SocialLinks; label: string; placeholder: string; color: string }[] = [
   { key: "whatsapp",  label: "WhatsApp",  placeholder: "https://chat.whatsapp.com/...", color: "#25D366" },
@@ -48,7 +49,7 @@ export default function NewCommunityPage() {
         is_private: isPrivate,
         social_links: socialLinks,
       }),
-    onSuccess: (community) => router.replace(`/communities/${community.slug}`),
+    onSuccess: (community) => router.replace(routes.community(community.slug)),
     onError: (e: any) => setError(e.message ?? "Failed to create community"),
   });
 

@@ -9,6 +9,7 @@ import { BarChart2, CalendarPlus, Edit2, Users, Eye, Ticket, Users2 } from "luci
 import Link from "next/link";
 import { cn, formatEventDateShort, formatPrice } from "@/lib/utils";
 import type { Event } from "@/types";
+import { routes } from "@/lib/routes";
 
 const STATUS_STYLES: Record<string, string> = {
   published: "bg-success/15 text-success border-success/40",
@@ -21,7 +22,7 @@ function EventRow({ event }: { event: Event }) {
   return (
     <div className="flex flex-col gap-0 rounded border-2 border-border bg-bg-card shadow-brutal-sm overflow-hidden">
       <Link
-        href={`/events/${event.slug}`}
+        href={routes.event(event.slug)}
         className="flex items-center gap-3 p-4 hover:bg-bg-elevated transition-colors"
       >
         {/* Cover thumbnail */}
@@ -52,7 +53,7 @@ function EventRow({ event }: { event: Event }) {
           </span>
           {event.series_id && (
             <Link
-              href={`/organizer/series/${event.series_id}`}
+              href={routes.series(event.series_id)}
               onClick={(e) => e.stopPropagation()}
               className="px-1.5 py-0.5 rounded border border-primary/40 bg-primary/10 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-colors"
             >
@@ -65,25 +66,25 @@ function EventRow({ event }: { event: Event }) {
       {/* Action bar */}
       <div className="flex border-t-2 border-border divide-x-2 divide-border">
         <Link
-          href={`/organizer/events/${event.id}/edit`}
+          href={routes.organizerEvent(event.id, "edit")}
           className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
         >
           <Edit2 size={11} /> Edit
         </Link>
         <Link
-          href={`/organizer/events/${event.id}/analytics`}
+          href={routes.organizerEvent(event.id, "analytics")}
           className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
         >
           <BarChart2 size={11} /> Analytics
         </Link>
         <Link
-          href={`/events/${event.slug}`}
+          href={routes.event(event.slug)}
           className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
         >
           <Eye size={11} /> View
         </Link>
         <Link
-          href={`/organizer/events/${event.id}/cohosts`}
+          href={routes.organizerEvent(event.id, "cohosts")}
           className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black uppercase tracking-widest text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
         >
           <Users2 size={11} /> Hosts

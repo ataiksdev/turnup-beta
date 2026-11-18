@@ -20,6 +20,8 @@ import Link from "next/link";
 import { useState, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { publicOrigin, routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 function SeriesSection({ seriesId, currentEventId }: { seriesId: string; currentEventId: string }) {
   const { data: series } = useQuery({
@@ -36,7 +38,7 @@ function SeriesSection({ seriesId, currentEventId }: { seriesId: string; current
       </h2>
       <div className="space-y-2">
         {others.slice(0, 5).map((e) => (
-          <Link key={e.id} href={`/events/${e.slug}`}
+          <Link key={e.id} href={routes.event(e.slug)}
             className="flex items-center gap-3 p-3 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors">
             <span className="w-6 h-6 rounded bg-primary/10 border border-primary/30 flex items-center justify-center text-[10px] font-black text-primary shrink-0">
               {series.events.findIndex((ev) => ev.id === e.id) + 1}
@@ -59,7 +61,9 @@ function SeriesSection({ seriesId, currentEventId }: { seriesId: string; current
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
-export function EventDetailClient({ id }: { id: string }) {
+export function EventDetailClient() {
+  // Path segment on the web build, ?id= in the Capacitor build (see lib/routes.ts).
+  const id = useRouteParam("id");
   const { token, user } = useAuthStore();
   const qc = useQueryClient();
 
@@ -309,7 +313,7 @@ export function EventDetailClient({ id }: { id: string }) {
   const isGoing = attendance === "going";
   const isInterested = attendance === "interested";
   const shareUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/events/${id}`
+    ? `${publicOrigin()}/events/${id}`
     : `${SITE}/events/${id}`;
 
   return (
@@ -476,7 +480,7 @@ export function EventDetailClient({ id }: { id: string }) {
 
         {/* Host */}
         <Link
-          href={`/profile/${event.host.username}`}
+          href={routes.profile(event.host.username)}
           className="flex flex-col gap-3 p-4 rounded border-2 border-border bg-bg-card hover:border-border-strong transition-colors"
           aria-label={`View ${displayName(event.host)}'s profile`}
         >

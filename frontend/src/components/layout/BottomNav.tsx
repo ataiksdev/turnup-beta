@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
 import { socialApi } from "@/lib/api";
+import { routes } from "@/lib/routes";
 
 const navItems = [
   { href: "/",             icon: Home,    label: "Home" },
@@ -36,7 +37,7 @@ export function BottomNav() {
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
         {navItems.map(({ href, icon: Icon, label }) => {
           const resolvedHref = href === "/profile" && user
-            ? `/profile/${user.username}`
+            ? routes.profile(user.username)
             : href;
           const isActive =
             pathname === resolvedHref ||

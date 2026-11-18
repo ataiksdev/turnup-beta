@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { EventDetailClient } from "./EventDetailClient";
 
@@ -13,16 +14,19 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata(
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ): Promise<Metadata> {
+  // Next 16: params is a Promise (synchronous access was removed, which made the old
+  // params.id undefined and broke every event page).
+  const { id } = await params;
   try {
-    const res = await fetch(`${API}/api/events/${params.id}`, {
+    const res = await fetch(`${API}/api/events/${encodeURIComponent(id)}`, {
       next: { revalidate: 60 },
     });
     if (!res.ok) return { title: "Event · Turnup" };
     const event = await res.json();
     const desc = event.description?.slice(0, 160) ?? "Discover this event on Turnup.";
-    const url  = `${SITE}/events/${params.id}`;
+    const url  = `${SITE}/events/${id}`;
     const images = event.cover_image ? [{ url: event.cover_image, width: 1200, height: 630 }] : [];
 
     return {
@@ -49,6 +53,6 @@ export async function generateMetadata(
   }
 }
 
-export default function EventPage({ params }: { params: { id: string } }) {
-  return <EventDetailClient id={params.id} />;
+export default function EventPage() {
+  return <Suspense><EventDetailClient /></Suspense>;
 }

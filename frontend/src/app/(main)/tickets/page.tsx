@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Ticket, CheckCircle2, Clock, XCircle, CalendarDays, MapPin, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { routes } from "@/lib/routes";
 
 const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   confirmed: { icon: CheckCircle2, label: "Confirmed",  cls: "text-success bg-success/10 border-success/30" },
@@ -81,7 +82,7 @@ export default function TicketsPage() {
               : null;
 
             return (
-              <Link key={t.id} href={`/tickets/${t.id}`} className="bg-bg-card border-2 border-border rounded shadow-brutal-sm overflow-hidden hover:border-primary transition-colors block">
+              <Link key={t.id} href={routes.ticket(t.id)} className="bg-bg-card border-2 border-border rounded shadow-brutal-sm overflow-hidden hover:border-primary transition-colors block">
                 {/* Cover strip */}
                 {t.event_cover && (
                   <div className="h-20 w-full overflow-hidden">
@@ -92,7 +93,7 @@ export default function TicketsPage() {
                 <div className="p-3 space-y-2">
                   {/* Event title */}
                   {t.event_slug ? (
-                    <Link href={`/events/${t.event_slug}`} className="font-black text-text text-sm hover:text-primary transition-colors line-clamp-1">
+                    <Link href={routes.event(t.event_slug)} className="font-black text-text text-sm hover:text-primary transition-colors line-clamp-1">
                       {t.event_title ?? "Event"}
                     </Link>
                   ) : (

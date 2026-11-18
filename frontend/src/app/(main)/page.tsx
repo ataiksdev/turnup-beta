@@ -12,6 +12,8 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Users, Lock, CheckCircle2 } from "lucide-react";
 import type { Event, User } from "@/types";
+import { routes } from "@/lib/routes";
+import { DeepLinkRestore } from "@/components/layout/DeepLinkRestore";
 
 function getGreeting(name?: string): string {
   const hour = new Date().getHours();
@@ -88,6 +90,7 @@ export default function DiscoverPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-4">
+      <DeepLinkRestore />
       <TopBar />
 
       {/* Greeting */}
@@ -111,7 +114,7 @@ export default function DiscoverPage() {
             {myCommunities.slice(0, 10).map((c: any) => (
               <Link
                 key={c.id}
-                href={`/communities/${c.slug}`}
+                href={routes.community(c.slug)}
                 className="snap-start shrink-0 w-32 flex flex-col items-center gap-2 p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors text-center"
               >
                 <div className="w-12 h-12 rounded-full bg-bg-elevated flex items-center justify-center overflow-hidden relative">

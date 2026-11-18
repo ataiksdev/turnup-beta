@@ -11,6 +11,7 @@ import {
   CalendarDays, Users,
 } from "lucide-react";
 import Link from "next/link";
+import { routes } from "@/lib/routes";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,7 @@ function MiniEventCard({ event, showNetworkNote }: { event: any; showNetworkNote
   const note = showNetworkNote ? networkNote(event) : null;
   return (
     <Link
-      href={`/events/${event.slug}`}
+      href={routes.event(event.slug)}
       className="shrink-0 w-44 rounded border-2 border-border bg-bg-card overflow-hidden hover:border-primary transition-colors shadow-brutal-sm"
     >
       <div className="relative h-28 bg-bg-elevated">
@@ -149,7 +150,7 @@ export default function ExplorePage() {
 
       {/* ── Hero featured event ─────────────────────────────────────── */}
       {hero && (
-        <Link href={`/events/${hero.slug}`} className="relative mx-4 mt-3 h-52 rounded border-2 border-border overflow-hidden shadow-brutal block hover:border-primary transition-colors">
+        <Link href={routes.event(hero.slug)} className="relative mx-4 mt-3 h-52 rounded border-2 border-border overflow-hidden shadow-brutal block hover:border-primary transition-colors">
           {hero.cover_image
             ? <img src={hero.cover_image} alt={hero.title} className="w-full h-full object-cover" />
             : <div className="w-full h-full bg-gradient-to-br from-primary/30 to-bg-elevated" />

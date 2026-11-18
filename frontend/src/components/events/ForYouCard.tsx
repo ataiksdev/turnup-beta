@@ -8,6 +8,7 @@ import { useState } from "react";
 import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
+import { routes } from "@/lib/routes";
 
 interface ForYouCardProps {
   event: Event;
@@ -48,7 +49,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
 
   return (
     <Link
-      href={`/events/${event.slug}`}
+      href={routes.event(event.slug)}
       className={cn(
         "group block bg-bg-card rounded border-2 border-border overflow-hidden",
         "shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg",

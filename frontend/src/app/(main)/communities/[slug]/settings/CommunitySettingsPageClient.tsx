@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import {useRouter} from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { communitiesApi, type SocialLinks } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Globe, Lock, ChevronDown, ChevronUp, RefreshCw, Trash2, Copy, Check } from "lucide-react";
 import { cn, copyToClipboard } from "@/lib/utils";
+import { publicOrigin, routes } from "@/lib/routes";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 const PLATFORM_META: { key: keyof SocialLinks; label: string; placeholder: string; color: string }[] = [
   { key: "whatsapp",  label: "WhatsApp",  placeholder: "https://chat.whatsapp.com/...", color: "#25D366" },
@@ -23,7 +25,7 @@ const PLATFORM_META: { key: keyof SocialLinks; label: string; placeholder: strin
 ];
 
 export default function CommunitySettingsPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const slug = useRouteParam("slug");
   const router = useRouter();
   const { token } = useAuthStore();
   const qc = useQueryClient();
@@ -63,7 +65,7 @@ export default function CommunitySettingsPage() {
     }),
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ["community", slug] });
-      router.replace(`/communities/${updated.slug}`);
+      router.replace(routes.community(updated.slug));
     },
     onError: (e: any) => setError(e.message ?? "Update failed"),
   });
@@ -80,14 +82,14 @@ export default function CommunitySettingsPage() {
 
   function copyInviteLink() {
     if (!community?.invite_token) return;
-    copyToClipboard(`${window.location.origin}/communities/join/${community.invite_token}`);
+    copyToClipboard(`${publicOrigin()}/communities/join/${community.invite_token}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
   if (isLoading) return <div className="flex flex-col"><TopBar back title="Settings" /></div>;
   if (!community || community.member_role !== "admin") {
-    router.replace(`/communities/${slug}`);
+    router.replace(routes.community(slug));
     return null;
   }
 
@@ -140,7 +142,7 @@ export default function CommunitySettingsPage() {
           <div className="p-4 rounded border-2 border-border bg-bg-card space-y-3">
             <p className="text-xs font-black text-text-muted uppercase tracking-widest">Invite Link</p>
             <p className="text-xs text-text-secondary break-all font-mono bg-bg-elevated px-2 py-1.5 rounded">
-              {`${typeof window !== "undefined" ? window.location.origin : ""}/communities/join/${community.invite_token}`}
+              {`${publicOrigin()}/communities/join/${community.invite_token}`}
             </p>
             <div className="flex gap-2">
               <Button size="sm" variant="secondary" onClick={copyInviteLink}>

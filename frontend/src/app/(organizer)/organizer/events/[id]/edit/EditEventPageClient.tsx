@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import {useRouter} from "next/navigation";
 import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useQuery } from "@tanstack/react-query";
@@ -14,6 +14,7 @@ import {
   Ticket, Trash2, ToggleLeft, ToggleRight, Users, Globe,
   ChevronRight, ChevronLeft, Monitor, Video, Blend,
 } from "lucide-react";
+import { useRouteParam } from "@/lib/useRouteParam";
 
 type EventType = "physical" | "virtual" | "hybrid";
 
@@ -136,7 +137,7 @@ function Toggle({ value, onChange, label, description }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function EditEventPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useRouteParam("id");
   const router = useRouter();
   const { token } = useAuthStore();
 
