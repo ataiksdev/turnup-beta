@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # Uploaded images (see app/routers/uploads.py). PUBLIC_BASE_URL is the public origin that
+    # serves /api/* (defaults to FRONTEND_URL, since the frontend proxies /api to the backend).
+    upload_dir: str = "data/uploads"
+    public_base_url: str = ""
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/turnup.db"
 
@@ -87,6 +92,7 @@ class Settings(BaseSettings):
     rate_limit_phone_otp: str = "3/minute"
     rate_limit_phone_verify: str = "5/minute"
     rate_limit_2fa_verify: str = "5/minute"
+    rate_limit_upload: str = "20/minute"
     rate_limit_checkout: str = "10/minute"
     rate_limit_refund: str = "10/minute"
     rate_limit_checkin: str = "60/minute"    # high-volume door scanning at event entry

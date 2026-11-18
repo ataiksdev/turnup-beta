@@ -16,6 +16,7 @@ import {
   Users, Globe, ChevronRight, ChevronLeft, Monitor, Video, Blend, Clock,
 } from "lucide-react";
 import { format, addWeeks, addMonths } from "date-fns";
+import { ImageUploadButton } from "@/components/ui/ImageUploadButton";
 
 // ── Recurrence helper ─────────────────────────────────────────────────────────
 
@@ -547,13 +548,14 @@ function CreateEventPage() {
       </FieldWrap>
 
       <FieldWrap>
-        <Label>Cover Image URL</Label>
+        <Label>Cover Image</Label>
         <Input
           value={form.cover_image}
           onChange={(e) => set("cover_image")(e.target.value)}
-          placeholder="https://..."
+          placeholder="Paste an image link, or upload one"
           icon={<Image size={16} />}
         />
+        <div className="mt-2"><ImageUploadButton onUploaded={(url) => set("cover_image")(url)} /></div>
         {form.cover_image && (
           <div className="mt-2 h-32 w-full rounded border-2 border-border overflow-hidden bg-bg-elevated">
             {/* eslint-disable-next-line @next/next/no-img-element */}

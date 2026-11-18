@@ -71,6 +71,10 @@ services:
     # limits) safe -- nobody outside the docker network can send a forged one.
     expose:
       - "8000"
+    volumes:
+      # Uploaded images. Shared by all API workers on this host; for several hosts use
+      # shared storage or an object store (see backend/app/routers/uploads.py).
+      - uploads:/app/data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -106,3 +110,4 @@ services:
 
 volumes:
   db-data:
+  uploads:

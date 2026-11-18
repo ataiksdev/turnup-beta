@@ -11,6 +11,7 @@ import { Globe, Lock, ChevronDown, ChevronUp, RefreshCw, Trash2, Copy, Check } f
 import { cn, copyToClipboard } from "@/lib/utils";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
+import { MembersManager } from "@/components/communities/MembersManager";
 
 const PLATFORM_META: { key: keyof SocialLinks; label: string; placeholder: string; color: string }[] = [
   { key: "whatsapp",  label: "WhatsApp",  placeholder: "https://chat.whatsapp.com/...", color: "#25D366" },
@@ -27,12 +28,15 @@ const PLATFORM_META: { key: keyof SocialLinks; label: string; placeholder: strin
 export default function CommunitySettingsPage() {
   const slug = useRouteParam("slug");
   const router = useRouter();
-  const { token } = useAuthStore();
+  const { token, hasHydrated } = useAuthStore();
   const qc = useQueryClient();
 
+  // Wait for the saved session to load: fetched anonymously, member_role is empty and the
+  // admin check below would bounce the community's own admins off this page on a full load.
   const { data: community, isLoading } = useQuery({
-    queryKey: ["community", slug],
+    queryKey: ["community", slug, !!token],
     queryFn: () => communitiesApi.get(slug, token ?? undefined),
+    enabled: hasHydrated && !!slug,
   });
 
   const [name, setName] = useState("");
@@ -87,7 +91,7 @@ export default function CommunitySettingsPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (isLoading) return <div className="flex flex-col"><TopBar back title="Settings" /></div>;
+  if (!hasHydrated || isLoading) return <div className="flex flex-col"><TopBar back title="Settings" /></div>;
   if (!community || community.member_role !== "admin") {
     router.replace(routes.community(slug));
     return null;
@@ -188,6 +192,8 @@ export default function CommunitySettingsPage() {
         <Button fullWidth size="lg" loading={updateMutation.isPending} onClick={() => updateMutation.mutate()}>
           Save Changes
         </Button>
+
+        <MembersManager slug={community.slug} creatorId={community.creator.id} />
 
         {/* Danger zone */}
         <div className="mt-6 p-4 rounded border-2 border-error/30 bg-error/5 space-y-3">

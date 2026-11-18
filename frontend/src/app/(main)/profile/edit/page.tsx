@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Lock, User, MapPin, Globe, FileText, Image, Smile } from "lucide-react";
 import Link from "next/link";
 import { parsePreferences } from "@/lib/utils";
+import { ImageUploadButton } from "@/components/ui/ImageUploadButton";
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -160,14 +161,15 @@ export default function EditProfilePage() {
 
           <div className="space-y-1">
             <Input
-              label="Avatar URL"
+              label="Avatar"
               type="url"
               value={form.avatar_url}
               onChange={set("avatar_url")}
               placeholder="https://..."
               icon={<Image size={16} />}
             />
-            <p className="text-[10px] text-text-muted">Paste a direct image URL. Upload support coming soon.</p>
+            <ImageUploadButton label="Upload a photo"
+              onUploaded={(url) => setForm((f) => ({ ...f, avatar_url: url }))} />
           </div>
 
           <div className="border-2 border-border rounded-xl p-4 space-y-3">

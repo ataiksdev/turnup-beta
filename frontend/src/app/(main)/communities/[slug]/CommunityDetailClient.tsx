@@ -62,15 +62,18 @@ type Tab = "events" | "members" | "about";
 
 export function CommunityDetailClient() {
   const slug = useRouteParam("slug");
-  const { token, user } = useAuthStore();
+  const { token, user, hasHydrated } = useAuthStore();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("events");
   const [copied, setCopied] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const { data: community, isLoading } = useQuery({
-    queryKey: ["community", slug],
+  const { data: community, isPending: isLoading } = useQuery({
+    // Keyed on the session too: the saved session loads just after first render, and the
+    // anonymous response (no membership/role) must not stick around afterwards.
+    queryKey: ["community", slug, !!token],
     queryFn: () => communitiesApi.get(slug, token ?? undefined),
+    enabled: hasHydrated && !!slug,
   });
 
   const eventsQuery = useQuery({

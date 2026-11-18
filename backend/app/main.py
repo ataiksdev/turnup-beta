@@ -15,6 +15,7 @@ from app.routers import organizer
 from app.routers import series
 from app.routers import admin
 from app.routers import communities
+from app.routers import uploads
 
 os.makedirs("data", exist_ok=True)
 logger = logging.getLogger("turnup")
@@ -69,6 +70,7 @@ app.include_router(organizer.router)
 app.include_router(series.router)
 app.include_router(admin.router)
 app.include_router(communities.router)
+app.include_router(uploads.router)
 
 
 @app.get("/api/health")

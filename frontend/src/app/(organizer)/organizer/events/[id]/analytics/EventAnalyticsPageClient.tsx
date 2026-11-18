@@ -8,6 +8,7 @@ import { BarChart2, Eye, Heart, Bookmark, Ticket, TrendingUp, Users, Clock, Scan
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
+import { WaitlistPanel } from "@/components/organizer/WaitlistPanel";
 
 function StatCard({ icon, label, value, sub }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string;
@@ -172,6 +173,8 @@ export default function EventAnalyticsPage() {
             </div>
           </div>
         )}
+
+        <WaitlistPanel eventId={id} />
 
         {/* Engagement summary */}
         <div className="bg-bg-card border-2 border-border rounded p-4 shadow-brutal-sm space-y-3">

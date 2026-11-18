@@ -12,6 +12,7 @@ import { AI_DRAFT_SESSION_KEY } from "@/lib/aiDraft";
 import {
   AlignLeft, MapPin, Calendar, DollarSign, Tag, Users, Monitor, Video, Blend,
 } from "lucide-react";
+import { ImageUploadButton } from "@/components/ui/ImageUploadButton";
 
 function Label({ children }: { children: React.ReactNode }) {
   return <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5">{children}</p>;
@@ -300,8 +301,9 @@ export default function AdminCreateEventPage() {
         </FieldWrap>
 
         <FieldWrap>
-          <Label>Cover Image URL</Label>
-          <Input value={form.cover_image} onChange={(e) => set("cover_image")(e.target.value)} placeholder="https://..." />
+          <Label>Cover Image</Label>
+          <Input value={form.cover_image} onChange={(e) => set("cover_image")(e.target.value)} placeholder="Paste an image link, or upload one" />
+          <div className="mt-2"><ImageUploadButton onUploaded={(url) => set("cover_image")(url)} /></div>
         </FieldWrap>
 
         {error && <p className="text-red-500 text-sm">{error}</p>}

@@ -1002,13 +1002,19 @@ async def get_analytics(
 # ── Ticket tiers ──────────────────────────────────────────────────────────────────
 
 @router.get("/{event_id}/tickets", response_model=list[TicketTierOut])
-async def list_ticket_tiers(event_id: str, db: AsyncSession = Depends(get_db)):
-    now = datetime.now(timezone.utc)
-    result = await db.execute(
-        select(TicketTier)
-        .where(TicketTier.event_id == event_id, TicketTier.is_active == True)
-        .order_by(TicketTier.price.asc())
-    )
+async def list_ticket_tiers(
+    event_id: str,
+    include_inactive: bool = False,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    """Buyers see tiers on sale. Hosts/co-hosts can ask for paused ones too (to manage them)."""
+    stmt = select(TicketTier).where(TicketTier.event_id == event_id)
+    if include_inactive and user:
+        await _require_event_access(event_id, user, db)
+    else:
+        stmt = stmt.where(TicketTier.is_active == True)
+    result = await db.execute(stmt.order_by(TicketTier.price.asc()))
     tiers = result.scalars().all()
     return [_tier_out(t) for t in tiers]
 

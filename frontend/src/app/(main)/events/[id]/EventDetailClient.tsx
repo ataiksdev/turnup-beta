@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
+import { EventMap } from "@/components/events/EventMap";
 
 function SeriesSection({ seriesId, currentEventId }: { seriesId: string; currentEventId: string }) {
   const { data: series } = useQuery({
@@ -64,12 +65,15 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export function EventDetailClient() {
   // Path segment on the web build, ?id= in the Capacitor build (see lib/routes.ts).
   const id = useRouteParam("id");
-  const { token, user } = useAuthStore();
+  const { token, user, hasHydrated } = useAuthStore();
   const qc = useQueryClient();
 
-  const { data: event, isLoading } = useQuery({
-    queryKey: ["event", id],
+  const { data: event, isPending: isLoading } = useQuery({
+    // Keyed on the session too, so the anonymous response (no saved/going state) is replaced
+    // once the saved session has loaded.
+    queryKey: ["event", id, !!token],
     queryFn: () => eventsApi.get(id, token ?? undefined),
+    enabled: hasHydrated && !!id,
   });
 
   // Count a view once the event has loaded (the API de-duplicates repeat views).
@@ -120,6 +124,14 @@ export function EventDetailClient() {
   // Waitlist state
   const [waitlisted, setWaitlisted] = useState(event?.is_waitlisted ?? false);
   const [waitlistPos, setWaitlistPos] = useState<number | null>(null);
+  // Returning visitors: look up their place in line (it's only in the join response otherwise).
+  const { data: waitlistInfo } = useQuery({
+    queryKey: ["waitlist-status", eid],
+    queryFn: () => eventsApi.waitlistStatus(token!, eid),
+    enabled: !!token && !!eid && waitlisted,
+    retry: false,
+  });
+  const shownWaitlistPos = waitlistPos ?? (waitlistInfo ? waitlistInfo.total_ahead + 1 : null);
 
   // Review state
   const [reviewRating, setReviewRating] = useState(myReview?.rating ?? 0);
@@ -565,16 +577,10 @@ export function EventDetailClient() {
           </section>
         )}
 
-        {/* Map placeholder */}
-        {event.latitude && event.longitude && (
-          <div className="rounded border-2 border-border overflow-hidden h-40 bg-bg-card flex items-center justify-center"
-            role="img" aria-label={`Map showing ${event.venue_name}, ${event.city}`}>
-            <div className="text-center space-y-1">
-              <MapPin size={24} className="text-primary mx-auto" aria-hidden />
-              <p className="text-xs text-text-muted">{event.venue_name}</p>
-              <p className="text-xs text-text-muted">{event.city}</p>
-            </div>
-          </div>
+        {/* Venue map + directions (physical and hybrid events) */}
+        {event.event_type !== "virtual" && (
+          <EventMap venue={event.venue_name} address={event.address} city={event.city}
+            latitude={event.latitude} longitude={event.longitude} />
         )}
 
         {/* Ticket tiers */}
@@ -700,7 +706,7 @@ export function EventDetailClient() {
             {waitlisted ? (
               <>
                 <p className="text-sm text-text-secondary">
-                  You're on the waitlist{waitlistPos ? ` at position #${waitlistPos}` : ""}. We'll notify you if a spot opens up.
+                  You're on the waitlist{shownWaitlistPos ? ` at position #${shownWaitlistPos}` : ""}. We'll notify you if a spot opens up.
                 </p>
                 <Button
                   variant="secondary"

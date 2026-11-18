@@ -1,0 +1,103 @@
+"""Image uploads (event covers, avatars).
+
+Every upload is decoded and re-encoded by Pillow before it's stored. That (1) proves the file
+really is an image of an allowed type, whatever its extension or Content-Type claim,
+(2) removes metadata such as EXIF GPS coordinates that phone photos carry, and (3) drops any
+non-image payload hidden in the file (polyglots, SVG scripts: SVG isn't accepted at all).
+
+Files are stored on local disk (UPLOAD_DIR) with random names and served from
+/api/uploads/<name>. On a multi-server deployment, point UPLOAD_DIR at shared storage or
+swap _store() for an object store (S3, Cloudinary...).
+"""
+import io
+import re
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
+from PIL import Image, ImageOps, UnidentifiedImageError
+
+from app.config import settings
+from app.middleware.auth import get_current_user
+from app.middleware.rate_limit import limiter
+from app.models.user import User
+
+router = APIRouter(prefix="/api/uploads", tags=["uploads"])
+
+MAX_BYTES = 8 * 1024 * 1024        # what we'll read from the client
+MAX_PIXELS = 40_000_000            # refuse decompression bombs before decoding them fully
+MAX_SIDE = 2000                    # stored images are scaled down to fit this box
+ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF"}
+_NAME = re.compile(r"^[0-9a-f]{32}\.(webp|jpg)$")
+
+
+def _upload_dir() -> Path:
+    path = Path(settings.upload_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _public_url(name: str) -> str:
+    # Absolute, so the URL also works inside the Android app (whose own origin is
+    # http://localhost) and in emails/link previews.
+    base = (settings.public_base_url or settings.frontend_url).rstrip("/")
+    return f"{base}/api/uploads/{name}"
+
+
+def _reencode(raw: bytes) -> tuple[bytes, str]:
+    try:
+        with Image.open(io.BytesIO(raw)) as probe:
+            fmt = probe.format
+            if fmt not in ALLOWED_FORMATS:
+                raise HTTPException(415, "Upload a JPEG, PNG, WebP or GIF image.")
+            if probe.width * probe.height > MAX_PIXELS:
+                raise HTTPException(413, "That image's dimensions are too large.")
+        with Image.open(io.BytesIO(raw)) as img:
+            img.load()
+            img = ImageOps.exif_transpose(img)  # keep phone photos upright once EXIF is gone
+            img.thumbnail((MAX_SIDE, MAX_SIDE))
+            has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
+            img = img.convert("RGBA" if has_alpha else "RGB")
+            out = io.BytesIO()
+            img.save(out, format="WEBP", quality=82, method=4)  # no exif/metadata is written
+            return out.getvalue(), "webp"
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        raise HTTPException(415, "That file isn't a readable image.")
+
+
+@router.post("", status_code=201)
+@limiter.limit(settings.rate_limit_upload)
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+):
+    raw = await file.read(MAX_BYTES + 1)  # bounded read: never buffer more than the limit
+    if len(raw) > MAX_BYTES:
+        raise HTTPException(413, f"Images can be up to {MAX_BYTES // (1024 * 1024)} MB.")
+    if not raw:
+        raise HTTPException(400, "The file is empty.")
+    data, ext = _reencode(raw)
+    name = f"{uuid.uuid4().hex}.{ext}"
+    (_upload_dir() / name).write_bytes(data)
+    return {"url": _public_url(name)}
+
+
+@router.get("/{name}")
+async def get_upload(name: str):
+    if not _NAME.match(name):  # random names only: no paths, no traversal
+        raise HTTPException(404, "Not found")
+    path = _upload_dir() / name
+    if not path.is_file():
+        raise HTTPException(404, "Not found")
+    return FileResponse(
+        path, media_type="image/webp" if name.endswith(".webp") else "image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",  # names never change
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
+    )

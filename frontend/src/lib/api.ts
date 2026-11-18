@@ -33,6 +33,11 @@ export interface CheckoutInit {
   is_free: boolean;
 }
 
+export interface WaitlistEntry {
+  id: string; user_id: string; username: string; full_name: string; avatar_url: string | null;
+  position: number; status: string; created_at: string; notified_at: string | null;
+}
+
 export interface DailyView { date: string; views: number; }
 export interface EventAnalytics {
   event_id: string; total_views: number; unique_views: number;
@@ -110,6 +115,24 @@ async function request<T>(
 
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+// ── Uploads ────────────────────────────────────────────────────────────────────
+
+/** Upload an image (cover, avatar). Returns its public URL. Not via request(): multipart
+ *  bodies must let the browser set Content-Type (with the boundary) itself. */
+export async function uploadImage(token: string, file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${BASE}/api/uploads`, {
+    method: "POST", body, headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, typeof err.detail === "string" ? err.detail
+      : res.status === 413 ? "That image is too large." : "Upload failed. Please try again.");
+  }
+  return (await res.json()).url as string;
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
@@ -294,6 +317,20 @@ export const eventsApi = {
   tiers: (eventId: string) =>
     request<TicketTierDetail[]>(`/events/${eventId}/tickets`),
 
+  /** Host view: includes paused tiers. */
+  manageTiers: (token: string, eventId: string) =>
+    request<TicketTierDetail[]>(`/events/${eventId}/tickets?include_inactive=true`, {}, token),
+
+  updateTier: (token: string, eventId: string, tierId: string, data: {
+    name?: string; price?: number; quantity?: number | null; is_active?: boolean; max_per_order?: number;
+  }) =>
+    request<TicketTierDetail>(`/events/${eventId}/tickets/${tierId}`, {
+      method: "PATCH", body: JSON.stringify(data),
+    }, token),
+
+  deleteTier: (token: string, eventId: string, tierId: string) =>
+    request<void>(`/events/${eventId}/tickets/${tierId}`, { method: "DELETE" }, token),
+
   createTier: (token: string, eventId: string, data: {
     name: string; description?: string; price: number; currency?: string;
     quantity?: number | null; max_per_order?: number; is_active?: boolean;
@@ -349,6 +386,20 @@ export const eventsApi = {
   waitlistJoin: (token: string, eventId: string) =>
     request<{ status: string; position: number; waitlist_count: number }>(
       `/events/${eventId}/waitlist`, { method: "POST" }, token),
+
+  waitlistStatus: (token: string, eventId: string) =>
+    request<{ position: number; status: string; total_ahead: number }>(
+      `/events/${eventId}/waitlist/status`, {}, token),
+
+  /** Host view of the waitlist. status: "waiting" | "notified" | undefined (all). */
+  waitlist: (token: string, eventId: string, status?: string) =>
+    request<WaitlistEntry[]>(
+      `/events/${eventId}/waitlist${status === undefined ? "?status=" : `?status=${status}`}`, {}, token),
+
+  notifyWaitlist: (token: string, eventId: string, count: number) =>
+    request<{ notified: string[]; count: number }>(`/events/${eventId}/waitlist/notify`, {
+      method: "POST", body: JSON.stringify({ count }),
+    }, token),
 
   waitlistLeave: (token: string, eventId: string) =>
     request<void>(`/events/${eventId}/waitlist`, { method: "DELETE" }, token),
@@ -432,6 +483,9 @@ export interface CoHost {
 }
 
 export const organizerApi = {
+  updateProfile: (token: string, data: { organization_name?: string; organizer_bio?: string; website?: string }) =>
+    request<OrganizerProfile>("/organizer/profile", { method: "PATCH", body: JSON.stringify(data) }, token),
+
   become: (token: string, data: { organization_name?: string; organizer_bio?: string; website?: string }) =>
     request<User>("/organizer/become", { method: "POST", body: JSON.stringify(data) }, token),
 
@@ -874,11 +928,19 @@ export const communitiesApi = {
   leave: (token: string, slug: string) =>
     request<void>(`/communities/${slug}/leave`, { method: "DELETE" }, token),
 
-  members: (slug: string, page?: number) => {
+  members: (slug: string, page?: number, token?: string) => {
     const qs = new URLSearchParams();
     if (page) qs.set("page", String(page));
-    return request<CommunityMember[]>(`/communities/${slug}/members?${qs}`);
+    // token: private communities only show their member list to members
+    return request<CommunityMember[]>(`/communities/${slug}/members?${qs}`, {}, token);
   },
+
+  setMemberRole: (token: string, slug: string, userId: string, role: "member" | "moderator" | "admin") =>
+    request<{ ok: boolean; role: string }>(
+      `/communities/${slug}/members/${userId}?role=${role}`, { method: "PATCH" }, token),
+
+  removeMember: (token: string, slug: string, userId: string) =>
+    request<void>(`/communities/${slug}/members/${userId}`, { method: "DELETE" }, token),
 
   events: (slug: string, page?: number) => {
     const qs = new URLSearchParams();

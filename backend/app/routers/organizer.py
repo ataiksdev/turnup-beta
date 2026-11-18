@@ -76,12 +76,17 @@ async def update_organizer_profile(
     user: User = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ):
-    if not user.organizer_profile:
-        raise HTTPException(404, "Organizer profile not found")
+    profile = user.organizer_profile
+    if not profile:
+        # Organizers made by an admin role change (or seed data) never went through
+        # /organizer/become, so they have no profile row yet: create it on first edit.
+        profile = OrganizerProfile(user_id=user.id)
+        db.add(profile)
     for field, val in payload.model_dump(exclude_none=True).items():
-        setattr(user.organizer_profile, field, val)
+        setattr(profile, field, val)
     await db.flush()
-    return user.organizer_profile
+    await db.refresh(profile)
+    return profile
 
 
 # ── Verification (self-serve application → admin review queue) ───────────────

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { organizerApi, authApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
+import { OrganizerProfileForm } from "@/components/organizer/OrganizerProfileForm";
 import { Button } from "@/components/ui/Button";
 import { BadgeCheck, Clock, XCircle, ShieldQuestion } from "lucide-react";
 
@@ -36,6 +37,7 @@ export default function OrganizerVerificationPage() {
       <TopBar title="Verification" back />
 
       <div className="px-4 py-4 space-y-4">
+        <OrganizerProfileForm />
         <p className="text-xs text-text-muted">
           A verified badge is a visual trust signal on your profile, events, and communities —
           it doesn't change what you can do. Your events still go through the normal review queue
