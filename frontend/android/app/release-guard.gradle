@@ -1,0 +1,44 @@
+// Refuses to build a RELEASE (APK or app bundle) that would not work on users' phones.
+//
+// `npx cap sync android` writes the active Capacitor config and the web app into
+// src/main/assets/. If CAPACITOR_DEV_SERVER_URL was set during that sync, the config holds a
+// server.url and the app becomes a live-reload shell that loads that address instead of its
+// bundled screens: on anyone else's phone it just shows "Web page not available". A release
+// with no bundled web app would open blank. Debug builds are never blocked.
+//
+// Kept in its own file so the check can be exercised with plain Gradle (no Android SDK).
+
+def assetsDir = file('src/main/assets')
+
+tasks.register('checkReleaseWebAssets') {
+    group = 'verification'
+    description = 'Fails if the bundled Capacitor app is missing or points at a dev server.'
+    inputs.files(fileTree(assetsDir) { include 'capacitor.config.json', 'public/index.html' })
+    doLast {
+        def configFile = new File(assetsDir, 'capacitor.config.json')
+        def indexFile = new File(assetsDir, 'public/index.html')
+        def fix = 'In frontend/: unset CAPACITOR_DEV_SERVER_URL (shell, .env.local, .env), then run\n' +
+                  '  npm run build:capacitor && npx cap sync android\n' +
+                  'and build the release again.'
+
+        if (!configFile.exists() || !indexFile.exists()) {
+            throw new GradleException(
+                "Release build stopped: the web app hasn't been copied into the Android project " +
+                "(missing ${configFile.exists() ? indexFile : configFile}).\n" + fix)
+        }
+        def config = new groovy.json.JsonSlurper().parse(configFile)
+        def devUrl = config instanceof Map ? config.server?.url : null
+        if (devUrl) {
+            throw new GradleException(
+                "Release build stopped: this build is a live-reload shell for ${devUrl}, not the " +
+                "bundled app, so it would show \"Web page not available\" on users' phones.\n" + fix)
+        }
+    }
+}
+
+// Android names these preReleaseBuild, prePlayReleaseBuild, ... (one per release variant).
+tasks.configureEach { task ->
+    if (task.name ==~ /pre\w*ReleaseBuild/) {
+        task.dependsOn('checkReleaseWebAssets')
+    }
+}

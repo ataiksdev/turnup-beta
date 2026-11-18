@@ -43,6 +43,7 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+apply from: 'release-guard.gradle'  // blocks releases that are live-reload shells or lack the web app
 
 try {
     def servicesJSON = file('google-services.json')
