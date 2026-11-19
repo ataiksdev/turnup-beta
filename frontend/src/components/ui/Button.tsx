@@ -1,6 +1,7 @@
+"use client";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
-import { ButtonHTMLAttributes, forwardRef } from "react";
+import { ButtonHTMLAttributes, forwardRef, useEffect, useState } from "react";
 
 type Variant = "primary" | "secondary" | "ghost" | "outline" | "danger";
 type Size = "xs" | "sm" | "md" | "lg";
@@ -41,10 +42,17 @@ const sizes: Record<Size, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "primary", size = "md", loading, fullWidth, className, children, disabled, ...props }, ref) => (
+  ({ variant = "primary", size = "md", loading, fullWidth, className, children, disabled, ...props }, ref) => {
+    // A submit button clicked before the app's JavaScript has started would make the browser
+    // do a plain GET form submit: nothing reaches the API, and fields with a name would land
+    // in the URL. Keep submit buttons disabled until the component has mounted.
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+    const notReady = props.type === "submit" && !mounted;
+    return (
     <button
       ref={ref}
-      disabled={disabled || loading}
+      disabled={disabled || loading || notReady}
       className={cn(
         "btn inline-flex items-center justify-center transition-all duration-100 select-none",
         "disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-x-0 disabled:translate-y-0",
@@ -58,7 +66,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       {loading && <Loader2 className="animate-spin" size={14} />}
       {children}
     </button>
-  ),
+    );
+  },
 );
 
 Button.displayName = "Button";
