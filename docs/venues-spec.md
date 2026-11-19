@@ -70,7 +70,8 @@ not floats like the older ticket tables.
 ### Venues
 
 - **venues**: id, slug, name, type (`hall | lounge | hotel_studio | outdoor`), description,
-  state, city, address, latitude, longitude, cover_image, gallery (JSON), amenities (JSON list),
+  state, area_id (FK `areas`), address, latitude, longitude, cover_image,
+  amenities (JSON list),
   rules, `price_display` (`from | range | on_request`), `refund_preset`
   (`flexible | moderate | strict`), `deposit_type` (`percent | fixed`), `deposit_value`,
   `status` (`draft | in_review | live | suspended | closed`), `verification_status`
@@ -80,7 +81,7 @@ not floats like the older ticket tables.
   pro_until, followers_count, rating_organizers, rating_guests, review counts, strike_count
   (rolling 12 months, derived), created_at, closed_at.
 - **venue_spaces**: one venue can have several spaces (main hall, rooftop, VIP lounge). id,
-  venue_id, name, description, capacity_seated, capacity_standing, indoor/outdoor, images,
+  venue_id, name, description, capacity_seated, capacity_standing, indoor/outdoor,
   price_from, price_to (kobo, nullable), price_unit (`per_day | per_hour | per_event`),
   min_hours, is_active.
 - **venue_members**: venue_id, user_id, role, invited_by, created_at. Unique (venue_id, user_id).
@@ -88,6 +89,12 @@ not floats like the older ticket tables.
   invite-token pattern).
 - **venue_blocks**: manual calendar blocks. venue_id, space_id (nullable = whole venue),
   starts_at, ends_at, note.
+
+- **areas**: id, state, name, slug, kind (`city | district`), latitude, longitude, is_active,
+  sort_order. An admin-editable list of places within each state, seeded for launch
+  (see 4.11). Unique (state, slug).
+- **venue_media**: id, venue_id, space_id (nullable), kind (`photo | video`), storage_key,
+  poster_key (video), duration_s, sort_order, is_hidden (over the plan's limit).
 
 ### Verification
 
@@ -163,11 +170,11 @@ not floats like the older ticket tables.
 - **subscriptions**: id, plan_code, user_id (Turnup+) or venue_id (Venue Pro), status
   (`active | non_renewing | past_due | cancelled`), paystack_subscription_code,
   paystack_customer_code, current_period_end, cancelled_at.
-- **featured_slots**: id, venue_id, state, city (nullable = whole state), starts_at, ends_at,
+- **featured_slots**: id, venue_id, state, week_start (Monday), starts_at, ends_at,
   amount_kobo, paystack_reference, status (`pending | active | ended | refunded`).
-- **platform_settings** (existing): add venue_commission_percent, featured_week_price_kobo,
-  featured_max_per_city, turnup_plus_early_alert_hours, venue_debt_pause_days (30),
-  strike_suspend_count (3), dispute_window_hours (48), max_recovery_percent (see 5.4).
+- **platform_settings** (existing): add venue_commission_percent, featured_week_price_kobo
+  (₦30,000), featured_max_per_state (5), free/pro photo and video limits, turnup_plus_early_alert_hours, venue_debt_pause_days (30),
+  strike_suspend_count (3), dispute_window_hours (48), max_recovery_percent (see 4.5).
 - **notifications** (existing): new kinds for enquiries, quotes, bookings, disputes, strikes,
   follows, venue events, verification steps, subscription renewals.
 
@@ -408,21 +415,59 @@ cancel-for-credit, group hold.
 - Monthly plan billed to the venue (Owner's card). Includes:
   - **analytics**: profile views, enquiry → booking conversion, follower growth, top
     referring searches
-  - **more photos** (40 vs 12) and **video**
+  - **more media**: up to **12 photos and 5 videos** (free venues: 6 photos and 2 videos).
+    Limits count across the venue and all its spaces. Videos: up to 60 seconds and 100 MB
+    each, converted to MP4 on the server with a poster image. Limits are admin settings.
   - **priority in search** (a ranking boost within the same filters, below featured)
   - **more team seats** (10 vs 3)
   - **quote templates** and **saved replies**
   - **Pro badge**
-- Lapsing to free keeps the data and hides the extra photos past the limit.
+- If Pro lapses, nothing is deleted. The venue's first 6 photos and 2 videos (in the order
+  it chose) stay visible and the rest are hidden until it renews or reorders.
 
 ### 4.10 Featured placement
 
-- A venue buys a week in a state (or a city within it). It appears in the "Featured venues"
-  strip and at the top of search results for that place, labelled **Featured**.
-- At most `featured_max_per_city` (suggested 3) at a time per place, so it keeps its value. The
-  checkout shows the available weeks.
+- A venue buys a week (Monday to Sunday) in **its own state** for **₦30,000**. There is no
+  city-level option.
+- At most `featured_max_per_state` (suggested 5) featured venues per state per week, so it
+  keeps its value. The checkout shows which weeks have space; venues can buy several weeks
+  ahead.
+- Where it shows:
+  - the **"Featured venues" strip** at the top of the Venues tab for that state, whatever
+    area or other filters are chosen;
+  - **pinned to the top of search results** for that state, labelled **Featured**, but only
+    when the venue matches the search's filters (area, type, capacity, date, price). A
+    100-guest lounge in Wuse isn't pinned above results for a 500-guest hall in Gwarinpa;
+  - a "Featured" badge on the venue page that week.
 - Paid by one-off Paystack payment to Turnup's main account. Only `live`, non-paused venues
-  can buy one.
+  can buy one. Refunded only if Turnup suspends the listing during that week for reasons
+  that aren't the venue's fault.
+
+### 4.11 Places: states and areas
+
+Nigerian addresses don't fit a simple "city" field. Abuja is the FCT, which isn't a state;
+"Abuja" usually means the city centre districts, while Kubwa, Lugbe and Gwagwalada are
+separate towns in the same territory. Lagos is one state, but people search by Lekki,
+Ikeja or VI, not "Lagos". So venues get a **state** (36 states + FCT, fixed list) and an
+**area** from an admin-managed list:
+
+- **FCT example:** Maitama, Asokoro, Wuse, Wuse 2, Garki, Central Business District, Jabi,
+  Utako, Gudu, Apo, Life Camp, Gwarinpa, Katampe, Kubwa, Lugbe, Karu, Lokogoma, Gwagwalada.
+- **Lagos example:** Victoria Island, Ikoyi, Lekki, Ajah, Ikeja, GRA Ikeja, Surulere, Yaba,
+  Maryland, Gbagada, Festac, Ikorodu, Epe, Badagry.
+- Other states start with their main cities (e.g. Port Harcourt, Ibadan, Enugu, Benin City,
+  Kano, Uyo, Calabar, Abeokuta) and grow as venues sign up.
+
+How it works:
+- In the venue portal the venue picks its state, then an area from the list. If its area
+  isn't listed it picks "Other" and types the name. An admin either adds it as a new area or
+  maps it to an existing one during verification.
+- The venue's map pin is required, so searches can also use distance.
+- **Search:** state first (defaulting to the user's state), then optionally one or more areas
+  (e.g. "Wuse, Wuse 2, Maitama"), or **"Near me"** within a chosen radius (5 / 10 / 25 km)
+  using the pin. The map view shows the results.
+- Events keep their free-text city for now; events linked to a venue show the venue's area.
+  Moving events to the same place list can come later.
 
 ---
 
@@ -430,7 +475,7 @@ cancel-for-credit, group hold.
 
 ### App and website (organizers and attendees)
 
-- **Explore → Venues tab**: search with filters (state/city, type, capacity, date available,
+- **Explore → Venues tab**: search with filters (state, area(s) or near me, type, capacity, date available,
   price band, amenities, verified only), map view, Featured strip.
 - **Venue page**: gallery, spaces, capacity, amenities, rules, price display, refund preset
   explained, calendar availability (busy/free, no booking details), both ratings, reviews,
@@ -475,7 +520,8 @@ cancel-for-credit, group hold.
 - Venue verification queue (documents, bank name match), agent management (create, states,
   deactivate), assignment, visit reports, disputes queue, venue ledgers and manual
   adjustments, suspensions and strikes, featured slots, subscription plans and prices, the
-  KYC access log, and review moderation.
+  KYC access log, review moderation, and the areas list (add, rename, merge, map "Other"
+  entries).
 
 ---
 
@@ -484,7 +530,8 @@ cancel-for-credit, group hold.
 All under `/api`. Grouped by router (new files `venues.py`, `venue_portal.py`, `agents.py`,
 `billing.py`; additions to `admin.py`, `events.py`).
 
-- **Public:** `GET /venues` (search), `GET /venues/featured`, `GET /venues/{slug}`,
+- **Public:** `GET /places/states`, `GET /places/areas?state=`, `GET /venues` (search: state,
+  area ids, or lat/lng + radius_km, plus filters), `GET /venues/featured`, `GET /venues/{slug}`,
   `GET /venues/{id}/availability?from&to`, `GET /venues/{id}/reviews`,
   `GET /venues/{id}/events`, `POST/DELETE /venues/{id}/follow`.
 - **Organizer:** `POST /venues/{id}/enquiries`, `GET /me/enquiries`,
@@ -530,7 +577,8 @@ presales, Thursday weekend picks, yearly Wrapped generation.
 | Refund funding deadline | 72 hours |
 | Balance due (venue's default) | 7 days before the booking |
 | Debt recovery cap per payment | 50% of the venue's share |
-| Featured placement | **₦10,000 / week / city**, ₦25,000 / week / whole state, max 3 per place |
+| Featured placement | **₦30,000 / week / state** (decided), max 5 venues per state per week |
+| Media limits | Free: 6 photos, 2 videos. Pro: 12 photos, 5 videos (decided) |
 | Venue Pro | **₦15,000 / month** (₦150,000 / year) |
 | Turnup+ | **₦1,500 / month** (₦15,000 / year) |
 | Early alert head start | 24 hours |
