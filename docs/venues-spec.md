@@ -134,12 +134,18 @@ not floats like the older ticket tables.
 - **refund_requests**: id, booking_id, dispute_id (nullable), reason
   (`organizer_cancelled | venue_cancelled | dispute | unpaid_balance`), amount_kobo,
   funded_kobo, refunded_kobo, due_at, status (`awaiting_venue | funded | refunded | overdue |
-  advanced_by_turnup`), created_at.
+  suspended | referred | settled_directly`), paused_at, suspended_at, referred_at,
+  claim_pack_key, settled_confirmed_by (both sides), created_at.
+- **blocked_identities**: kind (`cac | owner_id | bank_account | user`), value hash,
+  refund_request_id, reason, created_at, lifted_at. Checked when anyone lists a venue or adds
+  bank details.
+- **chargebacks**: id, payment_id, paystack_dispute_id, amount_kobo, status
+  (`open | won | lost`), evidence_submitted_at, ledger_entry_id.
 - **off_platform_reports**: id, enquiry_id, reporter_id, message_id, status, decided_by.
 - **venue_strikes**: id, venue_id, booking_id, reason, created_at (count those in the last
   12 months).
 - **venue_ledger** (the venue balance): id, venue_id, kind (`commission_owed | refund_owed |
-  recovered | paid_directly | advanced_by_turnup | adjustment`), amount_kobo (positive = venue owes Turnup),
+  recovered | paid_directly | chargeback | adjustment`), amount_kobo (positive = venue owes Turnup),
   booking_id, dispute_id, note, created_by, created_at. Balance = sum. `oldest_unpaid_at` drives
   the 30-day pause.
 - **venue_disputes**: id, booking_id, opened_by, side, reason (`not_as_listed | venue_no_show |
@@ -237,9 +243,10 @@ not floats like the older ticket tables.
 
 **Why organizers should pay the balance through Turnup** (shown on the quote, the booking and
 the venue page):
-- **Turnup Booking Protection** covers only money paid through Turnup. That means refunds
-  when the venue cancels, dispute decisions, and the 100% refund guarantee. Money paid
-  directly to a venue is not covered.
+- **Turnup-enforced booking terms** apply only to money paid through Turnup: the refund
+  preset, the venue's duty to refund, dispute decisions, strikes and recovery from the venue's
+  future payouts (4.12). Money paid directly to a venue is outside all of this. The wording
+  never promises a guarantee or that Turnup will pay (see 4.12).
 - **Pay in parts** before the due date, with automatic receipts and invoices (useful for
   companies that need paperwork).
 - **Track record.** Only bookings paid fully through Turnup count towards an organizer's
@@ -272,16 +279,8 @@ every refund works like this:
 2. The venue pays the amount to Turnup from the portal (Paystack checkout) within
    `refund_funding_hours`, suggested 72h.
 3. Turnup then refunds the organizer through Paystack, against the original payment(s).
-4. **If the venue doesn't pay in time:**
-   - the listing is paused,
-   - the amount goes on the venue's ledger as `refund_owed`,
-   - the recovery cap is lifted: 100% of the venue's share of its next bookings goes to the
-     debt until it's paid,
-   - each recovered amount is passed straight to the organizer as a refund, and
-   - the organizer can see the progress.
-
-   Turnup does not advance its own money. An admin can still choose to, case by case (for
-   example a large or reputational case), recorded on the ledger.
+4. **If the venue doesn't pay in time**, the unpaid-refund process in 4.12 starts. Turnup
+   **never advances its own money**.
 
 Who pays what:
 
@@ -487,6 +486,71 @@ How it works:
 - Events keep their free-text city for now; events linked to a venue show the venue's area.
   Moving events to the same place list can come later.
 
+### 4.12 Unpaid refunds: what Turnup does, and where its role ends
+
+**Principle.** The booking contract is between the venue and the organizer. Turnup is the
+platform and the venue's **limited payment collection agent**. Paying through Turnup counts
+as paying the venue: the venue's share goes straight to the venue's own Paystack subaccount
+(split), and Turnup never holds it. So a refund is a debt **the venue owes the organizer**.
+Turnup's only role is to **enforce penalties on the venue** that its terms allow, using what
+it controls. Turnup never pays the refund itself. The penalties:
+- **Pause** (hidden from search, no new enquiries or events).
+- **Recovery**: 100% of the venue's share of any further payments through Turnup goes to
+  the organizer.
+- **Strike**.
+- **Suspension**.
+- **Block**: the owner, CAC number, ID and bank account can't list a venue again.
+- **Disclosure**: the venue's verified legal identity is shared with the organizer in the
+  claim pack. Both sides accept this, with a checkbox
+and a link to the policy, when the quote is accepted (organizer) and at sign-up (venue).
+
+**Timeline** (each period is an admin setting):
+
+| When | What happens |
+|---|---|
+| Day 0 | Refund request created. The venue has 72h to fund it. Both sides see the amount and deadline |
+| Day 3 (overdue) | The listing is **paused**: hidden from search, no new enquiries, can't publish events. The amount goes on the venue ledger. The recovery cap is lifted: **100%** of the venue's share of any payment that still reaches it (remaining bookings' balances, ticket sales for its events) goes to the organizer until the refund is covered. Owner and Managers get daily reminders. The organizer sees a progress tracker |
+| Day 30 | The listing is **suspended**. The profile shows "Not currently accepting bookings". Turnup makes no public accusation. Organizers with upcoming bookings at that venue are told the venue is suspended and can talk to it in the thread or cancel under the normal rules. An admin reviews the case and can file a strike |
+| Day 60 | **Turnup's enforcement period ends.** The case is marked `referred`. The organizer receives a **claim pack** (below), and Turnup's active part ends. What's left is between the two parties |
+| After referral | The debt stays on the ledger. If any money for that venue ever passes through Turnup again, it still goes to the organizer first. The venue's owner, CAC number, ID and bank account are **blocked from listing any venue** until the organizer confirms it's settled or a court order resolves it. Either side can mark the case "settled directly" (the other side confirms), which closes it |
+
+**Claim pack** (a PDF the organizer can download, generated by the server):
+- Booking, quote and accepted policy, with timestamps.
+- Every payment with its Paystack reference, the cancellation or dispute decision, the refund
+  request, every reminder sent, and the ledger history.
+- The venue's **legal identity as verified**: registered business name, CAC number,
+  registered address, and the name of the owner who signed up. Disclosing this is covered
+  by the venue terms and the privacy policy (lawful basis: establishing a legal claim).
+- A plain note on the organizer's options: a demand letter, a small claims court (several
+  states, including Lagos and the FCT, have them for claims within their limit), and the
+  FCCPC for consumer bookings.
+
+Turnup answers court orders and lawful requests with its records. It does not take part in
+the claim.
+
+**Card chargebacks.** Turnup is the merchant on Paystack, so if an organizer asks their bank
+to reverse a payment, the chargeback lands on Turnup's account. To keep this between the
+parties:
+- The organizer terms say to use the refund process first.
+- Turnup answers chargebacks with the booking evidence.
+- A chargeback Turnup loses on a venue booking goes on the **venue's ledger**: the venue
+  terms make the venue indemnify Turnup for refunds and chargebacks on its bookings.
+- An organizer who files a chargeback while a refund is already being paid to them may have
+  booking access restricted.
+
+**What the wording must avoid:** the words "guarantee", "protected" or "we'll refund you" for
+venue bookings anywhere in the app, emails or marketing. That kind of promise could make
+Turnup liable whatever the terms say.
+
+**Limits of the approach.** Terms and disclaimers carry most of the risk, but not all of it:
+- Nigerian consumer law (the FCCPA) can override unfair exclusion clauses when the organizer
+  is an individual, e.g. someone booking a birthday party.
+- Turnup's real protection is **structural**: it never receives the venue's money, and it
+  never promises to pay. The terms then make the arrangement explicit.
+- Before launch, have a Nigerian lawyer review: the venue terms, the organizer booking
+  policy, the "limited payment collection agent" clause, the claim-pack disclosure, and the
+  chargeback indemnity.
+
 ---
 
 ## 5. Screens
@@ -636,10 +700,17 @@ gets a strike for each confirmed report (4.2).
   funds, within the funding deadline, including the commission share when the venue
   cancels), recovery from future payouts, no requests for off-platform payment, strikes,
   suspension, disputes, and Turnup's role as a marketplace (not the venue's agent).
-- Organizer booking policy (shown on every quote): Turnup Booking Protection covers only
-  money paid through Turnup; refunds are funded by the venue and passed on by Turnup; what
-  happens if the venue is late funding a refund; balance due date and what happens if it's
-  missed.
+- Organizer booking policy (shown on every quote, accepted with a checkbox): the contract
+  is with the venue; Turnup is the venue's limited payment collection agent; refunds are
+  owed and funded by the venue, and Turnup passes them on; Turnup enforces its policy
+  (4.12) but does not pay refunds itself; what happens when a venue is late (pause,
+  suspension, recovery, claim pack); use the refund process before a chargeback; balance due
+  date and what happens if it's missed.
+- Venue terms also cover: indemnity for refunds and chargebacks on its bookings; consent to
+  disclosing its verified legal identity to an organizer with an unpaid refund; being
+  blocked from re-listing while a referred refund is unpaid.
+- Privacy policy: the claim-pack disclosure and its lawful basis.
+- **Lawyer review before launch** (4.12, "Limits of the approach").
 - Agent contractor agreement with a confidentiality clause.
 - Turnup+ terms: auto-renewal, cancellation, and what each perk includes.
 
@@ -651,7 +722,9 @@ gets a strike for each confirmed report (4.2).
    balance. That is why the venue funds each refund first (4.3) before Turnup sends it.
    Still to confirm with Paystack: partial refunds across several payments, and any limits
    on refunding older transactions.
-2. **Agent pay** stays outside the app for now; it will be added to admin later.
+2. **Legal review** of the venue terms, the booking policy and the claim-pack disclosure
+   (4.12).
+3. **Agent pay** stays outside the app for now; it will be added to admin later.
 
 ---
 
