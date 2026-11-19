@@ -1,0 +1,3 @@
+# WEB_MODE=redirect: this server only hosts the API; the website lives elsewhere (e.g. Vercel).
+# Anyone opening the API's address in a browser is sent to the website instead.
+redir {$FRONTEND_URL}{uri} 302

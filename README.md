@@ -70,7 +70,12 @@ CI fails if models and migrations disagree (`tests/test_migrations.py`).
 
 Run **exactly one** process with the scheduler enabled; otherwise every job runs once per process.
 
-## Deploying with Docker
+## Deploying
+
+**Recommended (free): backend on an Oracle Cloud VM, website on Vercel, with automatic deploys
+from GitHub.** Step-by-step guide: [`deploy/oracle/README.md`](deploy/oracle/README.md).
+
+### Deploying with Docker (any server)
 
 ```bash
 cp .env.example .env          # set SECRET_KEY, POSTGRES_PASSWORD, SITE_ADDRESS, Paystack/SMTP keys
@@ -79,7 +84,9 @@ docker compose up -d --build
 
 This starts Postgres, a one-off `migrate` job, the API (2 workers, no jobs), a single
 `worker`, the Next.js frontend, and **Caddy** as the only public entry point (ports 80/443).
-Caddy sends `/api/*` to the backend and everything else to the frontend, passes the real
+Caddy sends `/api/*` to the backend and everything else to the frontend (or, with
+`COMPOSE_PROFILES=` and `WEB_MODE=redirect`, runs the API only and redirects browsers to an
+externally hosted website), passes the real
 client IP (the backend's rate limits depend on it), and serves HTTPS automatically once
 `SITE_ADDRESS` is your domain. The API and frontend aren't published directly.
 
