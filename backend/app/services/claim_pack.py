@@ -1,6 +1,6 @@
 """Claim pack (docs/venues-spec.md 4.12): the records an organizer needs to pursue an unpaid
 refund directly, once Turnup's enforcement period has ended. Built on demand, never stored."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fpdf import FPDF
 from sqlalchemy import select
@@ -84,7 +84,7 @@ async def build_claim_pack(db: AsyncSession, rr: RefundRequest) -> bytes:
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "Unpaid venue refund: claim pack", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
-    _p(pdf, f"Generated {_d(datetime.utcnow())} for {organizer.full_name or organizer.username}. "
+    _p(pdf, f"Generated {_d(datetime.now(timezone.utc))} for {organizer.full_name or organizer.username}. "
             "Turnup's enforcement period for this refund has ended. The refund is a debt the venue owes "
             "you under the booking terms you both accepted. This pack contains the records and the venue's "
             "verified legal details so you can pursue it directly.")

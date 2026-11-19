@@ -23,7 +23,7 @@ from app.models.venue import (
     VenueFollow, VenueInvite, VenueLedgerEntry, VenueMedia, VenueMember, VenueReview,
     VenueSpace,
 )
-from app.schemas.event import EventCreate
+from app.schemas.event import VenueEventCreate
 from app.schemas.venue import (
     BankIn, BlockIn, DealIn, FeaturedIn, InviteIn, MediaAdd, MediaOrder, MemberRoleIn,
     PayIn, RedeemIn, ReplyIn, SpaceIn, SubscribeIn, VenueCreate, VenueUpdate,
@@ -816,7 +816,7 @@ async def venue_hosted_events(venue_id: str, db: AsyncSession = Depends(get_db),
 
 
 @router.post("/venues/{venue_id}/events", status_code=201)
-async def create_venue_event(venue_id: str, payload: EventCreate, db: AsyncSession = Depends(get_db),
+async def create_venue_event(venue_id: str, payload: VenueEventCreate, db: AsyncSession = Depends(get_db),
                              user: User = Depends(get_current_user)):
     """The venue is the host; the member who created it is kept as host_id for audit.
     Goes through the normal approval queue like any organizer event."""
@@ -827,15 +827,14 @@ async def create_venue_event(venue_id: str, payload: EventCreate, db: AsyncSessi
     data = payload.model_dump()
     data.pop("template_id", None)
     data.update(venue_name=v.name, address=v.address, city=(await area_name(db, v)) or v.state,
-                latitude=v.latitude, longitude=v.longitude, country="NG")
+                latitude=v.latitude, longitude=v.longitude, country="NG", venue_id=v.id)
     if user.role == "admin":
         data["review_status"] = "approved"
     else:
         data["review_status"] = "pending"
         data["status"] = "draft"
     eid = str(uuid.uuid4())
-    event = Event(id=eid, slug=_slugify(payload.title, eid), host_id=user.id, host_venue_id=v.id,
-                  venue_id=v.id, **data)
+    event = Event(id=eid, slug=_slugify(payload.title, eid), host_id=user.id, host_venue_id=v.id, **data)
     db.add(event)
     await db.flush()
     if event.status == "published" and event.review_status == "approved":

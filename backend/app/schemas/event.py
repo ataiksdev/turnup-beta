@@ -140,3 +140,10 @@ class EventDetail(EventOut):
 
 class AttendRequest(BaseModel):
     status: str = Field(pattern=r"^(going|interested)$")
+
+
+class VenueEventCreate(EventCreate):
+    """A venue-hosted event: the place details come from the venue, so they're optional here."""
+    venue_name: str = "venue"
+    address: str = "venue address"
+    city: str = "venue city"
