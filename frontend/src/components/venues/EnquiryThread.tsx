@@ -46,7 +46,9 @@ export function EnquiryThread({ enquiry, side, onSend, quoteActions, sending }: 
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [enquiry.messages?.length]);
+  // Block body: newer browsers return a Promise from scrollIntoView, and an effect must
+  // return nothing or a cleanup function.
+  useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [enquiry.messages?.length]);
   const closed = ["closed", "expired", "declined"].includes(enquiry.status);
 
   async function send(e: React.FormEvent) {

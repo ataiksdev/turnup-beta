@@ -35,6 +35,14 @@ def _offline_dns(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
 
 
+@pytest.fixture(autouse=True)
+def _private_dirs(tmp_path, monkeypatch):
+    """Uploaded files and venue verification documents go to a temp dir, never data/."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "kyc_dir", str(tmp_path / "kyc"))
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path / "uploads"))
+
+
 @pytest_asyncio.fixture(scope="session")
 async def engine():
     if IS_SQLITE:

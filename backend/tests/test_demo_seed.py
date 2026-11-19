@@ -30,7 +30,7 @@ def test_seed_fill_refuse_and_reset(db_url):
     first = _seed(db_url, "--reset")  # --reset: the DB may hold leftovers from other tests
     assert first.returncode == 0, first.stdout + first.stderr
     assert "Seed complete" in first.stdout
-    for line in ("communities", "reviews", "waitlist", "approval queue", "organizer profiles"):
+    for line in ("communities", "reviews", "waitlist", "approval queue", "organizer profiles", "venue marketplace"):
         assert line in first.stdout, f"missing section: {line}"
 
     again = _seed(db_url)

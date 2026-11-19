@@ -173,6 +173,10 @@ Edit `/opt/turnup/.env` on the server, then run `/opt/turnup/deploy/oracle/deplo
 **Backups** are made at start-up and every 24 hours after, and kept for 14 days
 (`BACKUP_KEEP_DAYS`). They live on the same VM, so copy one to your PC now and then.
 
+**Venue verification files** (CAC certificates, IDs, agent visit photos) live in the separate
+`kyc` volume, not in the database backups. They're personal data: if you back them up, keep the
+copy encrypted and private. They're deleted automatically 12 months after a venue closes.
+
 ### Restore a backup
 
 This replaces the current database with the backup.

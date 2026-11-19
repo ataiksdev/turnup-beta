@@ -1,6 +1,10 @@
 # Venue marketplace: spec (draft for review)
 
-Status: **draft, nothing built yet.** Everything below ships in one release.
+Status: **built** (one release). Code map: backend `app/models/venue.py`, `app/services/venue_*.py`,
+`app/services/plus.py`, routers `venues.py`, `venue_portal.py`, `venue_bookings.py`, `agents.py`,
+`admin_venues.py`, `plus.py`; migration `0003`; frontend `src/lib/marketplace.ts`, pages under
+`/venues`, `/enquiries`, `/venue-bookings`, `/plus`, `(portal)/venue`, `(portal)/agent`, `(admin)`.
+Tests: `backend/tests/test_venues.py`, `test_plus.py`; browser: `scripts/e2e/marketplace.js`.
 
 Venues list their spaces on Turnup. Organizers find them, enquire, get quotes and pay deposits
 in the app. Anyone can follow venues; Turnup+ members get extra perks. Turnup earns from
