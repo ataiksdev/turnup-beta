@@ -217,7 +217,7 @@ async def my_events(
             "views_count": e.views_count, "cover_image": e.cover_image,
             "category": e.category, "is_free": e.is_free,
             "price_min": e.price_min, "price_max": e.price_max,
-            "created_at": e.created_at,
+            "created_at": e.created_at, "review_status": e.review_status, "review_note": e.review_note,
         }
         for e in events
     ]
@@ -271,7 +271,7 @@ async def my_ticket_orders(
             unit_price=o.unit_price, total_price=o.total_price,
             status=o.status, payment_reference=o.payment_reference,
             ticket_code=o.ticket_code,
-            checked_in_at=o.checked_in_at,
+            checked_in_at=o.checked_in_at, admitted_count=o.admitted_count or (o.quantity if o.checked_in_at else 0),
             event_title=o.event.title if o.event else None,
             event_slug=o.event.slug if o.event else None,
             event_cover=o.event.cover_image if o.event else None,
@@ -332,6 +332,7 @@ async def ticket_image(
         address=ev.address, city=ev.city, tier=o.tier.name, quantity=o.quantity,
         holder=user.display_name or user.full_name or user.username, ticket_code=o.ticket_code,
         order_id=o.id, event_id=ev.id, status=o.status, checked_in_at=o.checked_in_at,
+        admitted=o.admitted_count or (o.quantity if o.checked_in_at else 0),
         fast_lane=bool(ev.fast_lane_enabled and is_plus(user)), cover=await _cover_bytes(ev.cover_image),
     )
     return Response(png, media_type="image/png", headers={
@@ -362,7 +363,7 @@ async def get_ticket_order(
         unit_price=o.unit_price, total_price=o.total_price,
         status=o.status, payment_reference=o.payment_reference,
         ticket_code=o.ticket_code,
-        checked_in_at=o.checked_in_at,
+        checked_in_at=o.checked_in_at, admitted_count=o.admitted_count or (o.quantity if o.checked_in_at else 0),
         event_title=o.event.title if o.event else None,
         event_slug=o.event.slug if o.event else None,
         event_cover=o.event.cover_image if o.event else None,

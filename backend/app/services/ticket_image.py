@@ -102,6 +102,7 @@ def _qr(payload: str, size: int) -> Image.Image:
 def render_ticket(*, event_title: str, start: datetime, timezone_name: str | None, venue: str, address: str,
                   city: str, tier: str, quantity: int, holder: str, ticket_code: str, order_id: str,
                   event_id: str, status: str, checked_in_at: datetime | None = None, fast_lane: bool = False,
+                  admitted: int = 0,
                   cover: bytes | None = None) -> bytes:
     img = _background()
     card_h = H - CARD_Y - 150
@@ -174,13 +175,18 @@ def render_ticket(*, event_title: str, start: datetime, timezone_name: str | Non
         cy += 40
     d.text((sx, cy + 18), "ORDER", font=lf, fill=MUTED)
     d.text((sx, cy + 48), order_id[:8].upper(), font=_font("Bold", 34), fill=INK)
-    badge, colour = ("CHECKED IN", MUTED) if checked_in_at else (("VALID", SUCCESS) if status == "confirmed" else (status.upper(), MUTED))
+    if checked_in_at and 0 < admitted < quantity:
+        badge, colour = f"{admitted} OF {quantity} IN", PRIMARY_DARK
+    elif checked_in_at:
+        badge, colour = "CHECKED IN", MUTED
+    else:
+        badge, colour = ("VALID", SUCCESS) if status == "confirmed" else (status.upper(), MUTED)
     bf = _font("Black", 30)
     bw = int(d.textlength(badge, font=bf)) + 40
     by = qy + qr_size - 56
     d.rounded_rectangle((sx, by, sx + bw, by + 56), radius=12, outline=colour, width=4)
     d.text((sx + 20, by + 10), badge, font=bf, fill=colour)
-    d.text((56, qy + qr_size + 30), "One scan admits everyone on this ticket. Don't share it publicly.",
+    d.text((56, qy + qr_size + 30), "Your group can arrive together or one by one. Don't share it publicly.",
            font=_font("Medium", 24), fill=MUTED)
 
     # Rounded card + perforation notches cut out of the sides.

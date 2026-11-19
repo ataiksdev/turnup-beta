@@ -1,4 +1,5 @@
 "use client";
+import * as React from "react";
 import { Suspense } from "react";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -129,12 +130,27 @@ function StepBar({ current }: { current: number }) {
 
 // ── Shared label ─────────────────────────────────────────────────────────────
 
+const naira = (n: number) => (n === 0 ? "Free" : `₦${n.toLocaleString("en-NG", { maximumFractionDigits: 2 })}`);
+function priceRange(prices: number[]) {
+  const lo = Math.min(...prices), hi = Math.max(...prices);
+  return lo === hi ? naira(lo) : `${naira(lo)} – ${naira(hi)}`;
+}
+
+// Each field is a labelled group, so screen readers announce the label with its input.
+const LabelId = React.createContext<string | undefined>(undefined);
+
 function Label({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5">{children}</p>;
+  const id = React.useContext(LabelId);
+  return <p id={id} className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5">{children}</p>;
 }
 
 function FieldWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("space-y-1", className)}>{children}</div>;
+  const id = React.useId();
+  return (
+    <LabelId.Provider value={id}>
+      <div role="group" aria-labelledby={id} className={cn("space-y-1", className)}>{children}</div>
+    </LabelId.Provider>
+  );
 }
 
 // ── Textarea ─────────────────────────────────────────────────────────────────
@@ -204,7 +220,7 @@ function CreateEventPage() {
   const [form, setForm] = useState<FormState>({
     title: "", category_id: "", description: "",
     event_type: "physical",
-    venue_name: "", address: "", city: "", country: "US", meeting_url: "",
+    venue_name: "", address: "", city: "", country: "NG", meeting_url: "",
     start_date: "", end_date: "", timezone: "Africa/Lagos",
     capacity: "", waitlist_enabled: false,
     is_free: true, cover_image: "", tags: "",
@@ -969,7 +985,7 @@ function CreateEventPage() {
             </div>
             <div className="flex items-center gap-2 text-xs text-text-secondary">
               <Calendar size={12} className="text-primary" />
-              {form.start_date ? new Date(form.start_date).toLocaleString() : "—"}
+              {form.start_date ? new Date(form.start_date).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" }) : "—"}
             </div>
             <div className="flex items-center gap-2 text-xs text-text-secondary">
               <MapPin size={12} className="text-primary" />
@@ -984,7 +1000,7 @@ function CreateEventPage() {
             <div className="flex items-center gap-2 text-xs text-text-secondary">
               <DollarSign size={12} className="text-primary" />
               {form.is_free ? "Free" : form.tiers.length > 0
-                ? `$${Math.min(...form.tiers.map((t) => Number(t.price) || 0))} – $${Math.max(...form.tiers.map((t) => Number(t.price) || 0))}`
+                ? priceRange(form.tiers.map((t) => Number(t.price) || 0))
                 : "Paid"}
             </div>
             {form.capacity && (
@@ -1006,7 +1022,7 @@ function CreateEventPage() {
                 <p className="text-sm font-black text-text">{t.name || `Tier ${i + 1}`}</p>
                 {t.quantity && <p className="text-xs text-text-muted">{t.quantity} available</p>}
               </div>
-              <span className="text-sm font-black text-primary">${Number(t.price || 0).toFixed(2)}</span>
+              <span className="text-sm font-black text-primary">{naira(Number(t.price || 0))}</span>
             </div>
           ))}
         </div>

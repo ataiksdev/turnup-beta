@@ -200,7 +200,9 @@ export default function TicketDetailPage() {
             {displayTicket!.checked_in_at && (
               <div className="flex items-center gap-1.5 text-xs font-bold text-success">
                 <CheckCircle2 size={14} />
-                Checked in {format(new Date(displayTicket!.checked_in_at), "MMM d · h:mm a")}
+                {displayTicket!.quantity > 1 && (displayTicket!.admitted_count ?? 0) < displayTicket!.quantity
+                  ? `${displayTicket!.admitted_count} of ${displayTicket!.quantity} checked in · first at ${format(new Date(displayTicket!.checked_in_at), "h:mm a")}`
+                  : `Checked in ${format(new Date(displayTicket!.checked_in_at), "MMM d · h:mm a")}`}
               </div>
             )}
           </div>
