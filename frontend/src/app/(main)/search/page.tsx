@@ -297,7 +297,7 @@ function SearchContent() {
               className={cn(
                 "shrink-0 px-3 py-1.5 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
                 dateFilter === value
-                  ? "bg-primary text-white border-primary shadow-brutal-sm"
+                  ? "bg-primary text-on-primary border-primary shadow-brutal-sm"
                   : "bg-bg-card text-text-secondary border-border hover:border-primary hover:text-primary",
               )}
             >
@@ -314,7 +314,7 @@ function SearchContent() {
             className={cn(
               "w-full appearance-none pl-3 pr-9 py-2 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
               activeCategory
-                ? "bg-primary text-white border-primary shadow-brutal-sm"
+                ? "bg-primary text-on-primary border-primary shadow-brutal-sm"
                 : "bg-bg-card text-text-secondary border-border",
             )}
           >
@@ -342,7 +342,7 @@ function SearchContent() {
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded border-2 text-xs font-bold uppercase tracking-wide transition-all",
                 activeType === value
-                  ? "bg-primary text-white border-primary shadow-brutal-sm"
+                  ? "bg-primary text-on-primary border-primary shadow-brutal-sm"
                   : "bg-bg-card text-text-secondary border-border hover:border-primary hover:text-primary",
               )}
             >

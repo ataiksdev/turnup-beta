@@ -20,6 +20,18 @@
     --text-disabled:  65 65 65;
     --primary-muted:  88 28 135;
     --shadow-color:   255 255 255;    /* offset shadow color — white in dark */
+    /* Defaults = the Turnup theme; src/lib/themes.ts overrides all of these per theme. */
+    --primary:        168 85 247;
+    --primary-hover:  147 51 234;
+    --primary-light:  237 233 254;
+    --on-primary:     255 255 255;
+    --radius-sm: 1px; --radius: 1px; --radius-md: 2px; --radius-lg: 2px;
+    --shadow-sm: 2px 2px 0 rgb(var(--shadow-color));
+    --shadow:    3px 3px 0 rgb(var(--shadow-color));
+    --shadow-lg: 5px 5px 0 rgb(var(--shadow-color));
+    --shadow-primary:    3px 3px 0 rgb(var(--primary));
+    --shadow-primary-lg: 5px 5px 0 rgb(var(--primary));
+    --surface-alpha: 1; --elevated-alpha: 1; --border-alpha: 1; --blur: 0px; --page-bg: none;
     color-scheme: dark;
   }
 
@@ -58,6 +70,7 @@
     --text-disabled:  175 175 175;
     --primary-muted:  237 233 254;
     --shadow-color:   0 0 0;          /* black offset shadow in light */
+    --primary-light:  237 233 254;
     color-scheme: light;
   }
 
@@ -68,6 +81,9 @@
 
   html {
     @apply bg-bg text-text;
+    background-image: var(--page-bg);   /* gradient for Glass/Fluffy; none otherwise */
+    background-attachment: fixed;
+    min-height: 100%;
     font-family: var(--font-inter), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -149,3 +165,39 @@
     @apply animate-shimmer;
   }
 }
+
+/* ── Glass & Fluffy theme styles ─────────────────────────────────────────────────────
+   Components use the same classes in every theme (bg-bg-card, border-border, ...). These
+   rules restyle those classes when <html data-style> is "glass" or "fluffy" (set by
+   src/lib/themes.ts), so no component needs theme-specific code. */
+@layer utilities {
+  /* Page-level backgrounds become transparent so the theme's gradient shows through. */
+  html[data-style="glass"] .bg-bg,
+  html[data-style="fluffy"] .bg-bg { background-color: transparent; }
+
+  /* Glass: translucent, blurred panels and bars. */
+  html[data-style="glass"] :is(.bg-bg-card, .bg-bg-surface, .bg-bg-overlay) {
+    background-color: rgb(var(--bg-card) / var(--surface-alpha));
+    -webkit-backdrop-filter: blur(var(--blur)) saturate(150%);
+    backdrop-filter: blur(var(--blur)) saturate(150%);
+  }
+  html[data-style="glass"] .bg-bg-elevated {
+    background-color: rgb(var(--bg-elevated) / var(--elevated-alpha));
+  }
+  html[data-style="glass"] :is(.border-border, .border-border-subtle, .border-border-strong) {
+    border-color: rgb(var(--border) / var(--border-alpha));
+  }
+  html[data-style="glass"] input,
+  html[data-style="glass"] textarea,
+  html[data-style="glass"] select {
+    background-color: rgb(var(--bg-card) / calc(var(--surface-alpha) + 0.06));
+  }
+
+  /* Fluffy: soft 1.5px outlines instead of the 2px brutalist ones; Button components are pills. */
+  html[data-style="fluffy"] :is(.border-2, .border-t-2, .border-b-2, .border-l-2, .border-r-2) {
+    border-width: 1.5px;
+  }
+  html[data-style="fluffy"] .bg-bg-card { background-color: rgb(var(--bg-card) / var(--surface-alpha)); }
+  html[data-style="fluffy"] .btn { border-radius: 9999px; }  /* the Button component */
+}
+

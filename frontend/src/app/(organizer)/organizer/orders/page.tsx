@@ -140,7 +140,7 @@ export default function OrganizerOrdersPage() {
             className={cn(
               "shrink-0 px-3 py-1.5 rounded border-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-brutal-sm hover:shadow-brutal",
               selectedEventId === null
-                ? "border-primary bg-primary text-white"
+                ? "border-primary bg-primary text-on-primary"
                 : "border-border bg-bg-card text-text-muted hover:border-primary hover:text-primary",
             )}
           >
@@ -153,7 +153,7 @@ export default function OrganizerOrdersPage() {
               className={cn(
                 "shrink-0 px-3 py-1.5 rounded border-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-brutal-sm hover:shadow-brutal",
                 selectedEventId === event.id
-                  ? "border-primary bg-primary text-white"
+                  ? "border-primary bg-primary text-on-primary"
                   : "border-border bg-bg-card text-text-muted hover:border-primary hover:text-primary",
               )}
             >

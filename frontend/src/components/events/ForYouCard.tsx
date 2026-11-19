@@ -18,7 +18,7 @@ interface ForYouCardProps {
 }
 
 const RANK_STYLES: Record<number, string> = {
-  1: "bg-primary text-white",
+  1: "bg-primary text-on-primary",
   2: "bg-bg-elevated text-text border-2 border-border",
   3: "bg-bg-elevated text-text border-2 border-border",
 };
@@ -101,7 +101,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
 
         {/* Reason badge at bottom of image */}
         {reason && (
-          <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-primary text-white text-[10px] font-black uppercase tracking-wider rounded">
+          <span className="absolute bottom-3 left-3 px-2 py-0.5 bg-primary text-on-primary text-[10px] font-black uppercase tracking-wider rounded">
             {reason}
           </span>
         )}

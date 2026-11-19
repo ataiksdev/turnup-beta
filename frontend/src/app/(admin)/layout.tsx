@@ -43,7 +43,7 @@ function AdminBottomNav({ role }: { role: string }) {
             <Link key={href} href={href} aria-label={label} aria-current={isActive ? "page" : undefined}
               className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full group">
               <div className={cn("p-1.5 rounded transition-all duration-150",
-                isActive ? "bg-primary text-white" : "group-hover:bg-bg-elevated")}>
+                isActive ? "bg-primary text-on-primary" : "group-hover:bg-bg-elevated")}>
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} aria-hidden="true"
                   className={cn("transition-colors duration-150",
                     isActive ? "text-white" : "text-text-muted group-hover:text-text-secondary")} />
@@ -95,7 +95,7 @@ function AdminSidebar({ role }: { role: string }) {
               className={cn(
                 "flex items-center gap-2.5 px-3 py-2.5 rounded text-sm font-bold transition-colors duration-100",
                 isActive
-                  ? "bg-primary text-white"
+                  ? "bg-primary text-on-primary"
                   : "text-text-secondary hover:bg-bg-elevated hover:text-text",
               )}
             >

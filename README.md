@@ -30,7 +30,18 @@ npm ci
 npm run dev                   # http://localhost:3003; /api/* is proxied to localhost:8000
 ```
 
-Optional sample data: `python scripts/seed.py`.
+**Demo data** for test/staging (all accounts use the password `password123`):
+
+```bash
+cd backend
+python -m app.cli seed            # into an empty database
+python -m app.cli seed --reset    # wipe everything first (only allowed with DEBUG=true)
+```
+
+With Docker: `docker compose run --rm migrate python -m app.cli seed`. It creates an admin
+(`admin@turnup.ng`), organizers (`adaeze@`, `seun@`, `dayo@turnup.ng`) and attendees
+(`tunde@`, `chiamaka@turnup.ng`), with events, tickets (some checked in), communities,
+reviews, comments, a waitlist, and items waiting in the admin approval and verification queues.
 
 ## Database migrations
 

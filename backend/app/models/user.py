@@ -49,6 +49,9 @@ class User(Base):
     event_format_pref: Mapped[str | None] = mapped_column(String(20), nullable=True)
     goes_out_when: Mapped[str | None] = mapped_column(String(20), nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Appearance, synced across devices: "<theme>:<mode>", e.g. "sunset:system". See
+    # app/schemas/user.py THEME_IDS and frontend/src/lib/themes.ts.
+    theme_preference: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

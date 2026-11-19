@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { SkipNav } from "@/components/layout/SkipNav";
 import { PWASetup } from "@/components/layout/PWASetup";
+import { themeBootScript } from "@/lib/themes";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -51,12 +52,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // No class here — ThemeScript sets it before paint to prevent FOUC
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Prevent flash of wrong theme — dark is default, only apply .light if stored */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=JSON.parse(localStorage.getItem('turnup-ui')||'{}');var t=(s&&s.state&&s.state.theme)||'dark';if(t==='light'){document.documentElement.classList.add('light');}else{document.documentElement.classList.add('dark');}}catch(e){document.documentElement.classList.add('dark');}})();`,
-          }}
-        />
+        {/* Apply the saved theme (palette + light/dark/system) before first paint, so the
+            default theme never flashes. Generated from src/lib/themes.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <SkipNav />

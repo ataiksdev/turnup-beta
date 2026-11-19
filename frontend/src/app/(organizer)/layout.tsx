@@ -33,7 +33,7 @@ function OrganizerBottomNav() {
             >
               <div className={cn(
                 "p-1.5 rounded transition-all duration-150",
-                isActive ? "bg-primary text-white" : "group-hover:bg-bg-elevated",
+                isActive ? "bg-primary text-on-primary" : "group-hover:bg-bg-elevated",
               )}>
                 <Icon
                   size={20}

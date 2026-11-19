@@ -9,6 +9,10 @@ from app.schemas.types import WebUrl
 # (a None here used to make /auth/me -- and so every phone login -- return a 500).
 NameStr = Annotated[str, BeforeValidator(lambda v: v or "")]
 
+# Must match the theme ids in frontend/src/lib/themes.ts (tests/test_themes.py checks this).
+THEME_IDS = ("turnup", "sunset", "lagoon", "palm", "gold", "neon", "glass", "fluffy")
+THEME_PREFERENCE_PATTERN = rf"^({'|'.join(THEME_IDS)}):(light|dark|system)$"
+
 
 class UserSummary(BaseModel):
     id: str
@@ -77,6 +81,7 @@ class UserMe(BaseModel):
     event_format_pref: str | None = None
     goes_out_when: str | None = None
     onboarding_completed: bool
+    theme_preference: str | None = None
     created_at: datetime
     organizer_profile: OrganizerProfileOut | None = None
     model_config = {"from_attributes": True}
@@ -89,3 +94,4 @@ class UserUpdate(BaseModel):
     location: str | None = Field(None, max_length=120)
     website: WebUrl | None = Field(None, max_length=255)
     avatar_url: WebUrl | None = None
+    theme_preference: str | None = Field(None, pattern=THEME_PREFERENCE_PATTERN)

@@ -382,7 +382,7 @@ export function EventDetailClient() {
 
         {event.is_trending && (
           <div className="absolute top-16 left-4">
-            <span className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-white text-xs font-bold">
+            <span className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-on-primary text-xs font-bold">
               <Flame size={11} aria-hidden /> Trending
             </span>
           </div>

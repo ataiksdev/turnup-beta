@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/layout/AuthShell";
 import { timeAgo } from "@/lib/utils";
+import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 
 function Section({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -365,10 +366,16 @@ export default function SettingsPage() {
 
   if (hasHydrated && (!token || !user)) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-4 px-8 text-center">
-        <KeyRound size={48} className="text-primary" aria-hidden />
-        <h2 className="text-xl font-black text-text">Account settings</h2>
-        <Link href="/login?next=/settings"><Button fullWidth>Log In</Button></Link>
+      <div className="flex flex-col pb-8">
+        <TopBar title="Settings" back />
+        <div className="px-4 pt-4 space-y-4 max-w-2xl w-full mx-auto">
+          <AppearanceSettings />
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <KeyRound size={36} className="text-primary" aria-hidden />
+            <p className="text-sm text-text-secondary">Log in to manage your account, and to keep your theme on every device.</p>
+            <Link href="/login?next=/settings"><Button>Log In</Button></Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -376,8 +383,9 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col pb-8">
-      <TopBar title="Account & Security" back />
+      <TopBar title="Settings" back />
       <div className="px-4 pt-4 space-y-4 max-w-2xl w-full mx-auto">
+        <AppearanceSettings />
         <EmailSection />
         <PasswordSection />
         <TwoFactorSection />

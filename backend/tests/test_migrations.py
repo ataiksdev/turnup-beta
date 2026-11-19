@@ -61,20 +61,19 @@ def test_app_startup_initialises_a_fresh_database(db_url):
 
 
 def test_pre_alembic_database_is_adopted(tmp_path):
-    """A database built the old way (create_all, no alembic_version) is patched, stamped at
-    the baseline and upgraded, ending up identical to a migrated one."""
+    """A database from before migrations existed (baseline schema, no alembic_version table)
+    is stamped at the baseline and upgraded through every later migration."""
     url = f"sqlite+aiosqlite:///{tmp_path / 'legacy.db'}"
-    make_legacy = _run([sys.executable, "-c", (
-        "import asyncio\n"
-        "from app.database import Base, engine\n"
-        "import app.models.user, app.models.event, app.models.social, app.models.auth_tokens\n"
-        "import app.models.organizer, app.models.community, app.models.scout, app.models.settings\n"
+    assert _alembic("upgrade", "0001", url=url).returncode == 0
+    drop_version = _run([sys.executable, "-c", (
+        "import asyncio, sqlalchemy as sa\n"
+        "from app.database import engine\n"
         "async def main():\n"
         "    async with engine.begin() as c:\n"
-        "        await c.run_sync(Base.metadata.create_all)\n"
+        "        await c.execute(sa.text('DROP TABLE alembic_version'))\n"
         "asyncio.run(main())\n"
     )], url)
-    assert make_legacy.returncode == 0, make_legacy.stderr
+    assert drop_version.returncode == 0, drop_version.stderr
 
     r = _run([sys.executable, "-c",
               "import asyncio; from app.database import init_db; asyncio.run(init_db())"], url)

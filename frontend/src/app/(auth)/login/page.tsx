@@ -187,7 +187,7 @@ function LoginPage() {
               onClick={() => switchTab(t)}
               className={`flex-1 py-2 rounded text-sm font-bold uppercase tracking-wide transition-colors ${
                 tab === t
-                  ? "bg-primary text-white"
+                  ? "bg-primary text-on-primary"
                   : "text-text-muted hover:text-text"
               }`}
             >

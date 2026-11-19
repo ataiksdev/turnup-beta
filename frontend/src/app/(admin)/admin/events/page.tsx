@@ -261,7 +261,7 @@ export default function AdminEventsPage() {
               className={cn(
                 "text-xs font-bold px-3 py-1.5 rounded border-2 transition-colors",
                 reviewStatusFilter === opt.value
-                  ? "border-primary bg-primary text-white"
+                  ? "border-primary bg-primary text-on-primary"
                   : "border-border bg-bg-surface text-text-muted",
               )}
             >
