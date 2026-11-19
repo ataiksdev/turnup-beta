@@ -51,6 +51,7 @@ class UserPublic(BaseModel):
     category_preferences: str | None
     created_at: datetime
     is_following: bool = False
+    plus_badge: bool = False  # Turnup+ member who shows the badge
     organizer_profile: OrganizerProfileOut | None = None
     model_config = {"from_attributes": True}
 
@@ -82,6 +83,9 @@ class UserMe(BaseModel):
     goes_out_when: str | None = None
     onboarding_completed: bool
     theme_preference: str | None = None
+    plus_until: datetime | None = None
+    show_plus_badge: bool = True
+    wrapped_opt_in: bool = True
     created_at: datetime
     organizer_profile: OrganizerProfileOut | None = None
     model_config = {"from_attributes": True}

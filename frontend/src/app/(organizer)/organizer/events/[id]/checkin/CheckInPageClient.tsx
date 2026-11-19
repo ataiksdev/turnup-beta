@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useRouteParam } from "@/lib/useRouteParam";
+import { plusApi } from "@/lib/marketplace";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -227,6 +228,11 @@ export default function CheckInPage() {
               <>
                 <CheckCircle2 size={18} className="text-success shrink-0 mt-0.5" />
                 <div>
+                  {lastResult?.fast_lane && (
+                    <p className="mb-1 inline-block px-2 py-0.5 rounded bg-primary text-on-primary text-lg font-black tracking-widest">
+                      FAST LANE
+                    </p>
+                  )}
                   <p className="text-sm font-black text-white">{lastResult?.attendee_name}</p>
                   <p className="text-xs text-white/70">{lastResult?.tier_name} × {lastResult?.quantity}</p>
                 </div>
@@ -287,6 +293,9 @@ export default function CheckInPage() {
         </form>
       )}
 
+      {/* Turnup+ deal codes */}
+      <DealCodeCheck eventId={eventId} />
+
       {/* Scan log */}
       <div className="px-4 pt-5">
         <div className="flex items-center gap-2 mb-3">
@@ -321,5 +330,30 @@ export default function CheckInPage() {
         )}
       </div>
     </div>
+  );
+}
+
+
+function DealCodeCheck({ eventId }: { eventId: string }) {
+  const { token } = useAuthStore();
+  const [code, setCode] = useState("");
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const redeem = useMutation({
+    mutationFn: () => plusApi.redeemEventDeal(token!, eventId, code.trim()),
+    onSuccess: (r) => {
+      setResult(r.ok ? { ok: true, text: `${r.deal}: valid for ${r.member}` }
+        : { ok: false, text: r.reason === "already_used" ? "Already used" : r.reason === "membership_lapsed" ? "Membership has lapsed" : "Expired" });
+      setCode("");
+    },
+    onError: (e: any) => setResult({ ok: false, text: e.message ?? "Not found" }),
+  });
+  return (
+    <form className="px-4 pt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (code.trim()) redeem.mutate(); }}>
+      <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Turnup+ deal code"
+        aria-label="Turnup+ deal code" maxLength={12}
+        className="flex-1 bg-bg-card border-2 border-border rounded px-3 py-2 text-sm text-text font-mono uppercase" />
+      <Button type="submit" size="sm" variant="secondary" loading={redeem.isPending} disabled={!code.trim()}>Check deal</Button>
+      {result && <p role="status" className={cn("self-center text-xs font-bold", result.ok ? "text-success" : "text-error")}>{result.text}</p>}
+    </form>
   );
 }

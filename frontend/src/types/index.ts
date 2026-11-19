@@ -29,6 +29,12 @@ export interface User {
   has_password?: boolean;
   /** "<theme>:<mode>", e.g. "sunset:system" (see lib/themes.ts). */
   theme_preference?: string | null;
+  /** Turnup+ membership end (null = not a member). */
+  plus_until?: string | null;
+  show_plus_badge?: boolean;
+  wrapped_opt_in?: boolean;
+  /** Public profiles: a member who shows the badge. */
+  plus_badge?: boolean;
   created_at?: string;
   is_following?: boolean;
   organizer_profile?: OrganizerProfile | null;
@@ -100,6 +106,13 @@ export interface Event {
   review_note?: string | null;
   created_via?: "manual" | "ai_agent";
   refund_policy?: string | null;
+  /** Venue marketplace: the venue hosting it, and the listed venue it takes place at. */
+  host_venue_id?: string | null;
+  venue_id?: string | null;
+  /** Turnup+ options */
+  members_only?: boolean;
+  fast_lane_enabled?: boolean;
+  allow_ticket_transfers?: boolean;
   following_count?: number;
   following_hosted?: boolean;
 }

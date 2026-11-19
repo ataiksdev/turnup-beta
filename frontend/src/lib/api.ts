@@ -8,6 +8,8 @@ export interface TicketTierDetail {
   price: number; currency: string; quantity: number | null; quantity_sold: number;
   available: number | null; max_per_order: number; is_active: boolean;
   sale_start: string | null; sale_end: string | null; created_at: string;
+  /** Turnup+: a members-only tier (guest list) or a members' presale. */
+  members_only?: boolean; plus_presale_ends_at?: string | null; presale_then?: "open" | "close";
 }
 
 export interface TicketOrder {
@@ -53,6 +55,7 @@ export interface CheckInResult {
   tier_name: string;
   quantity: number;
   checked_in_at: string;
+  fast_lane?: boolean;
 }
 
 export interface Review {
@@ -63,7 +66,7 @@ export interface Review {
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
@@ -76,7 +79,7 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   options: RequestInit = {},
   token?: string,
@@ -323,6 +326,7 @@ export const eventsApi = {
 
   updateTier: (token: string, eventId: string, tierId: string, data: {
     name?: string; price?: number; quantity?: number | null; is_active?: boolean; max_per_order?: number;
+    members_only?: boolean; plus_presale_ends_at?: string | null; presale_then?: "open" | "close";
   }) =>
     request<TicketTierDetail>(`/events/${eventId}/tickets/${tierId}`, {
       method: "PATCH", body: JSON.stringify(data),
@@ -335,6 +339,7 @@ export const eventsApi = {
     name: string; description?: string; price: number; currency?: string;
     quantity?: number | null; max_per_order?: number; is_active?: boolean;
     sale_start?: string | null; sale_end?: string | null;
+    members_only?: boolean; plus_presale_ends_at?: string | null; presale_then?: "open" | "close";
   }) =>
     request<{ id: string; name: string; price: number }>(`/events/${eventId}/tickets`, {
       method: "POST", body: JSON.stringify(data),

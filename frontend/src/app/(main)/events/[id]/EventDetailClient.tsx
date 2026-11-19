@@ -23,6 +23,7 @@ import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { EventMap } from "@/components/events/EventMap";
+import { EventDeals, EventVenueCard, GuestVenueReview, MembersOnlyNotice, TierPlusBadges } from "@/components/events/EventMarketplace";
 
 function SeriesSection({ seriesId, currentEventId }: { seriesId: string; currentEventId: string }) {
   const { data: series } = useQuery({
@@ -583,6 +584,12 @@ export function EventDetailClient() {
             latitude={event.latitude} longitude={event.longitude} />
         )}
 
+        {/* Venue marketplace and Turnup+ */}
+        {(event.host_venue_id || event.venue_id) && <EventVenueCard event={event} />}
+        {event.members_only && <MembersOnlyNotice />}
+        <EventDeals eventId={event.id} />
+        <GuestVenueReview event={event} />
+
         {/* Ticket tiers */}
         {tiers && tiers.length > 0 && (
           <section aria-labelledby="tickets-heading">
@@ -612,6 +619,7 @@ export function EventDetailClient() {
                       <div>
                         <p className="font-bold text-text text-sm">{tier.name}</p>
                         {tier.description && <p className="text-xs text-text-muted">{tier.description}</p>}
+                        <TierPlusBadges tier={tier} />
                         {available !== null && (
                           <p className="text-xs text-text-muted mt-0.5">
                             {soldOut ? "Sold out" : `${available} left`}

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/layout/AuthShell";
 import { timeAgo } from "@/lib/utils";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
+import { MarketplaceLinks } from "@/components/settings/MarketplaceLinks";
 
 function Section({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -385,6 +386,7 @@ export default function SettingsPage() {
     <div className="flex flex-col pb-8">
       <TopBar title="Settings" back />
       <div className="px-4 pt-4 space-y-4 max-w-2xl w-full mx-auto">
+        <MarketplaceLinks />
         <AppearanceSettings />
         <EmailSection />
         <PasswordSection />

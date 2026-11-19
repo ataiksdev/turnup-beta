@@ -13,6 +13,7 @@ from app.models.social import Follow
 from app.models.user import User
 from app.schemas.event import EventOut
 from app.schemas.user import UserPublic
+from app.services.plus import is_plus
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -89,6 +90,7 @@ async def get_profile(
         "avg_rating": avg_rating,
         "review_count": review_count,
         "organizer_profile": user.organizer_profile,
+        "plus_badge": is_plus(user) and user.show_plus_badge,
     }
 
 

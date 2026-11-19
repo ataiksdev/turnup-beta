@@ -8,7 +8,7 @@ import { formatEventDate, formatPrice, cn } from "@/lib/utils";
 import {
   Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf,
   MapPin, Flame, Star, ArrowRight, Tag, Clock,
-  CalendarDays, Users,
+  CalendarDays, Users, Building2, Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
@@ -147,6 +147,20 @@ export default function ExplorePage() {
   return (
     <div className="flex flex-col pb-4">
       <TopBar title="Explore" />
+
+      {/* ── Venues and Turnup+ ──────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-2 mx-4 mt-3">
+        <Link href="/venues" className="p-3 rounded border-2 border-border bg-bg-card shadow-brutal-sm hover:border-primary">
+          <Building2 size={18} className="text-primary" aria-hidden />
+          <p className="text-sm font-black text-text mt-1">Venues</p>
+          <p className="text-[11px] text-text-muted">Halls, lounges and spaces to book</p>
+        </Link>
+        <Link href="/plus" className="p-3 rounded border-2 border-border bg-primary text-on-primary shadow-brutal-sm">
+          <Sparkles size={18} aria-hidden />
+          <p className="text-sm font-black mt-1">Turnup+</p>
+          <p className="text-[11px] opacity-90">Presale, deals, fast lane</p>
+        </Link>
+      </div>
 
       {/* ── Hero featured event ─────────────────────────────────────── */}
       {hero && (

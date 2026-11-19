@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Removes the admin/moderator portal from the static export before it's packaged into the
-// Capacitor mobile app. The admin portal is web-only by design (security/segregation) — it must
+// Removes the web-only portals from the static export before it's packaged into the Capacitor
+// mobile app: the admin/moderator portal, and the venue portal and agent portal (venue
+// marketplace, docs/venues-spec.md). They're web-only by design (security/segregation) and must
 // never ship inside the Android/iOS app bundle. The regular web deploy runs `next build` directly
 // and keeps this content; only the Capacitor pipeline runs this script.
 const fs = require("fs");
@@ -15,11 +16,13 @@ function rm(targetPath) {
   }
 }
 
+const WEB_ONLY = ["admin", "venue", "agent"];
+
 function stripFlatAdminFiles(dir) {
   // Top-level exports like admin.html / admin.txt sitting alongside the admin/ directory.
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir)) {
-    if (entry === "admin.html" || entry === "admin.txt") {
+    if (WEB_ONLY.some((name) => entry === `${name}.html` || entry === `${name}.txt`)) {
       rm(path.join(dir, entry));
     }
   }
@@ -30,10 +33,11 @@ if (!fs.existsSync(OUT_DIR)) {
   process.exit(1);
 }
 
-rm(path.join(OUT_DIR, "admin"));
+for (const name of WEB_ONLY) rm(path.join(OUT_DIR, name));
 stripFlatAdminFiles(OUT_DIR);
 
-const chunksDir = path.join(OUT_DIR, "_next", "static", "chunks", "app", "(admin)");
-rm(chunksDir);
+for (const group of ["(admin)", "(portal)"]) {
+  rm(path.join(OUT_DIR, "_next", "static", "chunks", "app", group));
+}
 
 console.log("[strip-admin] done.");

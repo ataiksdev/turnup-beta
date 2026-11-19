@@ -173,6 +173,12 @@ export default function ActivityPage() {
                   n.reference_type === "user"        ? routes.profile(n.actor?.username) :
                   n.reference_type === "ticket_order" ? routes.ticket(n.reference_id) :
                   n.reference_type === "organizer_verification" ? "/organizer/verification" :
+                  n.reference_type === "venue_enquiry" ? routes.enquiry(n.reference_id) :
+                  n.reference_type === "venue_booking" ? routes.venueBooking(n.reference_id) :
+                  n.reference_type === "refund_request" ? "/venue-bookings" :
+                  n.reference_type === "weekend_picks" ? "/plus/weekend" :
+                  n.reference_type === "wrapped" ? "/plus/wrapped" :
+                  n.reference_type === "venue" ? "/venue" :
                   null;
 
                 const isCoHostInvite = n.type === "event_invite" && n.reference_id;

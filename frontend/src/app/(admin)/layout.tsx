@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield, Radar } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield, Radar, Building2, Scale } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -18,6 +18,8 @@ const adminNavItems = [
   { href: "/admin/scout/sources", icon: Radar,          label: "AI Scout"   },
   { href: "/admin/categories",   icon: Tag,             label: "Categories" },
   { href: "/admin/orders",       icon: ShoppingBag,     label: "Orders"     },
+  { href: "/admin/venues",       icon: Building2,       label: "Venues"     },
+  { href: "/admin/marketplace",  icon: Scale,           label: "Marketplace" },
 ];
 
 const moderatorNavItems = [

@@ -8,6 +8,12 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 
+function toLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 const naira = (n: number) => (n === 0 ? "Free" : `₦${n.toLocaleString("en-NG", { maximumFractionDigits: 2 })}`);
 
 function TierRow({ eventId, tier }: { eventId: string; tier: TicketTierDetail }) {
@@ -17,6 +23,10 @@ function TierRow({ eventId, tier }: { eventId: string; tier: TicketTierDetail })
   const [name, setName] = useState(tier.name);
   const [price, setPrice] = useState(String(tier.price));
   const [quantity, setQuantity] = useState(tier.quantity === null ? "" : String(tier.quantity));
+  // Turnup+ options (docs/venues-spec.md 4.8)
+  const [membersOnly, setMembersOnly] = useState(!!tier.members_only);
+  const [presaleUntil, setPresaleUntil] = useState(toLocal(tier.plus_presale_ends_at));
+  const [presaleThen, setPresaleThen] = useState<"open" | "close">(tier.presale_then ?? "open");
   const [error, setError] = useState("");
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["manage-tiers", eventId] });
@@ -40,7 +50,10 @@ function TierRow({ eventId, tier }: { eventId: string; tier: TicketTierDetail })
     if (!name.trim()) return setError("Give the tier a name.");
     if (isNaN(p) || p < 0) return setError("Enter a valid price.");
     if (q !== null && (!Number.isInteger(q) || q < 1)) return setError("Quantity must be a whole number, or blank for unlimited.");
-    update.mutate({ name: name.trim(), price: p, quantity: q });
+    update.mutate({
+      name: name.trim(), price: p, quantity: q, members_only: membersOnly,
+      plus_presale_ends_at: presaleUntil ? new Date(presaleUntil).toISOString() : null, presale_then: presaleThen,
+    });
   }
 
   return (
@@ -54,6 +67,11 @@ function TierRow({ eventId, tier }: { eventId: string; tier: TicketTierDetail })
               {tier.quantity !== null ? ` of ${tier.quantity}` : " · unlimited"}
               {!tier.is_active && " · sales paused"}
             </p>
+            {(tier.members_only || tier.plus_presale_ends_at) && (
+              <p className="text-[10px] font-black uppercase text-primary">
+                {tier.members_only ? "Turnup+ members only" : `Members' presale until ${new Date(tier.plus_presale_ends_at!).toLocaleString()}`}
+              </p>
+            )}
           </div>
           <div className="flex gap-1 shrink-0">
             <Button type="button" size="xs" variant="secondary" aria-label={`Edit ${tier.name}`} onClick={() => setEditing(true)}>
@@ -80,6 +98,28 @@ function TierRow({ eventId, tier }: { eventId: string; tier: TicketTierDetail })
             <Input label="Quantity" inputMode="numeric" placeholder="Unlimited" value={quantity}
               onChange={(e) => setQuantity(e.target.value)} />
           </div>
+          <fieldset className="p-2 rounded border-2 border-border-subtle space-y-2">
+            <legend className="px-1 text-[10px] font-black uppercase text-primary">Turnup+</legend>
+            <label className="flex items-center gap-2 text-xs text-text">
+              <input type="checkbox" checked={membersOnly} onChange={(e) => setMembersOnly(e.target.checked)} />
+              Members only (a members' guest list)
+            </label>
+            {!membersOnly && (
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[11px] font-bold uppercase text-text-secondary space-y-1">Members' presale until
+                  <input type="datetime-local" value={presaleUntil} onChange={(e) => setPresaleUntil(e.target.value)}
+                    className="w-full h-9 rounded border-2 border-border bg-bg px-2 text-sm text-text normal-case" />
+                </label>
+                <label className="text-[11px] font-bold uppercase text-text-secondary space-y-1">Then
+                  <select value={presaleThen} onChange={(e) => setPresaleThen(e.target.value as "open" | "close")}
+                    className="w-full h-9 rounded border-2 border-border bg-bg px-2 text-sm text-text normal-case">
+                    <option value="open">Open to everyone</option>
+                    <option value="close">Stop selling</option>
+                  </select>
+                </label>
+              </div>
+            )}
+          </fieldset>
           {tier.quantity_sold > 0 && (
             <p className="text-[11px] text-text-muted">
               {tier.quantity_sold} already sold: price changes apply to new sales only.

@@ -135,6 +135,9 @@ export default function ProfilePage() {
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-black text-text">{displayName(profile)}</h1>
+            {profile.plus_badge && (
+              <span className="px-2 py-0.5 rounded bg-primary text-on-primary text-[10px] font-black uppercase tracking-widest">Plus</span>
+            )}
             {profile.role === "organizer" && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded border border-primary/40 bg-primary/10 text-[10px] font-black text-primary uppercase tracking-widest">
                 Organizer

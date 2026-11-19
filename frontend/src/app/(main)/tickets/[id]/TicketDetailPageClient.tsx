@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
+import { TransferTicket } from "@/components/events/TransferTicket";
 
 const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   confirmed: { icon: CheckCircle2, label: "Confirmed", cls: "text-success bg-success/10 border-success/30" },
@@ -206,6 +207,8 @@ export default function TicketDetailPage() {
             <p className="text-sm text-text-muted">QR code available once your ticket is confirmed</p>
           </div>
         ) : null}
+
+        {isConfirmed && !displayTicket!.checked_in_at && <TransferTicket orderId={displayTicket!.id} />}
 
         {/* Share event */}
         {displayTicket!.event_slug && (
