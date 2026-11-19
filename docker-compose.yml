@@ -33,6 +33,17 @@ x-backend: &backend
     SMTP_USER: ${SMTP_USER:-}
     SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     SMTP_FROM: ${SMTP_FROM:-noreply@turnup.app}
+    # Object storage and off-server backups (any S3-compatible service; see the Oracle guide).
+    STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+    S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+    S3_REGION: ${S3_REGION:-auto}
+    S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+    S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+    S3_BUCKET: ${S3_BUCKET:-}
+    S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+    BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+    BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+    OFFSITE_KEEP_DAYS: ${OFFSITE_KEEP_DAYS:-30}
     PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
     PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
     GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -106,7 +117,9 @@ services:
       <<: *backend-env
       RUN_SCHEDULER: "true"
     volumes:
-      - kyc:/app/data/kyc   # the worker deletes KYC files when their retention ends
+      - kyc:/app/data/kyc            # KYC retention, and the encrypted off-server copies
+      - uploads:/app/data/uploads    # weekly cleanup of unused uploads (local storage)
+      - db-backups:/backups:ro       # newest dump, copied off the server encrypted
     depends_on:
       migrate:
         condition: service_completed_successfully
