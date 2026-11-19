@@ -56,6 +56,11 @@ class TicketTier(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sale_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sale_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Turnup+: members-only tier (guest list), or a members' presale until plus_presale_ends_at,
+    # after which the tier opens to everyone ("open") or stops selling ("close").
+    members_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    plus_presale_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    presale_then: Mapped[str] = mapped_column(String(10), default="open", server_default="open")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     event = relationship("Event", back_populates="ticket_tiers")
@@ -90,6 +95,10 @@ class TicketOrder(Base):
     # the buyer is never charged more than total_price.
     platform_fee_percent: Mapped[float | None] = mapped_column(Float)
     platform_fee_amount: Mapped[float | None] = mapped_column(Float)
+    # Venue-hosted events are paid to the venue's Paystack subaccount; recovery_kobo is the part
+    # of this payment Turnup kept towards the venue's balance (spec 4.5).
+    venue_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    recovery_kobo: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="ticket_orders")

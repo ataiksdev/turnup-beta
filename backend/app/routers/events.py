@@ -85,6 +85,9 @@ def _serialize(event: Event, is_saved: bool = False,
         "is_waitlisted": is_waitlisted,
         "review_status": event.review_status, "review_note": event.review_note,
         "created_via": event.created_via, "refund_policy": event.refund_policy,
+        "host_venue_id": event.host_venue_id, "venue_id": event.venue_id,
+        "members_only": event.members_only, "fast_lane_enabled": event.fast_lane_enabled,
+        "allow_ticket_transfers": event.allow_ticket_transfers,
     }
 
 
@@ -115,19 +118,30 @@ async def _user_states(event_ids: list[str], user: User | None, db: AsyncSession
     return {eid: (eid in saved, attending.get(eid), eid in waitlisted) for eid in event_ids}
 
 
-async def _require_event_access(event_id: str, user: User, db: AsyncSession) -> Event:
-    """Returns event if user is host or accepted co-host."""
-    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
-    if not event:
-        raise HTTPException(404, "Event not found")
+async def _has_event_access(event: Event, user: User, db: AsyncSession, venue_role: str = "manager") -> bool:
+    """Host, accepted co-host, or (for a venue-hosted event) a venue Owner/Manager."""
     if event.host_id == user.id:
-        return event
+        return True
     ch = (await db.execute(select(EventCoHost).where(
-        EventCoHost.event_id == event_id,
+        EventCoHost.event_id == event.id,
         EventCoHost.user_id == user.id,
         EventCoHost.status == "accepted",
     ))).scalar_one_or_none()
-    if not ch:
+    if ch:
+        return True
+    if event.host_venue_id:
+        from app.services.venue_access import ROLE_RANK, get_membership
+        m = await get_membership(db, event.host_venue_id, user.id)
+        return bool(m and ROLE_RANK[m.role] >= ROLE_RANK[venue_role])
+    return False
+
+
+async def _require_event_access(event_id: str, user: User, db: AsyncSession) -> Event:
+    """Returns event if user is host, accepted co-host, or a manager of the hosting venue."""
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if not await _has_event_access(event, user, db):
         raise HTTPException(403, "Not authorized for this event")
     return event
 
@@ -500,10 +514,31 @@ async def paystack_webhook(
         raise HTTPException(401, "Invalid signature")
 
     payload = json.loads(raw)
-    if payload.get("event") != "charge.success":
-        return {"status": "ignored"}
+    event_name = payload.get("event") or ""
+    data = payload.get("data") or {}
+    reference = data.get("reference") or ""
 
-    reference = payload.get("data", {}).get("reference")
+    # Venue marketplace and subscriptions (docs/venues-spec.md).
+    if event_name.startswith("charge.dispute."):
+        from app.services.chargebacks import record_dispute_event
+        return {"status": await record_dispute_event(db, event_name, data)}
+    if event_name.startswith(("subscription.", "invoice.")):
+        from app.services.plus import handle_subscription_event
+        return {"status": await handle_subscription_event(db, event_name, data)}
+    if event_name != "charge.success":
+        return {"status": "ignored"}
+    if reference.startswith("sub_"):
+        from app.services.plus import activate_first_payment
+        await activate_first_payment(db, reference, data)
+        return {"status": "ok"}
+    if reference.startswith(("vb_", "vr_", "vd_", "vf_")):
+        from app.services.venue_money import settle_venue_payment
+        return {"status": (await settle_venue_payment(db, reference, data)).status}
+    if isinstance(data.get("plan"), dict) and data["plan"].get("plan_code"):
+        # A subscription renewal: Paystack makes its own reference.
+        from app.services.plus import handle_subscription_event
+        return {"status": await handle_subscription_event(db, "charge.success", data)}
+
     orders = (await db.execute(select(TicketOrder).where(
         TicketOrder.payment_reference == reference))).scalars().all()
     if not orders:
@@ -608,6 +643,12 @@ async def create_event(
         data["review_status"] = "pending"
         data["status"] = "draft"
 
+    if data.get("venue_id"):
+        from app.models.venue import Venue
+        if not (await db.execute(select(Venue.id).where(
+                Venue.id == data["venue_id"], Venue.status == "live"))).first():
+            raise HTTPException(400, "That venue isn't listed on Turnup.")
+
     eid = str(uuid.uuid4())
     event = Event(id=eid, slug=_slugify(payload.title, eid),
                   host_id=user.id, template_id=template_id, **data)
@@ -616,6 +657,9 @@ async def create_event(
     if event.status == "published":
         await db.execute(update(User).where(User.id == user.id).values(
             events_hosted=User.events_hosted + 1))
+        if event.review_status == "approved":
+            from app.services.alerts import announce_event
+            await announce_event(db, event)
     stmt = select(Event).options(*_load()).where(Event.id == eid)
     return _serialize((await db.execute(stmt)).scalar_one())
 
@@ -716,7 +760,7 @@ async def delete_event(
     event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found")
-    if event.host_id != user.id:
+    if event.host_id != user.id and not (event.host_venue_id and await _has_event_access(event, user, db)):
         raise HTTPException(403, "Only the host can delete this event")
     # Deleting would also delete buyers' tickets and the payment records needed to refund them.
     sold = (await db.execute(select(func.count(TicketOrder.id)).where(
@@ -1026,10 +1070,14 @@ async def create_ticket_tier(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    await _require_event_access(event_id, user, db)
+    event = await _require_event_access(event_id, user, db)
     t = TicketTier(id=str(uuid.uuid4()), event_id=event_id, **payload.model_dump())
     db.add(t)
     await db.flush()
+    if t.plus_presale_ends_at and _as_utc(t.plus_presale_ends_at) > datetime.now(timezone.utc) \
+            and event.status == "published":
+        from app.services.alerts import notify_presale
+        await notify_presale(db, event, t.name)
     return _tier_out(t)
 
 
@@ -1106,6 +1154,11 @@ async def checkout_tickets(
                 is_free=(total == 0),
             )
 
+    from app.services.plus import is_plus
+    member = is_plus(user)
+    if event.members_only and not member:
+        raise HTTPException(402, "This event is for Turnup+ members.")
+
     now = datetime.now(timezone.utc)
     reference = f"turnup-{uuid.uuid4().hex[:16]}"
     orders: list[TicketOrder] = []
@@ -1115,6 +1168,15 @@ async def checkout_tickets(
         t = await _get_tier(item.tier_id, event_id, db)
         if not t.is_active:
             raise HTTPException(400, f"'{t.name}' is not available")
+        if t.members_only and not member:
+            raise HTTPException(402, f"'{t.name}' is for Turnup+ members.")
+        if t.plus_presale_ends_at:
+            presale_end = _as_utc(t.plus_presale_ends_at)
+            if now < presale_end and not member:
+                raise HTTPException(402, f"'{t.name}' is in a Turnup+ members' presale until "
+                                         f"{presale_end:%d %b, %H:%M} UTC.")
+            if now >= presale_end and t.presale_then == "close":
+                raise HTTPException(400, f"The presale for '{t.name}' has ended")
         if t.sale_start and now < t.sale_start:
             raise HTTPException(400, f"Sales for '{t.name}' have not started yet")
         if t.sale_end and now > t.sale_end:
@@ -1160,10 +1222,28 @@ async def checkout_tickets(
     # Paid — init one Paystack transaction for the summed total (amount in kobo)
     amount_kobo = to_kobo(total)
     email = user.email or f"{user.username}@turnup.app"
+    split: dict = {}
+    if event.host_venue_id:
+        # Venue-hosted: paid to the venue's subaccount, Turnup keeps the ticket fee plus any
+        # recovery of what the venue owes (docs/venues-spec.md 4.5, 4.6).
+        from app.models.venue import Venue
+        from app.services.settings import get_platform_settings
+        from app.services.venue_money import plan_split
+        venue = (await db.execute(select(Venue).where(Venue.id == event.host_venue_id))).scalar_one_or_none()
+        if venue and venue.paystack_subaccount_code:
+            fee_percent = (await get_platform_settings(db)).ticket_fee_percent
+            fee, recovery, _ = await plan_split(db, venue, amount_kobo, fee_percent)
+            split = dict(subaccount=venue.paystack_subaccount_code, transaction_charge=fee + recovery,
+                         bearer="subaccount")
+            for i, o in enumerate(orders):
+                o.venue_id = venue.id
+                o.recovery_kobo = recovery if i == 0 else 0
+            await db.flush()
     try:
         await initialize_transaction(
             email=email, amount_kobo=amount_kobo, reference=reference,
             metadata={"order_ids": [o.id for o in orders], "event_id": event_id},
+            **split,
         )
     except PaystackConfigError as e:
         raise HTTPException(503, str(e))
@@ -1245,6 +1325,8 @@ def _tier_out(t: TicketTier) -> TicketTierOut:
         quantity_sold=t.quantity_sold, available=available,
         max_per_order=t.max_per_order, is_active=t.is_active,
         sale_start=t.sale_start, sale_end=t.sale_end, created_at=t.created_at,
+        members_only=bool(t.members_only), plus_presale_ends_at=t.plus_presale_ends_at,
+        presale_then=t.presale_then or "open",
     )
 
 
@@ -1466,14 +1548,15 @@ async def notify_waitlist(
 ):
     event = await _require_event_access(event_id, user, db)
     now = datetime.now(timezone.utc)
-    result = await db.execute(
+    # Turnup+ members are offered spots first, then everyone else in order (spec 4.8 perk 2).
+    from app.services.plus import is_plus
+    waiting = (await db.execute(
         select(EventWaitlist)
         .options(selectinload(EventWaitlist.user))
         .where(EventWaitlist.event_id == event_id, EventWaitlist.status == "waiting")
         .order_by(EventWaitlist.position.asc())
-        .limit(payload.count)
-    )
-    entries = result.scalars().all()
+    )).scalars().all()
+    entries = sorted(waiting, key=lambda e: (0 if is_plus(e.user) else 1, e.position))[:payload.count]
     notified = []
     for entry in entries:
         entry.status = "notified"
@@ -1511,17 +1594,8 @@ async def check_in_ticket(
     )).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found")
-    if event.host_id != user.id:
-        # Also allow co-hosts
-        cohost = (await db.execute(
-            select(EventCoHost).where(
-                EventCoHost.event_id == event_id,
-                EventCoHost.user_id == user.id,
-                EventCoHost.status == "accepted",
-            )
-        )).scalar_one_or_none()
-        if not cohost:
-            raise HTTPException(403, "Only the event host or a co-host can check in attendees")
+    if not await _has_event_access(event, user, db, venue_role="viewer"):
+        raise HTTPException(403, "Only the event host or a co-host can check in attendees")
 
     order = (await db.execute(
         select(TicketOrder)
@@ -1547,6 +1621,7 @@ async def check_in_ticket(
         if order.user else "Attendee"
     )
 
+    from app.services.plus import is_plus
     return CheckInResult(
         order_id=order.id,
         ticket_code=order.ticket_code,
@@ -1554,6 +1629,8 @@ async def check_in_ticket(
         tier_name=order.tier.name,
         quantity=order.quantity,
         checked_in_at=order.checked_in_at,
+        # Checked at scan time, so a lapsed membership doesn't get the fast lane.
+        fast_lane=bool(event.fast_lane_enabled and is_plus(order.user)),
     )
 
 

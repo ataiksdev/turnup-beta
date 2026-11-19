@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # serves /api/* (defaults to FRONTEND_URL, since the frontend proxies /api to the backend).
     upload_dir: str = "data/uploads"
     public_base_url: str = ""
+    # Venue verification documents (CAC, IDs, agent visit photos). Private: never served by
+    # /api/uploads; only through short-lived signed links after an access check. Keep it on
+    # its own volume (docker-compose.yml) and out of public backups.
+    kyc_dir: str = "data/kyc"
+    venue_video_max_mb: int = 100
+    venue_video_max_seconds: int = 60
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/turnup.db"

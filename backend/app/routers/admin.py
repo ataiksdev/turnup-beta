@@ -368,6 +368,8 @@ async def approve_event(
     if not was_published:  # re-approving an edited, still-live event isn't a new event
         await db.execute(update(User).where(User.id == ev.host_id).values(
             events_hosted=User.events_hosted + 1))
+        from app.services.alerts import announce_event
+        await announce_event(db, ev)
     return _admin_event_out(ev)
 
 

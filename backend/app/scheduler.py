@@ -38,6 +38,35 @@ async def run_expire_pending_orders():
             logger.exception("Pending-order expiry sweep failed")
 
 
+async def _run(name: str, fn):
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await fn(db)
+            logger.info("%s: %s", name, result)
+        except Exception:
+            logger.exception("%s failed", name)
+
+
+async def run_marketplace_frequent():
+    """Venue payments/bookings, refund penalties, early alerts (docs/venues-spec.md)."""
+    from app.services.alerts import send_due_alerts
+    from app.services.venue_booking import run_booking_sweeps
+    from app.services.venue_money import run_refund_penalties
+    await _run("Venue booking sweeps", run_booking_sweeps)
+    await _run("Refund penalties", run_refund_penalties)
+    await _run("Scheduled follower alerts", send_due_alerts)
+
+
+async def run_marketplace_daily():
+    from app.services.housekeeping import daily_marketplace
+    await _run("Marketplace daily", daily_marketplace)
+
+
+async def run_weekend_picks():
+    from app.services.picks import send_weekend_picks
+    await _run("Weekend picks", send_weekend_picks)
+
+
 def build_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     # Ticket-order expiry is core payment hygiene, so it always runs; the scout is added
@@ -47,6 +76,13 @@ def build_scheduler() -> AsyncIOScheduler:
         id="expire_pending_orders", replace_existing=True,
         max_instances=1, coalesce=True,
     )
+    scheduler.add_job(run_marketplace_frequent, IntervalTrigger(minutes=10), id="marketplace_frequent",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    scheduler.add_job(run_marketplace_daily, CronTrigger(hour=2, minute=17), id="marketplace_daily",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    # Thursdays 16:00 Lagos (15:00 UTC).
+    scheduler.add_job(run_weekend_picks, CronTrigger(day_of_week="thu", hour=15, minute=7), id="weekend_picks",
+                      replace_existing=True, max_instances=1, coalesce=True)
     if settings.ai_provider_api_key:
         scheduler.add_job(
             run_scheduled_scout, CronTrigger(hour=settings.scout_hour_utc, minute=0),

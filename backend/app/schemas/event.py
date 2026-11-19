@@ -40,6 +40,10 @@ class EventCreate(BaseModel):
     template_id: str | None = None  # optional: create from template
     created_via: str = Field("manual", pattern=r"^(manual|ai_agent)$")
     refund_policy: str | None = None
+    venue_id: str | None = None  # link to a listed venue
+    members_only: bool = False
+    fast_lane_enabled: bool = False
+    allow_ticket_transfers: bool = True
 
     @model_validator(mode="after")
     def _check_ranges(self):
@@ -69,6 +73,9 @@ class EventUpdate(BaseModel):
     status: str | None = Field(None, pattern=r"^(draft|published|cancelled|completed)$")
     tags: str | None = None
     refund_policy: str | None = None
+    members_only: bool | None = None
+    fast_lane_enabled: bool | None = None
+    allow_ticket_transfers: bool | None = None
 
 
 class EventOut(BaseModel):
@@ -107,6 +114,11 @@ class EventOut(BaseModel):
     review_note: str | None = None
     created_via: str = "manual"
     refund_policy: str | None = None
+    host_venue_id: str | None = None
+    venue_id: str | None = None
+    members_only: bool = False
+    fast_lane_enabled: bool = False
+    allow_ticket_transfers: bool = True
     # Only populated by GET /events/following (network-based discovery)
     following_count: int = 0
     following_hosted: bool = False

@@ -29,7 +29,8 @@ MAX_BYTES = 8 * 1024 * 1024        # what we'll read from the client
 MAX_PIXELS = 40_000_000            # refuse decompression bombs before decoding them fully
 MAX_SIDE = 2000                    # stored images are scaled down to fit this box
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF"}
-_NAME = re.compile(r"^[0-9a-f]{32}\.(webp|jpg)$")
+_NAME = re.compile(r"^[0-9a-f]{32}\.(webp|jpg|mp4|webm)$")
+_MEDIA_TYPES = {"webp": "image/webp", "jpg": "image/jpeg", "mp4": "video/mp4", "webm": "video/webm"}
 
 
 def _upload_dir() -> Path:
@@ -86,6 +87,37 @@ async def upload_image(
     return {"url": _public_url(name)}
 
 
+@router.post("/video", status_code=201)
+@limiter.limit("10/hour")
+async def upload_video(
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+):
+    """Venue videos (docs/venues-spec.md 4.9). Checked by content, limited in size and length,
+    and re-encoded to MP4 with ffmpeg (which also strips metadata and makes a poster image).
+    Without ffmpeg the original MP4/WebM is stored as is."""
+    from app.services.kyc_store import detect_video
+    from app.services.video import process_video
+    limit = settings.venue_video_max_mb * 1024 * 1024
+    raw = await file.read(limit + 1)
+    if len(raw) > limit:
+        raise HTTPException(413, f"Videos can be up to {settings.venue_video_max_mb} MB.")
+    kind = detect_video(raw)
+    if not kind:
+        raise HTTPException(415, "Upload an MP4, MOV or WebM video.")
+    name = uuid.uuid4().hex
+    video, ext, poster, duration = await process_video(raw, kind[1], settings.venue_video_max_seconds)
+    (_upload_dir() / f"{name}.{ext}").write_bytes(video)
+    poster_url = None
+    if poster:
+        pdata, pext = _reencode(poster)
+        pname = f"{uuid.uuid4().hex}.{pext}"
+        (_upload_dir() / pname).write_bytes(pdata)
+        poster_url = _public_url(pname)
+    return {"url": _public_url(f"{name}.{ext}"), "poster_url": poster_url, "duration_s": duration}
+
+
 @router.get("/{name}")
 async def get_upload(name: str):
     if not _NAME.match(name):  # random names only: no paths, no traversal
@@ -94,7 +126,7 @@ async def get_upload(name: str):
     if not path.is_file():
         raise HTTPException(404, "Not found")
     return FileResponse(
-        path, media_type="image/webp" if name.endswith(".webp") else "image/jpeg",
+        path, media_type=_MEDIA_TYPES[name.rsplit(".", 1)[1]],
         headers={
             "Cache-Control": "public, max-age=31536000, immutable",  # names never change
             "X-Content-Type-Options": "nosniff",
