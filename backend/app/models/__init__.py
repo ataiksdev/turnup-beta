@@ -9,6 +9,8 @@ from app.models.organizer import (
     EventCoHost, EventWaitlist, EventView, EventReview,
 )
 
+from app.models import venue as _venue  # noqa: F401  (registers venue marketplace tables)
+
 __all__ = [
     "User", "Category", "Event", "EventAttendee", "EventSave",
     "Comment", "Follow", "Notification",

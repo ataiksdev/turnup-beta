@@ -87,6 +87,9 @@ services:
       # Uploaded images. Shared by all API workers on this host; for several hosts use
       # shared storage or an object store (see backend/app/routers/uploads.py).
       - uploads:/app/data/uploads
+      # Venue verification documents (private, never served publicly). Not in the public
+      # uploads volume, and not in database backups: back it up separately if needed.
+      - kyc:/app/data/kyc
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -102,6 +105,8 @@ services:
     environment:
       <<: *backend-env
       RUN_SCHEDULER: "true"
+    volumes:
+      - kyc:/app/data/kyc   # the worker deletes KYC files when their retention ends
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -164,5 +169,6 @@ volumes:
   db-data:
   db-backups:
   uploads:
+  kyc:
   caddy-data:
   caddy-config:

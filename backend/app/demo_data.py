@@ -101,6 +101,26 @@ USERS = [
         "prefs": "comedy,music,nightlife",
         "role": "organizer",
     },
+    {
+        "username": "bola_venues",
+        "full_name": "Bola Ogunleye",
+        "email": "bola@turnup.ng",
+        "bio": "Owner, The Grand Pavilion (Lekki) and Skyline Rooftop (VI).",
+        "location": "Lagos, Nigeria",
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=bola",
+        "prefs": "music,nightlife",
+        "role": "attendee",
+    },
+    {
+        "username": "kemi_agent",
+        "full_name": "Kemi Balogun",
+        "email": "kemi@turnup.ng",
+        "bio": "Turnup venue agent, Lagos and Ogun.",
+        "location": "Lagos, Nigeria",
+        "avatar": "https://api.dicebear.com/9.x/avataaars/svg?seed=kemi",
+        "prefs": "music",
+        "role": "attendee",
+    },
 ]
 
 # ── Categories ─────────────────────────────────────────────────────────────────
@@ -757,6 +777,8 @@ async def run(reset: bool = False):
         print(f"✓ {len(saves)} saves for adaeze_sounds")
 
         await _seed_extras(db, user_ids, event_ids, cat_ids, events_data)
+        from app.demo_marketplace import seed_marketplace
+        await seed_marketplace(db, user_ids, event_ids)
 
     # A --reset wipe also removes the ai_scout bot account and platform settings that
     # init_db() creates; recreate them now that the demo users are back in place.

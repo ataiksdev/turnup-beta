@@ -108,6 +108,14 @@ class Event(Base):
     created_via: Mapped[str] = mapped_column(String(20), default="manual")  # manual | ai_agent
 
     host_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # Venue marketplace: a venue-hosted event shows the venue as host (host_id stays the member
+    # who created it). venue_id is where it takes place (linked listing).
+    host_venue_id: Mapped[str | None] = mapped_column(ForeignKey("venues.id", ondelete="SET NULL"), index=True)
+    venue_id: Mapped[str | None] = mapped_column(ForeignKey("venues.id", ondelete="SET NULL"), index=True)
+    # Turnup+ options
+    members_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    fast_lane_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    allow_ticket_transfers: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     category_id: Mapped[str | None] = mapped_column(ForeignKey("categories.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

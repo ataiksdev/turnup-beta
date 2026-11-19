@@ -47,6 +47,10 @@ class TicketTierCreate(BaseModel):
     is_active: bool = True
     sale_start: datetime | None = None
     sale_end: datetime | None = None
+    # Turnup+ (docs/venues-spec.md 4.8): members-only tier (guest list), or a members' presale
+    members_only: bool = False
+    plus_presale_ends_at: datetime | None = None
+    presale_then: str = Field("open", pattern=r"^(open|close)$")
 
 
 class TicketTierUpdate(BaseModel):
@@ -58,6 +62,9 @@ class TicketTierUpdate(BaseModel):
     is_active: bool | None = None
     sale_start: datetime | None = None
     sale_end: datetime | None = None
+    members_only: bool | None = None
+    plus_presale_ends_at: datetime | None = None
+    presale_then: str | None = Field(None, pattern=r"^(open|close)$")
 
 
 class TicketTierOut(BaseModel):
@@ -75,6 +82,9 @@ class TicketTierOut(BaseModel):
     sale_start: datetime | None
     sale_end: datetime | None
     created_at: datetime
+    members_only: bool = False
+    plus_presale_ends_at: datetime | None = None
+    presale_then: str = "open"
     model_config = {"from_attributes": True}
 
 
@@ -244,6 +254,7 @@ class CheckInResult(BaseModel):
     tier_name: str
     quantity: int
     checked_in_at: datetime
+    fast_lane: bool = False  # Turnup+ member at an event with a fast lane
 
 
 class ReviewCreate(BaseModel):

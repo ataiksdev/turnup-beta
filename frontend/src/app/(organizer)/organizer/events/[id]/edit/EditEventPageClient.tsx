@@ -17,6 +17,7 @@ import {
 import { useRouteParam } from "@/lib/useRouteParam";
 import { ImageUploadButton } from "@/components/ui/ImageUploadButton";
 import { TierManager } from "@/components/organizer/TierManager";
+import { EventDealsManager } from "@/components/organizer/EventDealsManager";
 
 type EventType = "physical" | "virtual" | "hybrid";
 
@@ -45,6 +46,9 @@ interface FormState {
   timezone: string;
   capacity: string;
   waitlist_enabled: boolean;
+  members_only: boolean;
+  fast_lane_enabled: boolean;
+  allow_ticket_transfers: boolean;
   is_free: boolean;
   tags: string;
   status: string;
@@ -153,6 +157,7 @@ export default function EditEventPage() {
     event_type: "physical", venue_name: "", address: "", city: "", country: "US", meeting_url: "",
     start_date: "", end_date: "", timezone: "Africa/Lagos",
     capacity: "", waitlist_enabled: false,
+    members_only: false, fast_lane_enabled: false, allow_ticket_transfers: true,
     is_free: true, tags: "", status: "published",
     newTiers: [],
   });
@@ -193,6 +198,9 @@ export default function EditEventPage() {
       timezone: event.timezone ?? "Africa/Lagos",
       capacity: event.capacity ? String(event.capacity) : "",
       waitlist_enabled: event.waitlist_enabled ?? false,
+      members_only: event.members_only ?? false,
+      fast_lane_enabled: event.fast_lane_enabled ?? false,
+      allow_ticket_transfers: event.allow_ticket_transfers ?? true,
       is_free: event.is_free ?? true,
       tags: event.tags ?? "",
       status: event.status ?? "published",
@@ -265,6 +273,9 @@ export default function EditEventPage() {
         is_free: form.is_free,
         capacity: form.capacity ? Number(form.capacity) : undefined,
         waitlist_enabled: form.waitlist_enabled,
+        members_only: form.members_only,
+        fast_lane_enabled: form.fast_lane_enabled,
+        allow_ticket_transfers: form.allow_ticket_transfers,
         tags: form.tags.trim() || undefined,
         ...(publishStatus ? { status: publishStatus } : {}),
       } as any);
@@ -436,7 +447,16 @@ export default function EditEventPage() {
       </FieldWrap>
 
       <Toggle value={form.waitlist_enabled} onChange={set("waitlist_enabled")}
-        label="Enable waitlist" description="Let people join when capacity is full" />
+        label="Enable waitlist" description="Let people join when capacity is full (Turnup+ members are offered spots first)" />
+
+      <p className="text-xs font-black uppercase tracking-widest text-primary pt-2">Turnup+</p>
+      <Toggle value={form.members_only} onChange={set("members_only")}
+        label="Members-only event" description="Everyone can see it; only Turnup+ members can RSVP or buy" />
+      <Toggle value={form.fast_lane_enabled} onChange={set("fast_lane_enabled")}
+        label="Fast lane" description="The door scanner shows FAST LANE for Turnup+ members' tickets" />
+      <Toggle value={form.allow_ticket_transfers} onChange={set("allow_ticket_transfers")}
+        label="Allow ticket transfers" description="Members can send their ticket to another Turnup user before the event" />
+      <EventDealsManager eventId={id} />
     </div>
   );
 

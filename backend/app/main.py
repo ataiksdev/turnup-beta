@@ -16,6 +16,7 @@ from app.routers import series
 from app.routers import admin
 from app.routers import communities
 from app.routers import uploads
+from app.routers import admin_venues, agents, plus, venue_bookings, venue_portal, venues
 
 os.makedirs("data", exist_ok=True)
 logger = logging.getLogger("turnup")
@@ -71,6 +72,12 @@ app.include_router(series.router)
 app.include_router(admin.router)
 app.include_router(communities.router)
 app.include_router(uploads.router)
+app.include_router(venues.router)
+app.include_router(venue_portal.router)
+app.include_router(venue_bookings.router)
+app.include_router(agents.router)
+app.include_router(admin_venues.router)
+app.include_router(plus.router)
 
 
 @app.get("/api/health")

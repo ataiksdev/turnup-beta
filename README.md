@@ -1,8 +1,9 @@
 # Turnup
 
 Event discovery and ticketing: find events, RSVP, buy tickets (Paystack), check in at the
-door, run events as an organizer, and moderate as an admin. Ships as a website and an
-Android app (Capacitor).
+door, run events as an organizer, and moderate as an admin. Plus a **venue marketplace**
+(venues list their spaces, organizers enquire, get quotes and pay through Turnup) and
+**Turnup+** memberships. Ships as a website and an Android app (Capacitor).
 
 | Part | Stack | Folder |
 |---|---|---|
@@ -42,6 +43,34 @@ With Docker: `docker compose run --rm migrate python -m app.cli seed`. It create
 (`admin@turnup.ng`), organizers (`adaeze@`, `seun@`, `dayo@turnup.ng`) and attendees
 (`tunde@`, `chiamaka@turnup.ng`), with events, tickets (some checked in), communities,
 reviews, comments, a waitlist, and items waiting in the admin approval and verification queues.
+For the venue marketplace: a venue owner (`bola@turnup.ng`, at /venue), an agent
+(`kemi@turnup.ng`, at /agent), venues at every verification stage, enquiries, bookings, a
+refund waiting for the venue, a featured slot and deals; `chiamaka@` is a Turnup+ member.
+
+## Venue marketplace and Turnup+
+
+Spec and decisions: [`docs/venues-spec.md`](docs/venues-spec.md). In short:
+
+| Who | Where |
+|---|---|
+| Organizers and attendees | `/venues` (search by state, area or near me), venue pages, `/enquiries`, `/venue-bookings`, `/plus` |
+| Venue teams (Owner / Manager / Viewer) | `/venue` (web only: listing, verification, payouts, enquiries and quotes, calendar, refunds, team, deals, Pro, featured) |
+| Agents | `/agent` (web only: assigned visits, documents, GPS check-in, report) |
+| Admins | `/admin/venues`, `/admin/marketplace` (disputes, refunds, reports, chargebacks, agents, areas, prices) |
+
+- Payments go through Paystack **split**: the venue's share goes straight to its subaccount,
+  Turnup's commission (and any recovery of what the venue owes) is the `transaction_charge`.
+- **Refunds are always paid by the venue.** The venue pays each refund in; Turnup then
+  refunds the organizer. Late refunds trigger penalties (pause, recovery from later payouts,
+  suspension, a claim pack for the organizer). Turnup never advances its own money.
+- Venue verification files are stored privately (`KYC_DIR`, its own Docker volume) and only
+  served through short-lived signed links; every view is logged.
+- Video uploads use ffmpeg when it's installed (it is in the Docker image).
+- The worker runs the marketplace jobs: expiring unpaid checkouts, completing bookings,
+  balance reminders, the unpaid-refund penalty timeline, early alerts, subscriptions,
+  featured slots, KYC retention, Thursday weekend picks and December Wrapped.
+
+`scripts/e2e/marketplace.js` drives the main journeys in a browser (instructions in the file).
 
 ## Database migrations
 

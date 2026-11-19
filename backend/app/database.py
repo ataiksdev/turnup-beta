@@ -36,6 +36,49 @@ async def get_db():
             raise
 
 
+# Added by migrations after the baseline (0001). A database from before migrations gets only
+# the baseline schema created for missing tables; the later migrations then add these. Keep
+# this in step when a migration adds a column to a baseline table or adds a table.
+POST_BASELINE_COLUMNS = {
+    "users": {"theme_preference", "plus_until", "show_plus_badge", "wrapped_opt_in"},       # 0002, 0003
+    "events": {"host_venue_id", "venue_id", "members_only", "fast_lane_enabled",            # 0003
+               "allow_ticket_transfers"},
+    "ticket_tiers": {"members_only", "plus_presale_ends_at", "presale_then"},               # 0003
+    "ticket_orders": {"venue_id", "recovery_kobo"},                                         # 0003
+    "platform_settings": {"venue_commission_percent", "featured_state_week_kobo",           # 0003
+                          "featured_area_week_kobo", "featured_max_per_state", "featured_max_per_area",
+                          "max_recovery_percent", "refund_funding_hours", "refund_suspend_days",
+                          "refund_referral_days", "venue_debt_pause_days", "strike_suspend_count",
+                          "dispute_window_hours", "free_photo_limit", "pro_photo_limit", "free_video_limit",
+                          "pro_video_limit", "free_team_seats", "pro_team_seats", "plus_early_alert_hours",
+                          "subscription_grace_days", "refund_presets"},
+}
+
+
+def _post_baseline_tables() -> set[str]:
+    """Every table defined in app/models/venue.py (migration 0003)."""
+    from app.models import venue
+    return {m.__tablename__ for m in vars(venue).values()
+            if isinstance(m, type) and issubclass(m, Base) and m is not Base and hasattr(m, "__tablename__")}
+
+
+def baseline_metadata():
+    """The models' schema minus everything added after the baseline migration."""
+    from sqlalchemy import MetaData, Table, UniqueConstraint
+    meta = MetaData()
+    later_tables = _post_baseline_tables()
+    for t in Base.metadata.sorted_tables:
+        if t.name in later_tables:
+            continue
+        drop = POST_BASELINE_COLUMNS.get(t.name, set())
+        cols = [c._copy() for c in t.columns if c.name not in drop]
+        uniques = [UniqueConstraint(*[c.name for c in uc.columns])
+                   for uc in t.constraints if isinstance(uc, UniqueConstraint)
+                   and all(c.name not in drop for c in uc.columns) and len(uc.columns) > 1]
+        Table(t.name, meta, *cols, *uniques)
+    return meta
+
+
 async def _legacy_column_patches(conn):
     """Only for databases created before Alembic was introduced: the app used to build its
     schema with create_all() plus this list of ADD COLUMNs at every startup. Brings such a
@@ -141,7 +184,7 @@ async def migrate_db():
     from sqlalchemy import inspect
 
     from app.models import (  # noqa: F401
-        user, event, social, auth_tokens, organizer, community, scout,
+        user, event, social, auth_tokens, organizer, community, scout, venue,
     )
     from app.models import settings as settings_model  # noqa: F401
 
@@ -149,7 +192,8 @@ async def migrate_db():
         tables = set(await conn.run_sync(lambda c: inspect(c).get_table_names()))
         legacy = "users" in tables and "alembic_version" not in tables
         if legacy:
-            await conn.run_sync(Base.metadata.create_all)  # tables added since it was created
+            # Baseline tables added since it was created (later ones come from migrations).
+            await conn.run_sync(baseline_metadata().create_all)
             await _legacy_column_patches(conn)
 
     cfg = alembic_config()
@@ -164,3 +208,13 @@ async def init_db():
     async with AsyncSessionLocal() as session:
         await _ensure_scout_bot(session)
         await _ensure_platform_settings(session)
+        await ensure_marketplace_defaults(session)
+
+
+async def ensure_marketplace_defaults(session):
+    """Seed the places list and subscription plans if missing (idempotent)."""
+    from app.services.places import ensure_areas
+    from app.services.plus import ensure_plans
+    await ensure_areas(session)
+    await ensure_plans(session)
+    await session.commit()

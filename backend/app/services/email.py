@@ -220,3 +220,10 @@ async def send_refund_email(
         return
     html = _refund_html(event_title or "Event", tier_name, quantity, total_price)
     await _send(to, _subject(f"Your ticket for {event_title} was refunded"), html)
+
+
+async def send_email(to: str, subject: str, body_html: str, title: str | None = None) -> None:
+    """A simple notification email in the house style. body_html must already be escaped."""
+    if not to:
+        return
+    await _send(to, _subject(subject), _base(_esc(title or subject), body_html))

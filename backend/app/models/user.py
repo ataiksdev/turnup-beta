@@ -53,6 +53,11 @@ class User(Base):
     # app/schemas/user.py THEME_IDS and frontend/src/lib/themes.ts.
     theme_preference: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
+    # Turnup+ (cached from subscriptions; see app/services/plus.py)
+    plus_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    show_plus_badge: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    wrapped_opt_in: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

@@ -289,6 +289,11 @@ async def settle_paid_orders(
             )
             (result.refunded_unavailable if new_status == "refunded" else result.needs_refund).append(order)
 
+    # Venue-hosted event paid by split: what Turnup kept towards the venue's balance.
+    first = orders[0] if orders else None
+    if result.newly_confirmed and first and first.venue_id and (first.recovery_kobo or 0) > 0:
+        await _apply_ticket_recovery(db, first)
+
     # Side effects: RSVP, in-app notifications, emails.
     events: dict[str, Event] = {}
     users: dict[str, User | None] = {}
@@ -400,3 +405,17 @@ async def run_expire_pending_orders(db: AsyncSession, older_than_minutes: int) -
                 summary.expired += 1
     await db.commit()
     return summary
+
+
+async def _apply_ticket_recovery(db: AsyncSession, order: TicketOrder) -> None:
+    from app.models.venue import Venue, VenueLedgerEntry
+    from app.services.venue_money import apply_recovery, pay_out_refund, restore_venue_if_clear
+    done = (await db.execute(select(VenueLedgerEntry.id).where(
+        VenueLedgerEntry.payment_reference == order.payment_reference,
+        VenueLedgerEntry.kind == "recovered"))).first()
+    if done:
+        return
+    for rr in await apply_recovery(db, order.venue_id, order.recovery_kobo, order.payment_reference):
+        await pay_out_refund(db, rr)
+    venue = (await db.execute(select(Venue).where(Venue.id == order.venue_id))).scalar_one()
+    await restore_venue_if_clear(db, venue)

@@ -39,6 +39,9 @@ export const routes = {
   organizerEvent: (id: Id, section: OrganizerSection) =>
     path(`/organizer/events/${enc(id)}/${section}`, `/organizer/events/view/${section}`, { id }),
   series: (id: Id) => path(`/organizer/series/${enc(id)}`, "/organizer/series/view", { id }),
+  venue: (slug: Id) => path(`/venues/${enc(slug)}`, "/venues/view", { slug }),
+  enquiry: (id: Id) => path(`/enquiries/${enc(id)}`, "/enquiries/view", { id }),
+  venueBooking: (id: Id) => path(`/venue-bookings/${enc(id)}`, "/venue-bookings/view", { id }),
 };
 
 /** Origin for links that leave the app (share buttons, invite links). In the Android app
