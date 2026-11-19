@@ -517,7 +517,8 @@ All under `/api`. Grouped by router (new files `venues.py`, `venue_portal.py`, `
 
 Background jobs (worker): expire unpaid bookings, complete bookings after 48h, close the guest
 review windows, send delayed (non-Plus) venue event alerts, pause venues with old debt, end
-featured slots, subscription grace periods, delete KYC files past `delete_after`.
+featured slots, subscription grace periods, delete KYC files past `delete_after`, open/close
+presales, Thursday weekend picks, yearly Wrapped generation.
 
 ---
 
