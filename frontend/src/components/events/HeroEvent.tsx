@@ -32,7 +32,7 @@ export function HeroEvent({ event }: { event: Event }) {
       {/* Top badges */}
       <div className="absolute top-4 left-4 flex gap-2">
         {event.is_trending && (
-          <span className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white text-[11px] font-bold uppercase tracking-wider border border-white/20 rounded">
+          <span className="flex items-center gap-1 px-2.5 py-1 bg-primary text-on-primary text-[11px] font-bold uppercase tracking-wider border border-white/20 rounded">
             <Flame size={10} aria-hidden /> Hot right now
           </span>
         )}

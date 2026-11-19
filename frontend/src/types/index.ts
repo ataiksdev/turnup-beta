@@ -27,6 +27,8 @@ export interface User {
   email_verified?: boolean;
   two_factor_enabled?: boolean;
   has_password?: boolean;
+  /** "<theme>:<mode>", e.g. "sunset:system" (see lib/themes.ts). */
+  theme_preference?: string | null;
   created_at?: string;
   is_following?: boolean;
   organizer_profile?: OrganizerProfile | null;

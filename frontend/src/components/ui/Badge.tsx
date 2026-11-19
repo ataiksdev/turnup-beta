@@ -9,7 +9,7 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 
 const variants: Record<Variant, string> = {
   default:  "bg-bg-elevated text-text-secondary border-border",
-  primary:  "bg-primary text-white border-primary",
+  primary:  "bg-primary text-on-primary border-primary",
   success:  "bg-success text-white border-success",
   warning:  "bg-warning text-black border-warning",
   error:    "bg-error text-white border-error",

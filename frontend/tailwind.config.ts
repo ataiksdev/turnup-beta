@@ -25,12 +25,15 @@ const config: Config = {
           muted:     "rgb(var(--text-muted) / <alpha-value>)",
           disabled:  "rgb(var(--text-disabled) / <alpha-value>)",
         },
+        // Themed (see src/lib/themes.ts). "on-primary" is the text colour that's readable ON
+        // the accent: white for most themes, dark for bright accents like gold or cyan.
         primary: {
-          DEFAULT: "#A855F7",
-          hover:   "#9333EA",
-          light:   "#EDE9FE",
+          DEFAULT: "rgb(var(--primary) / <alpha-value>)",
+          hover:   "rgb(var(--primary-hover) / <alpha-value>)",
+          light:   "rgb(var(--primary-light) / <alpha-value>)",
           muted:   "rgb(var(--primary-muted) / <alpha-value>)",
         },
+        "on-primary": "rgb(var(--on-primary) / <alpha-value>)",
         success: "#22C55E",
         error:   "#EF4444",
         warning: "#EAB308",
@@ -39,17 +42,18 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
-      // Neo-brutalist: minimal border radii everywhere; full kept for circles
+      // Themed radii: near-square for the neo-brutalist themes, soft for Glass, very round for
+      // Fluffy (values in src/lib/themes.ts). "full" stays a circle/pill everywhere.
       borderRadius: {
         none:    "0px",
-        DEFAULT: "1px",
-        sm:      "1px",
-        md:      "2px",
-        lg:      "2px",
-        xl:      "2px",
-        "2xl":   "2px",
-        "3xl":   "2px",
-        "4xl":   "2px",
+        DEFAULT: "var(--radius)",
+        sm:      "var(--radius-sm)",
+        md:      "var(--radius-md)",
+        lg:      "var(--radius-md)",
+        xl:      "var(--radius-lg)",
+        "2xl":   "var(--radius-lg)",
+        "3xl":   "var(--radius-lg)",
+        "4xl":   "var(--radius-lg)",
         full:    "9999px",
       },
       animation: {
@@ -65,17 +69,18 @@ const config: Config = {
         shimmer: { from: { backgroundPosition: "-200% 0" },
                    to:   { backgroundPosition: "200% 0" } },
       },
-      // Hard-offset shadows with CSS custom property for automatic theme switching
+      // Themed shadows: hard offsets for neo-brutalist themes, soft diffuse ones for Glass
+      // and Fluffy. Class names kept as-is so every component follows the theme.
       boxShadow: {
-        brutal:           "3px 3px 0 rgb(var(--shadow-color))",
-        "brutal-sm":      "2px 2px 0 rgb(var(--shadow-color))",
-        "brutal-lg":      "5px 5px 0 rgb(var(--shadow-color))",
-        "brutal-primary":    "3px 3px 0 #A855F7",
-        "brutal-primary-lg": "5px 5px 0 #A855F7",
+        brutal:           "var(--shadow)",
+        "brutal-sm":      "var(--shadow-sm)",
+        "brutal-lg":      "var(--shadow-lg)",
+        "brutal-primary":    "var(--shadow-primary)",
+        "brutal-primary-lg": "var(--shadow-primary-lg)",
         "brutal-error":      "3px 3px 0 #EF4444",
-        card:                "3px 3px 0 rgb(var(--shadow-color))",
-        glow:             "0 0 20px rgba(168,85,247,0.25)",
-        "glow-sm":        "0 0 10px rgba(168,85,247,0.18)",
+        card:                "var(--shadow)",
+        glow:             "0 0 20px rgb(var(--primary) / 0.25)",
+        "glow-sm":        "0 0 10px rgb(var(--primary) / 0.18)",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",

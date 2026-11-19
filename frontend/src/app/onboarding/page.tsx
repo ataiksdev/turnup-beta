@@ -189,7 +189,7 @@ export default function OnboardingPage() {
                     className={cn(
                       "px-4 py-2 rounded-full border-2 text-sm font-bold transition-all",
                       city === c
-                        ? "bg-primary text-white border-primary"
+                        ? "bg-primary text-on-primary border-primary"
                         : "bg-bg-surface border-border text-text-secondary hover:border-primary",
                     )}
                   >
@@ -329,7 +329,7 @@ export default function OnboardingPage() {
                     className={cn(
                       "flex-1 py-2.5 rounded-full border-2 text-sm font-bold transition-all",
                       format === value
-                        ? "bg-primary text-white border-primary"
+                        ? "bg-primary text-on-primary border-primary"
                         : "bg-bg-surface border-border text-text-secondary hover:border-primary",
                     )}
                   >

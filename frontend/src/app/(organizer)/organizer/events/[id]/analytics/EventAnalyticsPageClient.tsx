@@ -108,7 +108,7 @@ export default function EventAnalyticsPage() {
           </Link>
           <Link
             href={routes.organizerEvent(id, "checkin")}
-            className="flex items-center gap-1 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest rounded border-2 border-primary bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors shadow-brutal-sm"
+            className="flex items-center gap-1 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest rounded border-2 border-primary bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors shadow-brutal-sm"
           >
             <ScanLine size={12} /> Scan
           </Link>

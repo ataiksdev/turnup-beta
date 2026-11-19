@@ -118,7 +118,7 @@ export default function NewCommunityPage() {
                 className={cn(
                   "px-3 py-1.5 rounded-full border-2 text-xs font-bold transition-all",
                   city === c
-                    ? "bg-primary text-white border-primary"
+                    ? "bg-primary text-on-primary border-primary"
                     : "bg-bg-surface border-border text-text-secondary hover:border-primary",
                 )}
               >

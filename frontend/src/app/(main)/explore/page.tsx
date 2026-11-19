@@ -80,7 +80,7 @@ function MiniEventCard({ event, showNetworkNote }: { event: any; showNetworkNote
           </span>
         )}
         {event.is_trending && (
-          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-primary text-white text-[9px] font-black rounded uppercase flex items-center gap-0.5">
+          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-primary text-on-primary text-[9px] font-black rounded uppercase flex items-center gap-0.5">
             <Flame size={8} /> Hot
           </span>
         )}
@@ -157,7 +157,7 @@ export default function ExplorePage() {
           }
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-4">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary text-white text-[9px] font-black rounded uppercase mb-1.5">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary text-on-primary text-[9px] font-black rounded uppercase mb-1.5">
               <Star size={9} /> Featured
             </span>
             <h2 className="text-base font-black text-white leading-snug line-clamp-2">{hero.title}</h2>

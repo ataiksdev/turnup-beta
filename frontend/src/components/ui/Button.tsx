@@ -14,7 +14,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-primary text-white border-2 border-border font-bold " +
+    "bg-primary text-on-primary border-2 border-border font-bold " +
     "shadow-brutal hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg " +
     "active:translate-x-0.5 active:translate-y-0.5 active:shadow-none",
   secondary:
@@ -46,7 +46,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center transition-all duration-100 select-none",
+        "btn inline-flex items-center justify-center transition-all duration-100 select-none",
         "disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-x-0 disabled:translate-y-0",
         variants[variant],
         sizes[size],

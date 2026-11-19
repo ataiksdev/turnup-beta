@@ -54,7 +54,7 @@ export function BottomNav() {
             >
               <div className={cn(
                 "relative p-1.5 rounded transition-all duration-150",
-                isActive ? "bg-primary text-white" : "group-hover:bg-bg-elevated",
+                isActive ? "bg-primary text-on-primary" : "group-hover:bg-bg-elevated",
               )}>
                 <Icon
                   size={20}
@@ -66,7 +66,7 @@ export function BottomNav() {
                   )}
                 />
                 {showBadge && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full bg-primary text-white text-[9px] font-black flex items-center justify-center px-0.5 border border-bg-surface">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full bg-primary text-on-primary text-[9px] font-black flex items-center justify-center px-0.5 border border-bg-surface">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}

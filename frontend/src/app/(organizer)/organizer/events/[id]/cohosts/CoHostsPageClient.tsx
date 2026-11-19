@@ -181,7 +181,7 @@ export default function CoHostsPage() {
             <button
               type="submit"
               disabled={!username.trim() || inviteMutation.isPending}
-              className="px-4 py-2.5 rounded border-2 border-border bg-primary text-white text-[10px] font-black uppercase tracking-widest hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2.5 rounded border-2 border-border bg-primary text-on-primary text-[10px] font-black uppercase tracking-widest hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {inviteMutation.isPending ? "Inviting…" : "Invite"}
             </button>

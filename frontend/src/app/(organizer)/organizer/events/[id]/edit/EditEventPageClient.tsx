@@ -84,7 +84,7 @@ function StepBar({ current }: { current: number }) {
           <div className="flex flex-col items-center gap-0.5">
             <div className={cn(
               "w-6 h-6 rounded border-2 flex items-center justify-center text-[10px] font-black",
-              i < current  && "bg-primary border-primary text-white",
+              i < current  && "bg-primary border-primary text-on-primary",
               i === current && "bg-bg-card border-primary text-primary",
               i > current  && "bg-bg-card border-border text-text-muted",
             )}>

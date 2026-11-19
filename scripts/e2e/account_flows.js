@@ -52,7 +52,7 @@ const step = (s) => console.log('✓', s);
 
   // settings: 2FA setup
   await page.goto(BASE + '/settings');
-  await page.getByText('Account & Security').first().waitFor();
+  await page.getByText('Appearance').first().waitFor();
   await page.getByText('Verified').waitFor(); step('settings shows email as verified');
   await page.getByRole('button', { name: 'Set up 2FA' }).click();
   const keyText = await page.getByText('Enter this key').textContent();

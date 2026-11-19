@@ -81,7 +81,7 @@ export default function ActivityPage() {
           >
             {t}
             {t === "notifications" && unreadCount > 0 && (
-              <span className="absolute top-2 right-1/4 w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center font-bold">
+              <span className="absolute top-2 right-1/4 w-4 h-4 rounded-full bg-primary text-on-primary text-[9px] flex items-center justify-center font-bold">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}

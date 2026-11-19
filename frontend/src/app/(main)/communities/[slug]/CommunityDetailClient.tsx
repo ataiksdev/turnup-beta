@@ -243,7 +243,7 @@ export function CommunityDetailClient() {
                 className={cn(
                   "flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors",
                   i < arr.length - 1 && "border-r-2 border-border",
-                  tab === t ? "bg-primary text-white" : "text-text-muted hover:text-text bg-bg-card",
+                  tab === t ? "bg-primary text-on-primary" : "text-text-muted hover:text-text bg-bg-card",
                 )}
               >
                 {t === "events" ? `Events (${community.event_count})` : t === "members" ? `Members (${community.member_count})` : "About"}

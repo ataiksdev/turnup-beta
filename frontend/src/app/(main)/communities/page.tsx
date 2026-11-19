@@ -123,7 +123,7 @@ export default function CommunitiesPage() {
                 onClick={() => setTab(t)}
                 className={cn(
                   "flex-1 py-2 text-xs font-black uppercase tracking-widest transition-colors",
-                  tab === t ? "bg-primary text-white" : "text-text-muted hover:text-text bg-bg-card",
+                  tab === t ? "bg-primary text-on-primary" : "text-text-muted hover:text-text bg-bg-card",
                   t === "all" && "border-r-2 border-border",
                 )}
               >
@@ -134,7 +134,7 @@ export default function CommunitiesPage() {
           {token && (
             <Link
               href="/communities/new"
-              className="flex items-center justify-center w-10 h-10 rounded border-2 border-primary bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors shadow-brutal-sm"
+              className="flex items-center justify-center w-10 h-10 rounded border-2 border-primary bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors shadow-brutal-sm"
               aria-label="Create community"
             >
               <Plus size={18} />

@@ -82,7 +82,7 @@ export function PWASetup() {
           </div>
         </div>
         <button onClick={handleInstall}
-          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded border-2 border-border bg-primary text-white font-bold text-sm shadow-brutal active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
+          className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded border-2 border-border bg-primary text-on-primary font-bold text-sm shadow-brutal active:shadow-none active:translate-x-0.5 active:translate-y-0.5">
           <Download size={16} /> Install App
         </button>
       </div>
