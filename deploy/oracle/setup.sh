@@ -99,6 +99,18 @@ FRONTEND_URL=$website
 ALLOWED_ORIGINS=$website,http://localhost
 BACKUP_KEEP_DAYS=14
 
+# Object storage and off-server backups (guide: deploy/oracle/README.md, "Storage and backups").
+# Leave STORAGE_BACKEND=local until the bucket is set up.
+STORAGE_BACKEND=local
+S3_ENDPOINT_URL=
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+S3_BUCKET=
+S3_PUBLIC_BASE_URL=
+BACKUP_S3_BUCKET=
+# Encrypts the off-server backups. SAVE IT IN A PASSWORD MANAGER: without it they can't be restored.
+BACKUP_PASSPHRASE=$(openssl rand -base64 33 | tr -d '/+=' | cut -c1-40)
+
 # Email: until SMTP is filled in, emails are printed to the logs (docker compose logs backend)
 EMAIL_CONSOLE=true
 SMTP_HOST=
@@ -118,6 +130,10 @@ ANTHROPIC_API_KEY=
 ENV
   chmod 600 "$APP_DIR/.env"
   echo "Wrote $APP_DIR/.env (secrets generated). Add Paystack/SMTP keys there later."
+  echo
+  echo "IMPORTANT: copy this backup passphrase into a password manager now. Off-server backups"
+  echo "can't be restored without it (it's also in $APP_DIR/.env):"
+  grep '^BACKUP_PASSPHRASE=' "$APP_DIR/.env" | cut -d= -f2
 fi
 
 say "First start (builds images; takes a few minutes)"

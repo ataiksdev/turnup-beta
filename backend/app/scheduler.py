@@ -62,6 +62,16 @@ async def run_marketplace_daily():
     await _run("Marketplace daily", daily_marketplace)
 
 
+async def run_offsite_backup():
+    from app.services.storage_jobs import offsite_backup
+    await _run("Off-server backup", offsite_backup)
+
+
+async def run_prune_uploads():
+    from app.services.storage_jobs import prune_orphan_uploads
+    await _run("Unused uploads", prune_orphan_uploads)
+
+
 async def run_weekend_picks():
     from app.services.picks import send_weekend_picks
     await _run("Weekend picks", send_weekend_picks)
@@ -79,6 +89,12 @@ def build_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(run_marketplace_frequent, IntervalTrigger(minutes=10), id="marketplace_frequent",
                       replace_existing=True, max_instances=1, coalesce=True)
     scheduler.add_job(run_marketplace_daily, CronTrigger(hour=2, minute=17), id="marketplace_daily",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    # Every 6 hours: copies the newest database dump once it exists (the backup service makes
+    # one a day), plus that day's KYC archive; skipped unless off-server backups are set up.
+    scheduler.add_job(run_offsite_backup, IntervalTrigger(hours=6), id="offsite_backup",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    scheduler.add_job(run_prune_uploads, CronTrigger(day_of_week="sun", hour=3, minute=41), id="prune_uploads",
                       replace_existing=True, max_instances=1, coalesce=True)
     # Thursdays 16:00 Lagos (15:00 UTC).
     scheduler.add_job(run_weekend_picks, CronTrigger(day_of_week="thu", hour=15, minute=7), id="weekend_picks",

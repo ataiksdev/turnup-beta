@@ -15,13 +15,14 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.config import settings
 from app.middleware.auth import get_current_user
 from app.middleware.rate_limit import limiter
 from app.models.user import User
+from app.services import storage
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
@@ -34,16 +35,11 @@ _MEDIA_TYPES = {"webp": "image/webp", "jpg": "image/jpeg", "mp4": "video/mp4", "
 
 
 def _upload_dir() -> Path:
-    path = Path(settings.upload_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return storage.upload_dir()
 
-
-def _public_url(name: str) -> str:
-    # Absolute, so the URL also works inside the Android app (whose own origin is
-    # http://localhost) and in emails/link previews.
-    base = (settings.public_base_url or settings.frontend_url).rstrip("/")
-    return f"{base}/api/uploads/{name}"
+# Stored files go through app/services/storage.py: local disk, or an S3-compatible bucket.
+# URLs are absolute, so they also work inside the Android app (whose own origin is
+# http://localhost) and in emails/link previews.
 
 
 def _reencode(raw: bytes) -> tuple[bytes, str]:
@@ -82,9 +78,7 @@ async def upload_image(
     if not raw:
         raise HTTPException(400, "The file is empty.")
     data, ext = _reencode(raw)
-    name = f"{uuid.uuid4().hex}.{ext}"
-    (_upload_dir() / name).write_bytes(data)
-    return {"url": _public_url(name)}
+    return {"url": await storage.save(f"{uuid.uuid4().hex}.{ext}", data)}
 
 
 @router.post("/video", status_code=201)
@@ -108,14 +102,12 @@ async def upload_video(
         raise HTTPException(415, "Upload an MP4, MOV or WebM video.")
     name = uuid.uuid4().hex
     video, ext, poster, duration = await process_video(raw, kind[1], settings.venue_video_max_seconds)
-    (_upload_dir() / f"{name}.{ext}").write_bytes(video)
+    url = await storage.save(f"{name}.{ext}", video)
     poster_url = None
     if poster:
         pdata, pext = _reencode(poster)
-        pname = f"{uuid.uuid4().hex}.{pext}"
-        (_upload_dir() / pname).write_bytes(pdata)
-        poster_url = _public_url(pname)
-    return {"url": _public_url(f"{name}.{ext}"), "poster_url": poster_url, "duration_s": duration}
+        poster_url = await storage.save(f"{uuid.uuid4().hex}.{pext}", pdata)
+    return {"url": url, "poster_url": poster_url, "duration_s": duration}
 
 
 @router.get("/{name}")
@@ -123,6 +115,10 @@ async def get_upload(name: str):
     if not _NAME.match(name):  # random names only: no paths, no traversal
         raise HTTPException(404, "Not found")
     path = _upload_dir() / name
+    if storage.s3_enabled() and not path.is_file():
+        # Files live in the bucket; links made before the move to object storage still work.
+        return RedirectResponse(storage.public_url(name), status_code=301,
+                                headers={"Cache-Control": "public, max-age=86400"})
     if not path.is_file():
         raise HTTPException(404, "Not found")
     return FileResponse(

@@ -30,6 +30,26 @@ class Settings(BaseSettings):
     venue_video_max_mb: int = 100
     venue_video_max_seconds: int = 60
 
+    # Object storage (any S3-compatible service: Cloudflare R2, Supabase Storage, AWS S3,
+    # Backblaze B2...). See app/services/storage.py and deploy/oracle/README.md.
+    # STORAGE_BACKEND=local keeps public uploads on disk (UPLOAD_DIR); "s3" puts them in
+    # S3_BUCKET and links to S3_PUBLIC_BASE_URL (the bucket's public address).
+    storage_backend: str = "local"
+    s3_endpoint_url: str = ""
+    s3_region: str = "auto"
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_bucket: str = ""
+    s3_public_base_url: str = ""
+    # Off-server backups: the nightly database dump and the KYC files, encrypted with
+    # BACKUP_PASSPHRASE, copied to BACKUP_S3_BUCKET (a PRIVATE bucket, same credentials).
+    backup_s3_bucket: str = ""
+    backup_passphrase: str = ""
+    backup_dir: str = "/backups"
+    offsite_keep_days: int = 30
+    # Unused public uploads older than this are deleted by the weekly cleanup.
+    orphan_upload_grace_days: int = 7
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./data/turnup.db"
 
