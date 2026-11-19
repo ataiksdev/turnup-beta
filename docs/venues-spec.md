@@ -39,7 +39,7 @@ booking commission, Venue Pro subscriptions, featured placement and Turnup+.
 | Agent pay | Outside the app for now; added to admin later |
 | Reviews | Two scores: "for organizers" (organizers with a completed booking) and "for guests" (attendees who checked in to an event there) |
 | Following | Free for everyone. Turnup+ adds perks |
-| Turnup+ perks | **Being redesigned** (4.8) |
+| Turnup+ perks | Presale, priority waitlist, early alerts, members-only events and guest lists, fast lane, member deals, free ticket transfer, weekend picks, Plus badge, Turnup Wrapped (4.8). Not now: booking-fee waiver, monthly credit, cancel-for-credit, group hold |
 | Prices | All admin-configurable, with suggested starting values (section 7) |
 
 ---
@@ -52,7 +52,7 @@ separate tables, so one person can be an attendee, a venue manager and an agent 
 | Who | How it's recorded | Can |
 |---|---|---|
 | Venue Owner | `venue_members.role = owner` | Everything for the venue, including bank details, team, Pro and featured purchases, closing the venue |
-| Venue Manager | `venue_members.role = manager` | Listing, spaces, calendar, enquiries, quotes, events, perks. Not bank details, team or billing |
+| Venue Manager | `venue_members.role = manager` | Listing, spaces, calendar, enquiries, quotes, events, deals. Not bank details, team or billing |
 | Venue Viewer | `venue_members.role = viewer` | Read-only (calendar, enquiries, analytics) |
 | Agent | `agents` row (active, with states) | See venues assigned to them, view those venues' KYC documents, file visit reports |
 | Admin | `role = admin` | Review documents, assign agents, decide disputes, set prices, suspend venues, view the KYC access log |
@@ -150,9 +150,10 @@ not floats like the older ticket tables.
   `venue_id` (nullable FK: where the event takes place; set to the same venue for
   venue-hosted events). Existing `host_id` stays (the person who created it).
 - **venues** also gets `balance_due_days` (default 7).
-- **venue_perks**: id, venue_id, title, description, kind (`free_entry | discount | reserved |
-  other`), valid_from, valid_to, is_active.
-- **perk_redemptions**: perk_id, user_id, code, redeemed_at (the venue checks codes at the door
+- **deals**: id, venue_id or event_id (one of them), title, description, kind
+  (`free_entry | discount | free_item | reserved | other`), valid_from, valid_to,
+  max_per_member, is_active (Turnup+ only; see 4.8).
+- **deal_redemptions**: deal_id, user_id, code, claimed_at, redeemed_at (checked at the door
   like tickets).
 
 ### Subscriptions and featured placement
@@ -336,15 +337,71 @@ Who pays what:
 
 ### 4.8 Turnup+
 
-**Perks: being redesigned.** The billing mechanics below stay the same whatever the perks
-are.
-
+**Billing**
 - Monthly or yearly subscription through a Paystack Plan (card, recurring). Settings gets a
   "Turnup+" section: subscribe, see the renewal date, cancel (stays active until the period
   ends).
 - Subscription states arrive through Paystack subscription webhooks (`subscription.create`,
   `invoice.payment_failed`, `subscription.disable`, `subscription.not_renew`). If a renewal
   fails, the subscription is `past_due` with a 3-day grace period, then perks stop.
+- One helper, `is_plus(user)`, is used by every perk check. The answer is cached on
+  `users.plus_until`.
+
+**Perks.** None of these cost Turnup money; organizers and venues opt in where noted.
+
+1. **Presale.** An organizer or venue can mark a ticket tier as a members' presale: only
+   members can buy it until `plus_presale_ends_at`, then it opens to everyone or closes,
+   whichever the organizer chose. Members get a notification when a presale opens for an
+   organizer or venue they follow.
+2. **Priority waitlist.** When a spot opens on a sold-out event, members on the waitlist are
+   offered it first, then everyone else in order (`EventWaitlist` ordered by is_plus, then
+   position).
+3. **Early alerts.** Members hear about new events from followed venues **and organizers**
+   straight away; everyone else after `turnup_plus_early_alert_hours` (suggested 24h, sent by
+   the worker).
+4. **Members-only events and guest lists.**
+   - An event can be marked members-only: everyone can see it, but only members can RSVP or
+     buy, and the page says "Turnup+ members".
+   - Organizers and venues can also add a **members' guest list**: a free or discounted tier
+     with limited spots, only for members (a ticket tier flagged `members_only`).
+5. **Fast lane.** Organizers can switch on a fast lane for an event. Members' tickets show a
+   "Fast lane" mark, and the door scanner shows **FAST LANE** in large text when it scans one,
+   so staff can send them to the separate queue. The mark is checked when the ticket is
+   scanned (not when it was bought), so a lapsed member doesn't get it.
+6. **Member deals.** Venues (portal) and organizers (per event) create deals: free entry
+   before a time, a discount, a free drink, a reserved table. Members claim a deal and get a
+   code, which the door staff check with the same scanner as tickets. One redemption per deal
+   per member unless the venue or organizer says otherwise.
+7. **Free ticket transfer.** *New feature* (the app has no transfers today). Members can send
+   a ticket to another Turnup user before the event, if the organizer allows transfers
+   (default on). The old QR code stops working and the new holder gets a new one. Free for
+   members; non-members can't transfer for now (a paid transfer for non-members could come
+   later).
+8. **Weekend picks.** Every Thursday, members get a personal list of events for the weekend
+   (push and email). It's built from the existing For You ranking, filtered to the weekend
+   and the member's city, with venues and organizers they follow ranked higher.
+9. **Plus badge** next to the member's name on their profile, comments, reviews and on
+   organizers' guest lists. Members can hide it.
+10. **Turnup Wrapped.** Once a year (December), a shareable summary of the year: events
+    attended, top venues and organizers, cities, the busiest month, and the people they went
+    with the most (only friends who follow each other, and only if both have
+    "show me in Wrapped" on). Images are generated on the server for sharing to Instagram
+    and WhatsApp. Free users get a short version; members get the full one.
+
+**Data model additions**
+- `users.plus_until` (cached from `subscriptions`), `users.show_plus_badge`,
+  `users.wrapped_opt_in`.
+- `ticket_tiers`: `members_only` (bool), `plus_presale_ends_at`, `presale_then`
+  (`open | close`).
+- `events`: `members_only` (bool), `fast_lane_enabled` (bool),
+  `allow_ticket_transfers` (bool, default true).
+- `ticket_transfers`: id, order_id, from_user_id, to_user_id, old_ticket_code,
+  new_ticket_code, created_at.
+- `deals` and `deal_redemptions` (section 3): owned by a venue or an event.
+- `wrapped_reports`: user_id, year, data (JSON), image keys, generated_at.
+
+**Not now:** booking-fee waiver (would need a buyer-side fee), monthly ticket credit,
+cancel-for-credit, group hold.
 
 ### 4.9 Venue Pro
 
@@ -377,7 +434,7 @@ are.
   price band, amenities, verified only), map view, Featured strip.
 - **Venue page**: gallery, spaces, capacity, amenities, rules, price display, refund preset
   explained, calendar availability (busy/free, no booking details), both ratings, reviews,
-  upcoming events here, Follow button, badges (Verified, Pro), Turnup+ perks, an "Enquire"
+  upcoming events here, Follow button, badges (Verified, Pro), member deals, an "Enquire"
   button (organizers) or a "become an organizer" prompt.
 - **Enquiries** (organizer tools; also on the organizer dashboard): list and thread view with
   quote cards and an "Accept and pay deposit" button.
@@ -385,7 +442,12 @@ are.
   amount before confirming), open a dispute, leave a review.
 - **Following → Venues**; notifications for new venue events.
 - **Settings → Turnup+**: subscribe or manage.
-- **Perk wallet**: Turnup+ codes, under Tickets.
+- **Turnup+ wallet** (under Tickets): claimed deal codes, fast-lane mark on tickets,
+  "Transfer ticket" button.
+- **Weekend picks** (For You tab, Thursdays) and **Wrapped** (December, shareable images).
+- **Organizer event editor**: members-only toggle, presale and members' guest-list tiers,
+  fast lane, ticket transfers, event deals. The door scanner shows FAST LANE and accepts
+  deal codes.
 
 ### Venue portal (web only, `/venue/...`, not in the Android build)
 
@@ -396,7 +458,7 @@ are.
 - Calendar: bookings and blocks, add/remove blocks.
 - Bookings: details, cancel (with a warning about the strike and commission).
 - Events: create and manage (reuses the organizer event tools).
-- Perks: create, pause, see redemptions; door check-in for perk codes.
+- Deals: create, pause, see redemptions; door check-in for deal codes.
 - Reviews: reply.
 - Balance: ledger and pay off.
 - Team: invite, roles, transfer ownership.
@@ -430,13 +492,17 @@ All under `/api`. Grouped by router (new files `venues.py`, `venue_portal.py`, `
   `POST /quotes/{id}/decline`, `GET /me/venue-bookings`, `POST /venue-bookings/{id}/cancel`
   (with a `preview` option that returns the refund amount), `POST /venue-bookings/{id}/disputes`,
   `POST /venue-bookings/{id}/review`.
-- **Attendee:** `POST /events/{id}/venue-review`, `GET /me/perks`,
-  `POST /perks/{id}/claim`.
+- **Attendee:** `POST /events/{id}/venue-review`, `GET /me/deals`,
+  `POST /deals/{id}/claim`, `POST /tickets/{order_id}/transfer` (members),
+  `GET /me/weekend-picks`, `GET /me/wrapped/{year}`.
+- **Organizer (Turnup+ options):** tier fields `members_only`, `plus_presale_ends_at`,
+  `presale_then`; event fields `members_only`, `fast_lane_enabled`,
+  `allow_ticket_transfers`; event deals CRUD; `POST /events/{id}/deals/redeem` (door).
 - **Venue portal:** `POST /venue-portal/venues`, `GET/PATCH /venue-portal/venues/{id}`,
   spaces CRUD, `POST .../documents` (private upload), `PUT .../bank` (resolves the name and
   creates the subaccount), `POST .../submit`, enquiries inbox, `POST .../enquiries/{id}/quotes`,
   `POST .../enquiries/{id}/decline`, blocks CRUD, bookings list and cancel, members and
-  invites, perks CRUD and `POST .../perks/redeem`, review replies, ledger and
+  invites, deals CRUD and `POST .../deals/redeem`, review replies, ledger and
   `POST .../ledger/pay`, `POST .../pro` (subscribe), `POST .../featured` (buy a week),
   `GET .../analytics` (Pro only).
 - **Agent:** `GET /agent/venues`, `GET /agent/venues/{id}/documents/{doc}` (logged, short-lived
@@ -518,8 +584,7 @@ gets a strike for each confirmed report (4.2).
    balance. That is why the venue funds each refund first (4.3) before Turnup sends it.
    Still to confirm with Paystack: partial refunds across several payments, and any limits
    on refunding older transactions.
-2. **Turnup+ perks**: being redesigned (4.8).
-3. **Agent pay** stays outside the app for now; it will be added to admin later.
+2. **Agent pay** stays outside the app for now; it will be added to admin later.
 
 ---
 
@@ -536,7 +601,8 @@ gets a strike for each confirmed report (4.2).
 8. Disputes (both sides and admin).
 9. Venue events (and linking organizer events), early alerts, reviews (both kinds).
 10. Subscriptions: plans, Turnup+ and Venue Pro, webhooks, grace periods; Turnup+ perks
-    (final list from 4.8).
+    (presale, priority waitlist, early alerts, members-only events and guest lists, fast lane,
+    deals and redemption, ticket transfers, weekend picks, badge, Wrapped).
 11. Featured placement purchases and ranking; Venue Pro analytics and limits.
 12. Seed data (demo venues, agent, bookings at every stage), tests (backend unit and flow
     tests on SQLite and Postgres, browser E2E for the main journeys), docs, and the Android
