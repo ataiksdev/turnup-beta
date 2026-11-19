@@ -1,0 +1,2 @@
+# WEB_MODE=proxy: the website runs in this stack (the "frontend" service, compose profile "web").
+reverse_proxy frontend:3000

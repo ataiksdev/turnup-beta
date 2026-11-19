@@ -1,7 +1,8 @@
 # Front door for the docker-compose stack.
 #
 # SITE_ADDRESS: ":80" (default) serves plain HTTP on port 80. Set it to your domain
-# (e.g. "turnup.example.com") and Caddy obtains and renews an HTTPS certificate itself.
+# (e.g. "turnup.example.com" or "api.turnup.example.com") and Caddy obtains and renews an
+# HTTPS certificate itself.
 #
 # /api/* goes straight to the backend. Caddy sets X-Forwarded-For to the real client IP
 # (and ignores any X-Forwarded-For a client sends, since clients aren't trusted proxies),
@@ -17,8 +18,12 @@
 		reverse_proxy backend:8000
 	}
 
+	# Everything that isn't /api: depends on where the website lives (WEB_MODE):
+	#   proxy    -> the frontend container in this stack (default; site/proxy.caddy)
+	#   redirect -> the website is hosted elsewhere, e.g. Vercel: send browsers to
+	#               FRONTEND_URL (site/redirect.caddy). Used for an API-only server.
 	handle {
-		reverse_proxy frontend:3000
+		import site/{$WEB_MODE:proxy}.caddy
 	}
 
 	header {

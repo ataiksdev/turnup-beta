@@ -1,0 +1,61 @@
+name: Deploy
+
+# Deploys the backend to the Oracle server after CI passes on the default branch.
+# Set up once with deploy/oracle/README.md; until the ORACLE_* secrets exist this does nothing.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [claude/build-turnup-platform-hhOzs]
+  workflow_dispatch:   # "Run workflow" button: redeploy by hand
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false   # never interrupt a deploy halfway
+
+jobs:
+  deploy:
+    # Only after a successful CI run for a push (not for pull requests), or a manual run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the server is configured
+        id: cfg
+        env:
+          HOST: ${{ secrets.ORACLE_HOST }}
+        run: |
+          if [ -z "$HOST" ]; then
+            echo "::notice::Skipping deploy: ORACLE_* secrets aren't set (see deploy/oracle/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy over SSH
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          HOST: ${{ secrets.ORACLE_HOST }}
+          USER: ${{ secrets.ORACLE_USER }}
+          SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts   # pinned host key: no blind trust
+          # The key is restricted on the server to running deploy/oracle/deploy.sh only.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "$USER@$HOST" deploy
+
+      - name: Check the API from outside
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          API_URL: ${{ vars.API_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then echo "Set the API_URL repository variable to also check from outside."; exit 0; fi
+          for _ in $(seq 1 20); do
+            if curl -fsS "$API_URL/api/health"; then echo; exit 0; fi
+            sleep 6
+          done
+          echo "::error::$API_URL/api/health isn't answering"; exit 1
