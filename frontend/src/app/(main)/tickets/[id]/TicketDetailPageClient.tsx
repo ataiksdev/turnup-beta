@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { TransferTicket } from "@/components/events/TransferTicket";
+import { SaveTicketButton } from "@/components/events/SaveTicketButton";
 
 const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   confirmed: { icon: CheckCircle2, label: "Confirmed", cls: "text-success bg-success/10 border-success/30" },
@@ -191,7 +192,7 @@ export default function TicketDetailPage() {
               />
             </div>
             <p className="text-xs text-text-muted text-center">
-              Show this at the door. Screenshot it for offline access.
+              Show this at the door. Save the ticket below to keep it for offline access.
             </p>
             <p className="font-mono text-xs text-text-muted tracking-widest">
               {displayTicket!.ticket_code.toUpperCase().replace(/-/g, " ")}
@@ -210,6 +211,7 @@ export default function TicketDetailPage() {
           </div>
         ) : null}
 
+        {isConfirmed && displayTicket!.ticket_code && !isOffline && <SaveTicketButton orderId={displayTicket!.id} />}
         {isConfirmed && !displayTicket!.checked_in_at && <TransferTicket orderId={displayTicket!.id} />}
 
         {/* Share event */}
