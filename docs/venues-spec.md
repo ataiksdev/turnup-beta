@@ -170,10 +170,12 @@ not floats like the older ticket tables.
 - **subscriptions**: id, plan_code, user_id (Turnup+) or venue_id (Venue Pro), status
   (`active | non_renewing | past_due | cancelled`), paystack_subscription_code,
   paystack_customer_code, current_period_end, cancelled_at.
-- **featured_slots**: id, venue_id, state, week_start (Monday), starts_at, ends_at,
+- **featured_slots**: id, venue_id, scope (`state | area`), state, area_id (area scope only),
+  week_start (Monday), starts_at, ends_at,
   amount_kobo, paystack_reference, status (`pending | active | ended | refunded`).
-- **platform_settings** (existing): add venue_commission_percent, featured_week_price_kobo
-  (₦30,000), featured_max_per_state (5), free/pro photo and video limits, turnup_plus_early_alert_hours, venue_debt_pause_days (30),
+- **platform_settings** (existing): add venue_commission_percent, featured_state_week_price_kobo
+  (₦50,000), featured_area_week_price_kobo (₦15,000), featured_max_per_state (5),
+  featured_max_per_area (3), free/pro photo and video limits, turnup_plus_early_alert_hours, venue_debt_pause_days (30),
   strike_suspend_count (3), dispute_window_hours (48), max_recovery_percent (see 4.5).
 - **notifications** (existing): new kinds for enquiries, quotes, bookings, disputes, strikes,
   follows, venue events, verification steps, subscription renewals.
@@ -427,21 +429,37 @@ cancel-for-credit, group hold.
 
 ### 4.10 Featured placement
 
-- A venue buys a week (Monday to Sunday) in **its own state** for **₦30,000**. There is no
-  city-level option.
-- At most `featured_max_per_state` (suggested 5) featured venues per state per week, so it
-  keeps its value. The checkout shows which weeks have space; venues can buy several weeks
-  ahead.
-- Where it shows:
-  - the **"Featured venues" strip** at the top of the Venues tab for that state, whatever
-    area or other filters are chosen;
-  - **pinned to the top of search results** for that state, labelled **Featured**, but only
-    when the venue matches the search's filters (area, type, capacity, date, price). A
-    100-guest lounge in Wuse isn't pinned above results for a 500-guest hall in Gwarinpa;
-  - a "Featured" badge on the venue page that week.
-- Paid by one-off Paystack payment to Turnup's main account. Only `live`, non-paused venues
-  can buy one. Refunded only if Turnup suspends the listing during that week for reasons
-  that aren't the venue's fault.
+There are two levels. A venue can buy either, or both, for any week (Monday to Sunday), several
+weeks ahead:
+
+| Level | Price | Where it can be bought | Limit per week |
+|---|---|---|---|
+| **State-wide** | **₦50,000 / week** | The venue's own state | 5 per state |
+| **Area** | **₦15,000 / week** | The venue's own area | 3 per area |
+
+The checkout shows which weeks still have space. Prices and limits are admin settings.
+
+**Featured venues strip** (top of the Venues tab):
+
+| What the viewer is looking at | The strip shows |
+|---|---|
+| A state, no area picked | That state's **state-wide** featured venues |
+| One or more areas (e.g. Wuse, Maitama) | **Area** featured venues for those areas first, then the state's state-wide ones |
+| Near me | **Area** featured venues within the chosen radius first, then the state's state-wide ones |
+
+The order within each group rotates on every load, so no paying venue is always last.
+
+**In search results:** a featured venue is pinned to the top, labelled **Featured**, only when
+it matches the search's filters (type, capacity, date, price, and the area or radius for
+area slots). State-wide venues are pinned above area venues. A 100-guest lounge in Wuse isn't
+pinned above results for a 500-guest hall in Gwarinpa.
+
+**Rules:**
+- The venue page shows a "Featured" badge that week.
+- Paid by a one-off Paystack payment to Turnup's main account.
+- Only `live`, non-paused venues can buy.
+- Refunded only if Turnup suspends the listing during that week for reasons that aren't the
+  venue's fault.
 
 ### 4.11 Places: states and areas
 
@@ -577,7 +595,7 @@ presales, Thursday weekend picks, yearly Wrapped generation.
 | Refund funding deadline | 72 hours |
 | Balance due (venue's default) | 7 days before the booking |
 | Debt recovery cap per payment | 50% of the venue's share |
-| Featured placement | **₦30,000 / week / state** (decided), max 5 venues per state per week |
+| Featured placement | **₦50,000 / week state-wide** (max 5 per state), **₦15,000 / week per area** (max 3 per area) (decided) |
 | Media limits | Free: 6 photos, 2 videos. Pro: 12 photos, 5 videos (decided) |
 | Venue Pro | **₦15,000 / month** (₦150,000 / year) |
 | Turnup+ | **₦1,500 / month** (₦15,000 / year) |
