@@ -18,7 +18,9 @@ for pid, p in brutal.items():
                    "modes": {m: {**p["modes"][m], **BRUTAL_STYLE} for m in ("dark", "light")}}
 
 def style_vars(sid, mode, v):
-    b, s1, s2 = v["page"]
+    b, s1, s2 = v["page"][:3]
+    common = {"--surface-alpha": str(v["card_alpha"]), "--elevated-alpha": str(v["elevated_alpha"]),
+              "--border-alpha": str(v["border_alpha"])}
     if sid == "glass":
         sh = "0 0 0" if mode == "dark" else "30 41 99"
         k = (0.18, 0.28, 0.36) if mode == "dark" else (0.06, 0.10, 0.14)
@@ -30,8 +32,31 @@ def style_vars(sid, mode, v):
                 "--shadow-lg": f"0 18px 50px rgb({sh} / {k[2]})",
                 "--shadow-primary": "0 0 0 1px rgb(var(--primary) / 0.45), 0 8px 24px rgb(var(--primary) / 0.30)",
                 "--shadow-primary-lg": "0 0 0 1px rgb(var(--primary) / 0.55), 0 14px 36px rgb(var(--primary) / 0.38)",
-                "--surface-alpha": str(v["card_alpha"]), "--elevated-alpha": str(v["elevated_alpha"]),
-                "--border-alpha": str(v["border_alpha"]), "--blur": "18px", "--page-bg": page}
+                **common, "--blur": "18px", "--page-bg": page}
+    if sid == "turnup":  # fluid
+        k = (0.35, 0.50, 0.60) if mode == "dark" else (0.08, 0.14, 0.20)
+        page = (f"radial-gradient(70rem 40rem at 10% -15%, rgb({rgb(s1)}) 0%, transparent 70%), "
+                f"radial-gradient(50rem 40rem at 100% 20%, rgb({rgb(s2)}) 0%, transparent 65%)")
+        return {"--radius-sm": "8px", "--radius": "12px", "--radius-md": "14px", "--radius-lg": "20px",
+                "--shadow-sm": f"0 1px 3px rgb(var(--shadow-color) / {k[0]})",
+                "--shadow": f"0 8px 24px -10px rgb(var(--shadow-color) / {k[1]}), 0 1px 2px rgb(var(--shadow-color) / {k[0] / 2})",
+                "--shadow-lg": f"0 20px 44px -16px rgb(var(--shadow-color) / {k[2]})",
+                "--shadow-primary": "0 8px 22px -8px rgb(var(--primary) / 0.60)",
+                "--shadow-primary-lg": "0 14px 32px -10px rgb(var(--primary) / 0.70)",
+                **common, "--blur": "0px", "--page-bg": page}
+    if sid == "pop":  # quiz-show: pill buttons on a solid dark 3D edge (see globals.css), chunky cards
+        k = (0.45, 0.55, 0.65) if mode == "dark" else (0.10, 0.14, 0.18)
+        s3 = v["page"][3]  # confetti: three soft glows in different colours
+        page = (f"radial-gradient(38rem 28rem at 0% 0%, rgb({rgb(s1)}) 0%, transparent 70%), "
+                f"radial-gradient(34rem 26rem at 100% 35%, rgb({rgb(s2)}) 0%, transparent 70%), "
+                f"radial-gradient(40rem 30rem at 20% 100%, rgb({rgb(s3)}) 0%, transparent 70%)")
+        return {"--radius-sm": "10px", "--radius": "14px", "--radius-md": "16px", "--radius-lg": "20px",
+                "--shadow-sm": f"0 2px 0 rgb(var(--shadow-color) / {k[0]})",
+                "--shadow": f"0 3px 0 rgb(var(--shadow-color) / {k[1]})",
+                "--shadow-lg": f"0 5px 0 rgb(var(--shadow-color) / {k[2]})",
+                "--shadow-primary": "0 3px 0 rgb(var(--shadow-color))",
+                "--shadow-primary-lg": "0 5px 0 rgb(var(--shadow-color))",
+                **common, "--blur": "0px", "--page-bg": page}
     # fluffy
     page = (f"radial-gradient(40rem 30rem at 10% 0%, rgb({rgb(s1)}) 0%, transparent 70%), "
             f"radial-gradient(40rem 30rem at 90% 30%, rgb({rgb(s2)}) 0%, transparent 70%)")
@@ -41,17 +66,21 @@ def style_vars(sid, mode, v):
             "--shadow-lg": "0 18px 40px -14px rgb(var(--shadow-color) / 0.50)",
             "--shadow-primary": "0 10px 24px -8px rgb(var(--primary) / 0.55)",
             "--shadow-primary-lg": "0 16px 32px -10px rgb(var(--primary) / 0.60)",
-            "--surface-alpha": str(v["card_alpha"]), "--elevated-alpha": str(v["elevated_alpha"]),
-            "--border-alpha": str(v["border_alpha"]), "--blur": "0px", "--page-bg": page}
+            **common, "--blur": "0px", "--page-bg": page}
 
 for sid, s in S.items():
     modes = {}
     for m in ("dark", "light"):
         v = s[m]
-        elevated = blend(v["card"], v["bg"], v["elevated_alpha"]) if sid == "fluffy" else v["card"]
-        shadow = ("000000" if m == "dark" else ("BE3A79" if sid == "fluffy" else "1E2963"))
-        modes[m] = {"--bg": rgb(v["bg"]), "--bg-surface": rgb(v["card"]), "--bg-card": rgb(v["card"]),
-                    "--bg-elevated": rgb(elevated), "--bg-overlay": rgb(v["card"]),
+        if "shadow" in v:
+            shadow = v["shadow"]
+        else:
+            shadow = ("000000" if m == "dark" else ("BE3A79" if sid == "fluffy" else "1E2963"))
+        surface = v.get("surface", v["card"])
+        elevated = v.get("elevated") or (blend(v["card"], v["bg"], v["elevated_alpha"]) if sid == "fluffy" else v["card"])
+        overlay = v.get("overlay", v["card"])
+        modes[m] = {"--bg": rgb(v["bg"]), "--bg-surface": rgb(surface), "--bg-card": rgb(v["card"]),
+                    "--bg-elevated": rgb(elevated), "--bg-overlay": rgb(overlay),
                     "--border": rgb(v["border"]), "--border-subtle": rgb(v["subtle"]), "--border-strong": rgb(v["border"]),
                     "--text": rgb(v["text"]), "--text-secondary": rgb(v["text2"]), "--text-muted": rgb(v["muted"]),
                     "--text-disabled": rgb(v["disabled"]), "--primary": rgb(v["primary"]), "--primary-hover": rgb(v["hover"]),
@@ -61,23 +90,24 @@ for sid, s in S.items():
                    "swatch": {m: "#" + s[m]["primary"] for m in ("dark", "light")},
                    "chrome": {m: "#" + s[m]["bg"] for m in ("dark", "light")}, "modes": modes}
 
-order = ["turnup", "sunset", "lagoon", "palm", "gold", "neon", "glass", "fluffy"]
+order = ["turnup", "pop", "sunset", "gold", "glass", "fluffy"]
 data = json.dumps({k: themes[k] for k in order}, indent=2)
 print(f'''// GENERATED by scripts/themes (see its README): edit the palettes there and regenerate.
 // Colours were checked for WCAG contrast
 // (body text >= 7:1, secondary/muted/accent text >= 4.5:1, button labels >= 4.5:1; for the
 // translucent Glass theme against the panel blended over every part of the page gradient).
-// The one exception is the original Turnup palette, kept exactly as it was.
+// The one exception: white button labels on Turnup's electric purple in dark mode (3.96:1), kept as the brand look.
 
 export type ThemeMode = "light" | "dark";
 export type ModePreference = ThemeMode | "system";
-export type ThemeStyle = "brutal" | "glass" | "fluffy";
+export type ThemeStyle = "fluid" | "pop" | "brutal" | "glass" | "fluffy";
 
 export interface ThemeDef {{
   name: string;
   blurb: string;
-  /** brutal: hard borders + offset shadows; glass: frosted translucent panels;
-   *  fluffy: soft pastel, very round, cloud shadows. */
+  /** fluid: rounded, thin soft borders, diffuse shadows (the default); pop: quiz-show chunky,
+   *  3D bottom edges, rounded bold type; brutal: hard borders + offset shadows; glass: frosted
+   *  translucent panels; fluffy: soft pastel, very round, cloud shadows. */
   style: ThemeStyle;
   swatch: Record<ThemeMode, string>;
   /** Page background colour, used for the browser/OS chrome (meta theme-color). */

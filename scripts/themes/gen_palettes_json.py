@@ -1,9 +1,5 @@
 import json, sys
 sys.path.insert(0, sys.argv[1]); from palettes import P, cr
-# Default palette = exactly today's look (from globals.css), so nobody's app changes on update.
-P["turnup"]["dark"].update(muted="737373")
-P["turnup"]["light"].update(text2="323232", muted="737373", disabled="AFAFAF", primary="A855F7",
-                            hover="9333EA", plight="EDE9FE", pmuted="EDE9FE")
 VARS = [("bg","--bg"),("surface","--bg-surface"),("card","--bg-card"),("elevated","--bg-elevated"),
         ("overlay","--bg-overlay"),("border","--border"),("subtle","--border-subtle"),("border","--border-strong"),
         ("text","--text"),("text2","--text-secondary"),("muted","--text-muted"),("disabled","--text-disabled"),

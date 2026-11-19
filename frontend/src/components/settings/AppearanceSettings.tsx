@@ -20,7 +20,7 @@ function ThemePreview({ id, mode }: { id: ThemeId; mode: ThemeMode }) {
   const panelAlpha = Number(v["--surface-alpha"] ?? 1);
   const panel: CSSProperties = {
     background: c("--bg-card", panelAlpha),
-    border: `${style === "brutal" ? 2 : 1.5}px solid ${c("--border", Number(v["--border-alpha"] ?? 1))}`,
+    border: `${style === "brutal" || style === "pop" ? 2 : style === "fluid" ? 1 : 1.5}px solid ${c("--border", Number(v["--border-alpha"] ?? 1))}`,
     borderRadius: v["--radius"],
     boxShadow: v["--shadow-sm"].replaceAll("var(--shadow-color)", v["--shadow-color"]).replaceAll("var(--primary)", v["--primary"]),
     backdropFilter: style === "glass" ? "blur(8px)" : undefined,
@@ -35,7 +35,7 @@ function ThemePreview({ id, mode }: { id: ThemeId; mode: ThemeMode }) {
         <div className="mt-auto flex items-center gap-1.5">
           <span className="text-[9px] font-black px-2 py-0.5"
             style={{ background: c("--primary"), color: c("--on-primary"),
-                     borderRadius: style === "fluffy" ? "9999px" : v["--radius-sm"] }}>
+                     borderRadius: style === "fluffy" || style === "pop" ? "9999px" : v["--radius-sm"] }}>
             Go
           </span>
           <span className="h-1.5 w-8 rounded-full" style={{ background: c("--primary", 0.5) }} />

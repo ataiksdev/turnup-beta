@@ -5,7 +5,34 @@ def blend(fg, bg, a):  # fg over bg at alpha a -> hex
 
 # Style themes. "card" is the panel tint drawn at card_alpha over the page; worst-case page
 # colours (base and the strongest blob) are checked, so text stays readable on any part.
+#
+# Optional surface/elevated/overlay give the solid styles (fluid, pop) their layer colours.
 S = {
+ # The default. Fluid: rounded corners, thin soft borders, diffuse shadows, a faint purple glow.
+ "turnup": {"name": "Turnup", "blurb": "Electric purple, smooth and rounded", "style": "fluid",
+   "dark": dict(bg="0C0A12", page=["0C0A12", "1C0E36", "151030"], card="15121D", card_alpha=1.0,
+                surface="110E18", elevated="1D1928", overlay="262133", elevated_alpha=1.0,
+                border="3D3552", border_alpha=1.0, subtle="221E2E",
+                text="FFFFFF", text2="C9C3D6", muted="9A93AB", disabled="4A4458",
+                primary="A855F7", hover="9333EA", plight="EDE9FE", pmuted="3B1764", on="FFFFFF", shadow="000000"),
+   "light": dict(bg="F7F5FB", page=["F7F5FB", "EFE6FD", "EAEEFF"], card="FFFFFF", card_alpha=1.0,
+                surface="F1EEF7", elevated="EFEBF6", overlay="E4DFEE", elevated_alpha=1.0,
+                border="CFC6E0", border_alpha=1.0, subtle="EAE6F1",
+                text="14111C", text2="3D3750", muted="5F5873", disabled="B3ACC2",
+                primary="7E22CE", hover="6B21A8", plight="F3E8FF", pmuted="E9D5FF", on="FFFFFF", shadow="2E1065")},
+ # Quiz-show: playful and chunky. Cream page with confetti glows (mint, butter, bubblegum), inky
+ # outlines, pill buttons on a solid 3D edge, rounded bold type. Dark: midnight navy + electric lime.
+ "pop": {"name": "Game Night", "blurb": "Confetti colours, chunky pill buttons, like a quiz show", "style": "pop",
+   "dark": dict(bg="14163A", page=["14163A", "2A1F5E", "123E4A", "3A1A4E"], card="1E2152", card_alpha=1.0,
+                surface="191C47", elevated="282C66", overlay="313676", elevated_alpha=1.0,
+                border="555BC0", border_alpha=1.0, subtle="2C3070",
+                text="FFFFFF", text2="DCDDF5", muted="AEB1DE", disabled="555A9A",
+                primary="D4F25C", hover="C2E83A", plight="F3FCD2", pmuted="4A5A12", on="17190A", shadow="05061A"),
+   "light": dict(bg="FFF7EA", page=["FFF7EA", "D8F6E8", "FFEDB8", "FFDDE8"], card="FFFFFF", card_alpha=1.0,
+                surface="FFFCF5", elevated="FFF1D9", overlay="FBE6C4", elevated_alpha=1.0,
+                border="1B1A3A", border_alpha=1.0, subtle="F0E2CB",
+                text="1B1A3A", text2="3A3960", muted="58577D", disabled="B9B8CF",
+                primary="2747D6", hover="1E37AD", plight="DCE4FF", pmuted="B9C8FF", on="FFFFFF", shadow="1B1A3A")},
  "glass": {"name": "Glass", "blurb": "Frosted panels over a glowing gradient", "style": "glass",
    "dark": dict(bg="0B1020", page=["0B1020", "2E1D5C", "0D2C45"], card="FFFFFF", card_alpha=0.10,
                 elevated_alpha=0.16, border="FFFFFF", border_alpha=0.30,
