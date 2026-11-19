@@ -32,7 +32,7 @@ export default function TicketDetailPage() {
   const { token } = useAuthStore();
   const { tickets, setTicket } = useTicketCache();
 
-  const { data: ticket, isLoading, isError } = useQuery({
+  const { data: ticket, isError } = useQuery({
     queryKey: ["ticket", id],
     queryFn: () => organizerApi.getTicket(token!, id),
     enabled: !!token && !!id,
@@ -57,7 +57,9 @@ export default function TicketDetailPage() {
     );
   }
 
-  if (isLoading && !cached) {
+  // Until there's a ticket to show (including the moment between the saved login being restored
+  // and the request starting, when the query isn't "loading" yet), show the skeleton.
+  if (!displayTicket && !isError) {
     return (
       <div className="flex flex-col">
         <TopBar back title="Ticket" />
@@ -70,7 +72,7 @@ export default function TicketDetailPage() {
     );
   }
 
-  if (isError && !cached) {
+  if (!displayTicket) {
     return (
       <div className="flex flex-col">
         <TopBar back title="Ticket" />
