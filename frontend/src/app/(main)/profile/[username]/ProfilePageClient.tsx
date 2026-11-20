@@ -390,7 +390,7 @@ export default function ProfilePage() {
       {/* Followers / Following bottom-sheet modal */}
       {followListModal && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50"
+          className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/50"
           onClick={() => setFollowListModal(null)}
         >
           <div

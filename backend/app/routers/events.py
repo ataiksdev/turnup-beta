@@ -792,6 +792,8 @@ async def attend(
     if old_status == payload.status:
         return {"status": payload.status, "attendees_count": event.attendees_count,
                 "interested_count": event.interested_count}
+    if _as_utc(event.end_date or event.start_date) <= datetime.now(timezone.utc):
+        raise HTTPException(400, "This event has ended.")
 
     becoming_going = payload.status == "going"
     if becoming_going:
@@ -1135,6 +1137,10 @@ async def checkout_tickets(
         Event.id == event_id, Event.status == "published"))).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found")
+    # A past event can still be opened (e.g. from an organizer's profile), but its tickets
+    # can't be bought. Sales stay open until the event ends, for latecomers.
+    if _as_utc(event.end_date or event.start_date) <= datetime.now(timezone.utc):
+        raise HTTPException(400, "This event has ended, so tickets are no longer on sale.")
 
     # Idempotency replay: a retried submit of the same checkout intent returns the same
     # reservation instead of creating a duplicate one.
@@ -1177,9 +1183,9 @@ async def checkout_tickets(
                                          f"{presale_end:%d %b, %H:%M} UTC.")
             if now >= presale_end and t.presale_then == "close":
                 raise HTTPException(400, f"The presale for '{t.name}' has ended")
-        if t.sale_start and now < t.sale_start:
+        if t.sale_start and now < _as_utc(t.sale_start):
             raise HTTPException(400, f"Sales for '{t.name}' have not started yet")
-        if t.sale_end and now > t.sale_end:
+        if t.sale_end and now > _as_utc(t.sale_end):
             raise HTTPException(400, f"Sales for '{t.name}' have ended")
         if item.quantity > t.max_per_order:
             raise HTTPException(400, f"Maximum {t.max_per_order} '{t.name}' tickets per order")
@@ -1471,6 +1477,8 @@ async def join_waitlist(
         raise HTTPException(404, "Event not found")
     if not event.waitlist_enabled:
         raise HTTPException(400, "This event does not have a waitlist")
+    if _as_utc(event.end_date or event.start_date) <= datetime.now(timezone.utc):
+        raise HTTPException(400, "This event has ended.")
     return await _join_waitlist_internal(event, user, db)
 
 

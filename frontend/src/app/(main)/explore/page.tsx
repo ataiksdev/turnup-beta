@@ -6,25 +6,15 @@ import { TopBar } from "@/components/layout/TopBar";
 import { EventCard } from "@/components/events/EventCard";
 import { formatEventDate, formatPrice, cn } from "@/lib/utils";
 import {
-  Music, Moon, Palette, Utensils, Monitor, Trophy, Laugh, Leaf,
   MapPin, Flame, Star, ArrowRight, Tag, Clock,
   CalendarDays, Users, Building2, Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
+import { CATEGORIES, CategoryTile } from "@/components/events/CategoryTile";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const CATEGORIES = [
-  { label: "Music",     slug: "music",     icon: Music,    bg: "bg-[#1a472a]", accent: "#22c55e" },
-  { label: "Nightlife", slug: "nightlife", icon: Moon,     bg: "bg-[#2d1b69]", accent: "#a78bfa" },
-  { label: "Arts",      slug: "arts",      icon: Palette,  bg: "bg-[#6b2d2d]", accent: "#f87171" },
-  { label: "Food",      slug: "food",      icon: Utensils, bg: "bg-[#6b4c1a]", accent: "#fb923c" },
-  { label: "Tech",      slug: "tech",      icon: Monitor,  bg: "bg-[#0d3b59]", accent: "#38bdf8" },
-  { label: "Sports",    slug: "sports",    icon: Trophy,   bg: "bg-[#1a5c2d]", accent: "#4ade80" },
-  { label: "Comedy",    slug: "comedy",    icon: Laugh,    bg: "bg-[#5c3d1a]", accent: "#fbbf24" },
-  { label: "Wellness",  slug: "wellness",  icon: Leaf,     bg: "bg-[#2d4a1a]", accent: "#86efac" },
-];
 
 // ── Section components ────────────────────────────────────────────────────────
 
@@ -208,19 +198,7 @@ export default function ExplorePage() {
       <section className="mt-5">
         <SectionHeader title="Browse by Category" />
         <div className="px-4 grid grid-cols-4 gap-2">
-          {CATEGORIES.map(({ label, slug, icon: Icon, bg }) => (
-            <Link
-              key={slug}
-              href={`/search?category=${slug}`}
-              className={cn(
-                "relative flex flex-col items-center justify-center gap-1.5 h-20 rounded border-2 border-border overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-brutal-sm",
-                bg,
-              )}
-            >
-              <Icon size={20} className="text-white/80" />
-              <span className="text-[9px] font-black text-white uppercase tracking-wide leading-none">{label}</span>
-            </Link>
-          ))}
+          {CATEGORIES.map((c) => <CategoryTile key={c.slug} category={c} size="sm" />)}
         </div>
       </section>
 

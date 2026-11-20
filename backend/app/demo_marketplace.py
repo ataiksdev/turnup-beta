@@ -211,3 +211,45 @@ async def seed_marketplace(db, user_ids: dict, event_ids: dict) -> None:
     await db.commit()
     print("✓ venue marketplace: 4 venues (2 visited, 1 live awaiting visit, 1 in review), agent kemi@turnup.ng, "
           "5 enquiries, 4 bookings, a refund awaiting the venue, featured slot, deals, Turnup+ member chiamaka@turnup.ng")
+
+
+async def run_venues_only() -> None:
+    """`python -m app.cli seed-venues`: add the venue demo data to a database that was seeded
+    with the demo data before the venue marketplace existed (so `seed` refuses, and only
+    `seed --reset` would add it, by wiping everything). Adds any missing demo accounts
+    (e.g. bola@turnup.ng, kemi@turnup.ng, password123), then the venues. Runs only on a demo
+    database, and only once."""
+    from sqlalchemy import func, or_
+
+    from app.database import AsyncSessionLocal, init_db
+    from app.demo_data import USERS, SeedRefused
+    from app.services.auth import hash_password
+
+    await init_db()
+    async with AsyncSessionLocal() as db:
+        if not (await db.execute(select(User.id).where(User.username == "adaeze_sounds"))).first():
+            raise SeedRefused("This doesn't look like a demo database (no adaeze_sounds account). "
+                              "Run `python -m app.cli seed` on an empty database instead.")
+        venues = (await db.execute(select(func.count(Venue.id)))).scalar()
+        if venues:
+            raise SeedRefused(f"The database already has {venues} venue(s); nothing to add.")
+
+        added = []
+        for u in USERS:
+            taken = (await db.execute(select(User.id).where(
+                or_(User.username == u["username"], User.email == u["email"])))).first()
+            if taken:
+                continue
+            db.add(User(id=str(uuid.uuid4()), email=u["email"], username=u["username"], full_name=u["full_name"],
+                        hashed_password=hash_password("password123"), bio=u.get("bio"),
+                        avatar_url=u.get("avatar"), location=u.get("location"),
+                        is_verified=u.get("verified", False), category_preferences=u.get("prefs"),
+                        onboarding_completed=True, role=u.get("role", "attendee")))
+            added.append(u["email"])
+        await db.flush()
+        if added:
+            print(f"✓ added missing demo accounts: {', '.join(added)} (password123)")
+
+        names = [u["username"] for u in USERS]
+        user_ids = dict((await db.execute(select(User.username, User.id).where(User.username.in_(names)))).all())
+        await seed_marketplace(db, user_ids, {})

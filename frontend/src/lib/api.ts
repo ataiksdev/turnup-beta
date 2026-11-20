@@ -966,6 +966,9 @@ export const communitiesApi = {
     return request<any[]>(`/communities/${slug}/events?${qs}`);
   },
 
+  /** Slugs of my communities that already have this event. */
+  sharedWith: (token: string, eventId: string) =>
+    request<{ slugs: string[] }>(`/communities/my/shared-event/${eventId}`, {}, token),
   shareEvent: (token: string, slug: string, event_id: string) =>
     request<{ ok: boolean }>(`/communities/${slug}/events`, {
       method: "POST", body: JSON.stringify({ event_id }),

@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { eventsApi, socialApi, seriesApi, communitiesApi, apiErrorMessage } from "@/lib/api";
+import { eventsApi, socialApi, seriesApi, communitiesApi, apiErrorMessage, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ShareButton } from "@/components/ui/ShareButton";
 import { EventDetailSkeleton } from "@/components/ui/Skeleton";
-import { formatEventDate, formatMoney, formatPrice, parseTags, timeAgo, displayName, safeHref } from "@/lib/utils";
+import { formatEventDate, formatMoney, formatPrice, parseTags, timeAgo, displayName, safeHref, randomId } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
@@ -144,6 +144,7 @@ export function EventDetailClient() {
   // Share to community state
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharedTo, setSharedTo] = useState<string[]>([]);
+  const [shareError, setShareError] = useState("");
 
   function flashError(msg: string) {
     setActionError(msg);
@@ -239,7 +240,7 @@ export function EventDetailClient() {
     mutationFn: () => {
       if (!token || cartItems.length === 0) return Promise.reject();
       if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = crypto.randomUUID();
+        idempotencyKeyRef.current = randomId();
       }
       return eventsApi.checkout(token, eid, cartItems, idempotencyKeyRef.current);
     },
@@ -318,11 +319,32 @@ export function EventDetailClient() {
     enabled: !!token && showShareModal,
   });
 
+  // Communities that already have this event (shared earlier, by me or another member).
+  const { data: alreadyShared } = useQuery({
+    queryKey: ["community-shared", eid],
+    queryFn: () => communitiesApi.sharedWith(token!, eid),
+    enabled: !!token && showShareModal,
+  });
+  const sharedSlugs = new Set([...sharedTo, ...(alreadyShared?.slugs ?? [])]);
+
   const shareMutation = useMutation({
     mutationFn: (slug: string) => communitiesApi.shareEvent(token!, slug, eid),
+    onMutate: () => setShareError(""),
     onSuccess: (_, slug) => setSharedTo((prev) => [...prev, slug]),
-    onError: (err) => flashError(apiErrorMessage(err, "Could not share event. Try again.")),
+    onError: (err, slug) => {
+      // Someone shared it there in the meantime: it's there, which is what was wanted.
+      if (err instanceof ApiError && err.status === 409) { setSharedTo((prev) => [...prev, slug]); return; }
+      setShareError(apiErrorMessage(err, "Couldn't share the event. Try again."));
+    },
   });
+
+  // The share sheet closes with Escape, like any dialog.
+  useEffect(() => {
+    if (!showShareModal) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowShareModal(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showShareModal]);
 
   if (isLoading) return <EventDetailSkeleton />;
 
@@ -339,6 +361,8 @@ export function EventDetailClient() {
   const tags    = parseTags(event.tags);
   const isGoing = attendance === "going";
   const isInterested = attendance === "interested";
+  // Past events still open (e.g. from an organizer's profile) but can't be bought or RSVP'd to.
+  const hasEnded = new Date(event.end_date ?? event.start_date).getTime() <= Date.now();
   const shareUrl = typeof window !== "undefined"
     ? `${publicOrigin()}/events/${id}`
     : `${SITE}/events/${id}`;
@@ -466,8 +490,18 @@ export function EventDetailClient() {
           </a>
         )}
 
+        {hasEnded && (
+          <div role="status" className="flex items-center gap-3 px-4 py-3 rounded border-2 border-border-subtle bg-bg-elevated">
+            <Clock size={18} className="text-text-muted shrink-0" aria-hidden />
+            <p className="text-sm text-text-secondary">
+              <span className="font-bold text-text">This event has ended.</span>{" "}
+              {isGoing ? "You were there." : "Tickets and RSVPs are closed."}
+            </p>
+          </div>
+        )}
+
         {/* RSVP */}
-        {user && (
+        {user && !hasEnded && (
           <div className="space-y-2">
             <div className="flex gap-2" role="group" aria-label="RSVP options">
               <Button
@@ -496,7 +530,7 @@ export function EventDetailClient() {
         )}
 
         {/* Share to Community */}
-        {user && (
+        {user && !hasEnded && (
           <button
             onClick={() => setShowShareModal(true)}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded border-2 border-dashed border-border hover:border-primary hover:text-primary text-text-muted text-xs font-bold uppercase tracking-widest transition-colors"
@@ -599,7 +633,7 @@ export function EventDetailClient() {
         <GuestVenueReview event={event} />
 
         {/* Ticket tiers */}
-        {tiers && tiers.length > 0 && (
+        {tiers && tiers.length > 0 && !hasEnded && (
           <section aria-labelledby="tickets-heading">
             <h2 id="tickets-heading" className="text-base font-bold text-text flex items-center gap-2 mb-3">
               <Ticket size={18} className="text-primary" /> Tickets
@@ -713,7 +747,7 @@ export function EventDetailClient() {
         )}
 
         {/* Waitlist */}
-        {event?.waitlist_enabled && user && !purchaseSuccess && (tiers?.every(t => (t.available !== null && t.available <= 0)) || !tiers?.length) && (
+        {event?.waitlist_enabled && user && !purchaseSuccess && !hasEnded && (tiers?.every(t => (t.available !== null && t.available <= 0)) || !tiers?.length) && (
           <section className="bg-bg-card border-2 border-border rounded p-4 shadow-brutal-sm space-y-3">
             <div className="flex items-center gap-2">
               <Clock size={16} className="text-primary" />
@@ -921,19 +955,21 @@ export function EventDetailClient() {
       {/* Share to Community bottom sheet */}
       {showShareModal && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-end bg-black/50"
+          className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/50"
           onClick={() => setShowShareModal(false)}
         >
           <div
+            role="dialog" aria-modal="true" aria-labelledby="share-community-title"
             className="bg-bg rounded-t-2xl border-t-2 border-border max-h-[70vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b-2 border-border">
-              <p className="font-black text-text uppercase tracking-widest text-xs">Share to Community</p>
-              <button onClick={() => setShowShareModal(false)} className="p-1 rounded hover:bg-bg-elevated transition-colors">
+              <p id="share-community-title" className="font-black text-text uppercase tracking-widest text-xs">Share to Community</p>
+              <button autoFocus aria-label="Close" onClick={() => setShowShareModal(false)} className="p-1 rounded hover:bg-bg-elevated transition-colors">
                 <XIcon size={16} className="text-text-muted" />
               </button>
             </div>
+            {shareError && <p role="alert" className="px-4 pt-3 text-xs text-error">{shareError}</p>}
             <div className="overflow-y-auto flex-1 divide-y divide-border">
               {!myCommunities ? (
                 <div className="flex justify-center py-10">
@@ -947,7 +983,7 @@ export function EventDetailClient() {
                 </div>
               ) : (
                 myCommunities.map((c: any) => {
-                  const shared = sharedTo.includes(c.slug);
+                  const shared = sharedSlugs.has(c.slug);
                   return (
                     <button
                       key={c.id}
@@ -963,7 +999,9 @@ export function EventDetailClient() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-text truncate">{c.name}</p>
-                        <p className="text-xs text-text-muted">{c.member_count} members</p>
+                        <p className="text-xs text-text-muted">
+                          {shared ? "Shared here" : `${c.member_count} members`}
+                        </p>
                       </div>
                       {shared ? (
                         <CheckCircle2 size={16} className="text-success shrink-0" />

@@ -18,6 +18,22 @@ export function safeHref(url: string | null | undefined): string | undefined {
   }
 }
 
+/** A random UUID (v4) that works everywhere. crypto.randomUUID only exists on secure pages
+ *  (HTTPS or localhost) and newer browsers/WebViews, so opening the app over plain HTTP (e.g.
+ *  a LAN address) or in an older Android WebView made it throw; getRandomValues works on any
+ *  page. */
+export function randomId(): string {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === "function") return c.randomUUID();
+  const b = new Uint8Array(16);
+  if (typeof c?.getRandomValues === "function") c.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4
+  b[8] = (b[8] & 0x3f) | 0x80; // variant
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

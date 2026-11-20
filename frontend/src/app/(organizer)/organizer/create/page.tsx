@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { TopBar } from "@/components/layout/TopBar";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { cn } from "@/lib/utils";
+import { cn, randomId } from "@/lib/utils";
 import {
   AlignLeft, Calendar, CheckCircle2, ChevronDown, DollarSign, FileText, Image, MapPin,
   Plus, Tag, Ticket, Trash2, ToggleLeft, ToggleRight,
@@ -91,7 +91,7 @@ const TIMEZONES = [
 
 const STEPS = ["Basics", "Time & Place", "Tickets", "Review"];
 
-function uid() { return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2); }
+const uid = randomId;
 function newTier(): TierDraft {
   return { id: uid(), name: "", description: "", price: "", quantity: "", max_per_order: "10" };
 }
