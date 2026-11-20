@@ -7,16 +7,23 @@ import { EventCard } from "@/components/events/EventCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { Bookmark } from "lucide-react";
+import { Bookmark, WifiOff } from "lucide-react";
+import { useOfflineCopy } from "@/store/tickets";
+import { useOffline } from "@/lib/network";
 
 export default function SavedPage() {
   const { token, user } = useAuthStore();
 
-  const { data: saved, isLoading, isError } = useQuery({
+  const { data: live, isLoading, isError } = useQuery({
     queryKey: ["saved", user?.username],
     queryFn: () => (token && user) ? usersApi.saved(user.username, token) : Promise.resolve([]),
     enabled: !!token && !!user,
   });
+  // The copy kept on the phone (OfflineSync), whenever the live list isn't here.
+  const copy = useOfflineCopy(user?.id);
+  const offline = useOffline();
+  const usingCopy = !live && copy.syncedAt !== null;
+  const saved = live ?? (usingCopy ? copy.saved : undefined);
 
   if (!user || !token) {
     return (
@@ -33,18 +40,27 @@ export default function SavedPage() {
     <div className="flex flex-col pb-4">
       <TopBar title="Saved Events" />
 
+      {usingCopy && (offline || isError) && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-bg-elevated border-b border-border text-xs text-text-muted">
+          <WifiOff size={12} aria-hidden />
+          <span>You&apos;re offline. Showing saved events kept on this phone.</span>
+        </div>
+      )}
+
       <div className="px-4 pt-4">
-        {isLoading ? (
+        {isLoading && !saved && !offline ? (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-52 w-full" />
             ))}
           </div>
-        ) : isError ? (
+        ) : (isError || offline) && !saved ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
             <Bookmark size={40} className="text-border-strong" aria-hidden />
-            <p className="text-text-secondary font-medium">Could not load saved events</p>
-            <p className="text-sm text-text-muted">Check your connection and try again</p>
+            <p className="text-text-secondary font-medium">{offline ? "You're offline" : "Could not load saved events"}</p>
+            <p className="text-sm text-text-muted">
+              {offline ? "Your saved events will show here once you're back online." : "Check your connection and try again"}
+            </p>
           </div>
         ) : saved && saved.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">

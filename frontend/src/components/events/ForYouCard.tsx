@@ -9,6 +9,7 @@ import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { routes } from "@/lib/routes";
+import { useOfflineImage } from "@/lib/offlineImages";
 
 interface ForYouCardProps {
   event: Event;
@@ -24,6 +25,7 @@ const RANK_STYLES: Record<number, string> = {
 };
 
 export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
+  const coverSrc = useOfflineImage(event.cover_image); // kept copy while offline
   const { token } = useAuthStore();
   const [saved, setSaved] = useState(event.is_saved);
   const [saving, setSaving] = useState(false);
@@ -61,7 +63,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
       <div className="relative w-full aspect-[16/7] overflow-hidden">
         {event.cover_image ? (
           <Image
-            src={event.cover_image}
+            src={coverSrc ?? event.cover_image}
             alt={event.title}
             fill
             className="object-cover"

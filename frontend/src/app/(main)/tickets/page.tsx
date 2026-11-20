@@ -1,9 +1,10 @@
 "use client";
-import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
-import { useTicketCache } from "@/store/tickets";
+import { useOfflineCopy } from "@/store/tickets";
+import { useOffline } from "@/lib/network";
+import { OfflineImg } from "@/components/ui/OfflineImg";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -22,7 +23,9 @@ const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; 
 
 export default function TicketsPage() {
   const { token, user } = useAuthStore();
-  const { tickets: cachedTickets, setTickets } = useTicketCache();
+  // The copy kept on the phone (OfflineSync refreshes it); shown whenever live data isn't here.
+  const { tickets: cachedTickets, syncedAt } = useOfflineCopy(user?.id);
+  const offline = useOffline();
 
   const { data: tickets, isLoading, isError } = useQuery({
     queryKey: ["my-tickets", user?.id],
@@ -30,15 +33,11 @@ export default function TicketsPage() {
     enabled: !!token,
   });
 
-  useEffect(() => {
-    if (tickets?.length) setTickets(tickets);
-  }, [tickets, setTickets]);
-
   const cachedList = Object.values(cachedTickets).sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
-  const isOffline = isError && cachedList.length > 0;
-  const displayTickets = tickets ?? (isError ? cachedList : undefined);
+  const usingCopy = !tickets && cachedList.length > 0;
+  const displayTickets = tickets ?? (cachedList.length ? cachedList : undefined);
 
   if (!user || !token) {
     return (
@@ -55,10 +54,13 @@ export default function TicketsPage() {
     <div className="flex flex-col pb-4">
       <TopBar title="My Tickets" />
 
-      {isOffline && (
+      {usingCopy && (offline || isError) && (
         <div className="flex items-center gap-2 px-4 py-2 bg-bg-elevated border-b border-border text-xs text-text-muted">
           <WifiOff size={12} />
-          <span>You're offline — showing saved tickets</span>
+          <span>
+            You&apos;re offline. Showing tickets saved on this phone
+            {syncedAt ? ` (updated ${new Date(syncedAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })})` : ""}.
+          </span>
         </div>
       )}
 
@@ -67,11 +69,13 @@ export default function TicketsPage() {
           Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-28 w-full" />
           ))
-        ) : isError && !cachedList.length ? (
+        ) : (isError || offline) && !displayTickets ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
             <Ticket size={40} className="text-border-strong" aria-hidden />
-            <p className="text-text-secondary font-medium">Could not load tickets</p>
-            <p className="text-sm text-text-muted">Check your connection and try again</p>
+            <p className="text-text-secondary font-medium">{offline ? "You're offline" : "Could not load tickets"}</p>
+            <p className="text-sm text-text-muted">
+              {offline ? "Your tickets will show here once you're back online." : "Check your connection and try again"}
+            </p>
           </div>
         ) : displayTickets && displayTickets.length > 0 ? (
           displayTickets.map((t) => {
@@ -86,7 +90,7 @@ export default function TicketsPage() {
                 {/* Cover strip */}
                 {t.event_cover && (
                   <div className="h-20 w-full overflow-hidden">
-                    <img src={t.event_cover} alt="" className="w-full h-full object-cover" />
+                    <OfflineImg src={t.event_cover} alt="" className="w-full h-full object-cover" />
                   </div>
                 )}
 

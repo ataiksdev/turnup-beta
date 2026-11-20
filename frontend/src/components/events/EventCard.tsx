@@ -8,6 +8,7 @@ import { useState } from "react";
 import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { routes } from "@/lib/routes";
+import { useOfflineImage } from "@/lib/offlineImages";
 
 interface EventCardProps {
   event: Event;
@@ -16,6 +17,7 @@ interface EventCardProps {
 }
 
 export function EventCard({ event, size = "md", className }: EventCardProps) {
+  const coverSrc = useOfflineImage(event.cover_image); // kept copy while offline
   const { token } = useAuthStore();
   const [saved, setSaved] = useState(event.is_saved);
   const [saving, setSaving] = useState(false);
@@ -54,7 +56,7 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
       <div className="relative aspect-square w-full overflow-hidden">
         {event.cover_image ? (
           <Image
-            src={event.cover_image}
+            src={coverSrc ?? event.cover_image}
             alt={event.title}
             fill
             className="object-cover"

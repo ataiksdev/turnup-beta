@@ -2,6 +2,7 @@ import type {
   Category, Comment, Event, EventFilters, FeedItem,
   Notification, OrganizerProfile, Token, User,
 } from "@/types";
+import { OFFLINE_MESSAGE, reportReachable, requestOfflineSync } from "@/lib/network";
 
 export interface TicketTierDetail {
   id: string; event_id: string; name: string; description: string | null;
@@ -84,6 +85,7 @@ export class ApiError extends Error {
 /** The server's explanation for a 4xx ("Event is at capacity", "This event needs a
  *  ticket"...), or `fallback` for network/server errors whose text isn't meant for users. */
 export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.status === 0) return err.message; // offline
   if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.message) return err.message;
   return fallback;
 }
@@ -99,7 +101,17 @@ export async function request<T>(
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}/api${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api${path}`, { ...options, headers });
+  } catch (err) {
+    // Never reached the server (no connection, server down): say so plainly instead of the
+    // browser's "Failed to fetch", and let the offline banner know. Status 0 = no response.
+    if ((err as Error)?.name === "AbortError") throw err;
+    reportReachable(false);
+    throw new ApiError(0, OFFLINE_MESSAGE);
+  }
+  reportReachable(true);
 
   if (!res.ok) {
     // The session behind the stored token was revoked (logout elsewhere, password change or
@@ -365,7 +377,8 @@ export const eventsApi = {
     request<{ status: null }>(`/events/${eventId}/attend`, { method: "DELETE" }, token),
 
   save: (token: string, eventId: string) =>
-    request<{ saved: boolean }>(`/events/${eventId}/save`, { method: "POST" }, token),
+    request<{ saved: boolean }>(`/events/${eventId}/save`, { method: "POST" }, token)
+      .then((r) => { requestOfflineSync(); return r; }),
 
   attendees: (eventId: string, status?: string) => {
     const q = status ? `?status=${status}` : "";
@@ -382,7 +395,7 @@ export const eventsApi = {
   checkout: (token: string, eventId: string, items: CheckoutItem[], idempotencyKey?: string) =>
     request<CheckoutInit>(`/events/${eventId}/tickets/checkout`, {
       method: "POST", body: JSON.stringify({ items, idempotency_key: idempotencyKey }),
-    }, token),
+    }, token).then((r) => { if (r.is_free) requestOfflineSync(); return r; }),
 
   recordView: (eventId: string, token?: string) =>
     request<void>(`/events/${eventId}/views`, { method: "POST" }, token),
@@ -390,7 +403,7 @@ export const eventsApi = {
   verifyPayment: (token: string, eventId: string, reference: string) =>
     request<TicketOrder[]>(`/events/${eventId}/tickets/verify-payment`, {
       method: "POST", body: JSON.stringify({ reference }),
-    }, token),
+    }, token).then((r) => { requestOfflineSync(); return r; }),
 
   checkIn: (token: string, eventId: string, ticketCode: string, admit?: number) =>
     request<CheckInResult>(`/events/${eventId}/checkin`, {

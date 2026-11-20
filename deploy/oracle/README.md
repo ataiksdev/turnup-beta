@@ -172,7 +172,15 @@ suggested: 10 GB free and no charge for downloads.
 1. **dash.cloudflare.com → R2 → Create bucket** twice:
    - `turnup-media` (public uploads): bucket → **Settings → Public access** → allow the
      `r2.dev` URL, or connect a custom domain such as `media.yourdomain.com` (better: cached by
-     Cloudflare, no rate limit). Copy the public address.
+     Cloudflare, no rate limit). Copy the public address. Then **Settings → CORS policy → Add**:
+
+     ```json
+     [{ "AllowedOrigins": ["http://localhost", "https://<website address>"], "AllowedMethods": ["GET"] }]
+     ```
+
+     This lets the app keep cover photos of your tickets and saved events on the phone for
+     offline use (`http://localhost` is the Android app). Without it, those photos just show a
+     placeholder offline.
    - `turnup-backups` (private): leave public access **off**.
 2. **R2 → Manage API tokens → Create API token**: permission *Object Read & Write*, limited to
    those two buckets. Copy the *Access Key ID*, *Secret Access Key* and the *S3 endpoint*
