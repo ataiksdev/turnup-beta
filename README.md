@@ -141,4 +141,5 @@ GitHub Actions (`.github/workflows/ci.yml`) runs all of the above on every push.
 cd frontend
 npm run build:capacitor       # static export into out/, admin pages removed
 npx cap sync android && npx cap open android
+npm run cap:live              # live reload from your dev server instead (needs CAPACITOR_DEV_SERVER_URL)
 ```

@@ -134,8 +134,12 @@ NEXT_PUBLIC_API_URL=https://<api name>
 NEXT_PUBLIC_SITE_URL=<website address>
 ```
 
-Remove `CAPACITOR_DEV_SERVER_URL` (or the release build refuses to run; see
-`frontend/android/app/release-guard.gradle`), then:
+Remove `CAPACITOR_DEV_SERVER_URL` from the shell, `.env.local` and `.env`: while it's set,
+`npx cap sync android` stops with an explanation, because it would turn the app into a
+live-reload shell for your computer instead of bundling the screens (it then shows "Web page not
+available" whenever that computer isn't reachable). Live reload on purpose is `npm run cap:live`,
+and release builds also refuse a live-reload shell (`frontend/android/app/release-guard.gradle`).
+Then:
 
 ```bash
 npm run build:capacitor

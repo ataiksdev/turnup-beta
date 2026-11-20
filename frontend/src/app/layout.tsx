@@ -5,6 +5,10 @@ import { Providers } from "./providers";
 import { SkipNav } from "@/components/layout/SkipNav";
 import { PWASetup } from "@/components/layout/PWASetup";
 import { themeBootScript } from "@/lib/themes";
+import { AppSplash } from "@/components/layout/AppSplash";
+
+// The Android app (static export) gets the animated splash; the website doesn't.
+const IS_APP = process.env.NEXT_PUBLIC_STATIC_EXPORT === "true";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 // Rounded, bold type for the Game Night theme (only downloaded when that theme is on).
@@ -59,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
       </head>
       <body className={`${inter.variable} ${nunito.variable} font-sans antialiased`}>
+        {IS_APP && <AppSplash />}
         <SkipNav />
         <Providers>
           {children}
