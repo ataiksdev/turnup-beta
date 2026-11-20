@@ -1,14 +1,27 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Nunito } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
 import { SkipNav } from "@/components/layout/SkipNav";
 import { PWASetup } from "@/components/layout/PWASetup";
 import { themeBootScript } from "@/lib/themes";
+import { AppSplash } from "@/components/layout/AppSplash";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// The Android app (static export) gets the animated splash; the website doesn't.
+const IS_APP = process.env.NEXT_PUBLIC_STATIC_EXPORT === "true";
+
+// Fonts ship with the app (npm @fontsource-variable/*, SIL Open Font License) instead of being
+// fetched from Google Fonts at build time, which made builds fail whenever that download did.
+// Variable fonts: one file covers every weight.
+const inter = localFont({
+  src: "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2",
+  variable: "--font-inter", weight: "100 900", display: "swap",
+});
 // Rounded, bold type for the Game Night theme (only downloaded when that theme is on).
-const nunito = Nunito({ subsets: ["latin"], variable: "--font-pop", weight: ["500", "700", "800", "900"], preload: false });
+const nunito = localFont({
+  src: "../../node_modules/@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2",
+  variable: "--font-pop", weight: "200 1000", display: "swap", preload: false,
+});
 
 export const metadata: Metadata = {
   title: { default: "Turnup", template: "%s · Turnup" },
@@ -59,6 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
       </head>
       <body className={`${inter.variable} ${nunito.variable} font-sans antialiased`}>
+        {IS_APP && <AppSplash />}
         <SkipNav />
         <Providers>
           {children}

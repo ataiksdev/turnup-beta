@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Download, Share, X, Zap } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -13,7 +14,23 @@ export function PWASetup() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Register service worker
+    // The Android app already has every screen bundled, so it doesn't use the website's
+    // service worker: inside the app's WebView it would sit between the app and its own
+    // files and can leave it blank offline. Remove any copy an earlier version installed
+    // (and its caches), and skip the website's install prompts too.
+    if (Capacitor.isNativePlatform()) {
+      navigator.serviceWorker?.getRegistrations()
+        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+        .catch(() => {});
+      if ("caches" in window) {
+        caches.keys()
+          .then((keys) => Promise.all(keys.filter((k) => k.startsWith("turnup-")).map((k) => caches.delete(k))))
+          .catch(() => {});
+      }
+      return;
+    }
+
+    // Website: register the service worker (offline page, image cache).
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
     }

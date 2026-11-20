@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState } from "react";
 import { ThemeController } from "@/components/layout/ThemeController";
+import { OfflineBanner } from "@/components/layout/OfflineBanner";
+import { OfflineSync } from "@/components/layout/OfflineSync";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,6 +25,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeController />
       {children}
+      <OfflineBanner />
+      <OfflineSync />
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

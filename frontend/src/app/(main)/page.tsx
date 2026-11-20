@@ -10,7 +10,8 @@ import { parsePreferences, displayName as getDisplayName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Users, Lock, CheckCircle2 } from "lucide-react";
+import { Users, Lock, CheckCircle2, WifiOff, Ticket, Bookmark } from "lucide-react";
+import { useOffline } from "@/lib/network";
 import type { Event, User } from "@/types";
 import { routes } from "@/lib/routes";
 import { DeepLinkRestore } from "@/components/layout/DeepLinkRestore";
@@ -85,6 +86,7 @@ export default function DiscoverPage() {
     enabled: !!token,
   });
 
+  const offline = useOffline();
   const heroEvent = featured?.[0];
   const topPicks = forYou?.slice(0, 3) ?? [];
 
@@ -170,7 +172,28 @@ export default function DiscoverPage() {
           </Link>
         </div>
 
-        {loadingForYou ? (
+        {offline && !forYou?.length ? (
+          <div role="status" className="flex flex-col items-center gap-3 px-6 py-8 text-center border-2 border-dashed border-border rounded">
+            <WifiOff size={28} className="text-text-muted" aria-hidden />
+            <div>
+              <p className="text-sm font-black text-text">You&apos;re offline</p>
+              <p className="text-xs text-text-muted mt-1">
+                New events will load when you&apos;re back online.
+                {user ? " Your tickets and saved events are on this phone." : ""}
+              </p>
+            </div>
+            {user && (
+              <div className="flex gap-2">
+                <Link href="/tickets" className="inline-flex items-center gap-1.5 h-8 px-3 rounded border-2 border-border bg-bg-card text-xs font-bold text-text">
+                  <Ticket size={13} aria-hidden /> My tickets
+                </Link>
+                <Link href="/saved" className="inline-flex items-center gap-1.5 h-8 px-3 rounded border-2 border-border bg-bg-card text-xs font-bold text-text">
+                  <Bookmark size={13} aria-hidden /> Saved
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : loadingForYou ? (
           <div className="space-y-3">
             <Skeleton className="h-[220px] w-full" />
             <div className="grid grid-cols-2 gap-3">
@@ -228,13 +251,15 @@ export default function DiscoverPage() {
         <HeroEvent event={heroEvent} />
       )}
 
-      {/* Trending */}
-      <EventCarousel
-        title="Trending Now"
-        events={trending}
-        loading={loadingTrending}
-        seeAllHref="/search?trending=true"
-      />
+      {/* Trending (hidden offline when there's nothing loaded to show) */}
+      {!(offline && !trending?.length) && (
+        <EventCarousel
+          title="Trending Now"
+          events={trending}
+          loading={loadingTrending}
+          seeAllHref="/search?trending=true"
+        />
+      )}
 
       {/* Remaining For You — rest of the personalised list as a carousel */}
       {forYou && forYou.length > 3 && (
@@ -246,12 +271,14 @@ export default function DiscoverPage() {
       )}
 
       {/* Free events */}
-      <EventCarousel
-        title="Free to Attend"
-        events={free}
-        loading={loadingFree}
-        seeAllHref="/search?free=true"
-      />
+      {!(offline && !free?.length) && (
+        <EventCarousel
+          title="Free to Attend"
+          events={free}
+          loading={loadingFree}
+          seeAllHref="/search?free=true"
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,9 @@
-const VERSION = 'v1';
+const VERSION = 'v2';
+
+// The Android app (Capacitor serves it from http://localhost with no port) bundles every
+// screen and must not run this website worker: if an older app version installed it, it
+// removes itself and lets every request through untouched.
+const IN_APP = self.location.origin === 'http://localhost' || self.location.protocol === 'capacitor:';
 const STATIC_CACHE = `turnup-static-${VERSION}`;
 const IMAGE_CACHE  = `turnup-images-${VERSION}`;
 const PAGE_CACHE   = `turnup-pages-${VERSION}`;
@@ -8,6 +13,7 @@ const ALL_CACHES = [STATIC_CACHE, IMAGE_CACHE, PAGE_CACHE];
 
 // ── Install ───────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
+  if (IN_APP) { self.skipWaiting(); return; }
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => cache.addAll(PRECACHE))
@@ -17,6 +23,14 @@ self.addEventListener('install', (event) => {
 
 // ── Activate — prune old caches ───────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
+  if (IN_APP) {
+    event.waitUntil(
+      caches.keys()
+        .then((keys) => Promise.all(keys.filter((k) => k.startsWith('turnup-')).map((k) => caches.delete(k))))
+        .then(() => self.registration.unregister()),
+    );
+    return;
+  }
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
@@ -28,6 +42,7 @@ self.addEventListener('activate', (event) => {
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
+  if (IN_APP) return; // never stand between the app and its own files
   const { request } = event;
   const url = new URL(request.url);
 

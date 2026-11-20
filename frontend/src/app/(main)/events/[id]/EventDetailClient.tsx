@@ -2,6 +2,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { eventsApi, socialApi, seriesApi, communitiesApi, apiErrorMessage, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { useOfflineCopy, useOfflineStore } from "@/store/tickets";
+import { useOffline } from "@/lib/network";
+import { useOfflineImage } from "@/lib/offlineImages";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -13,7 +16,7 @@ import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
   Star, Ticket, Minus, Plus, Flame, Monitor, AlertCircle,
-  Clock, Images, RefreshCw, Share2, X as XIcon,
+  Clock, Images, RefreshCw, Share2, X as XIcon, WifiOff,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -69,13 +72,25 @@ export function EventDetailClient() {
   const { token, user, hasHydrated } = useAuthStore();
   const qc = useQueryClient();
 
-  const { data: event, isPending: isLoading } = useQuery({
+  const { data: liveEvent, isPending: livePending } = useQuery({
     // Keyed on the session too, so the anonymous response (no saved/going state) is replaced
     // once the saved session has loaded.
     queryKey: ["event", id, !!token],
     queryFn: () => eventsApi.get(id, token ?? undefined),
     enabled: hasHydrated && !!id,
   });
+  // Events the user has a ticket for or saved are kept on the phone (OfflineSync): offline,
+  // the page opens from that copy. Buying, RSVPs and comments need a connection.
+  const offlineCopy = useOfflineCopy(user?.id);
+  const offline = useOffline();
+  const keptEvent = offlineCopy.events[id];
+  const event = liveEvent ?? keptEvent;
+  const showingKeptCopy = !liveEvent && !!keptEvent;
+  const isLoading = livePending && !keptEvent && !offline;
+  useEffect(() => {
+    if (liveEvent && user) useOfflineStore.getState().setEvent(user.id, liveEvent);
+  }, [liveEvent, user]);
+  const heroSrc = useOfflineImage(event?.cover_image);
 
   // Count a view once the event has loaded (the API de-duplicates repeat views).
   const viewedEventId = event?.id;
@@ -350,9 +365,14 @@ export function EventDetailClient() {
 
   if (!event) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-3">
+      <div className="flex flex-col items-center justify-center h-screen gap-3 px-8 text-center">
         <AlertCircle size={40} className="text-border-strong" aria-hidden />
-        <p className="text-text-secondary">Event not found</p>
+        <p className="text-text-secondary">{offline ? "You're offline" : "Event not found"}</p>
+        {offline && (
+          <p className="text-sm text-text-muted">
+            This event isn&apos;t saved on this phone. Events you have tickets for or saved open offline.
+          </p>
+        )}
         <Link href="/" className="text-primary text-sm font-medium">← Back to Discover</Link>
       </div>
     );
@@ -369,11 +389,17 @@ export function EventDetailClient() {
 
   return (
     <article className="flex flex-col pb-8">
+      {showingKeptCopy && (
+        <div role="status" className="flex items-center gap-2 px-4 py-2 bg-bg-elevated border-b border-border text-xs text-text-muted">
+          <WifiOff size={12} aria-hidden />
+          <span>You&apos;re offline. Showing the copy of this event saved on your phone.</span>
+        </div>
+      )}
       {/* Hero image */}
       <div className="relative h-72 w-full">
-        {event.cover_image ? (
+        {heroSrc ? (
           <Image
-            src={event.cover_image}
+            src={heroSrc}
             alt={event.title}
             fill
             className="object-cover"

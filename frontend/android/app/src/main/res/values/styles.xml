@@ -13,10 +13,17 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Dark behind the WebView while the page loads, never white. -->
+        <item name="android:windowBackground">@color/splash_background</item>
     </style>
 
 
+    <!-- Launch screen: the plain dark brand background (no icon), followed straight away by the
+         animated "turnup" splash in the web app (src/components/layout/AppSplash.tsx). -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="android:background">@color/splash_background</item>
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

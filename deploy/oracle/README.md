@@ -134,8 +134,12 @@ NEXT_PUBLIC_API_URL=https://<api name>
 NEXT_PUBLIC_SITE_URL=<website address>
 ```
 
-Remove `CAPACITOR_DEV_SERVER_URL` (or the release build refuses to run; see
-`frontend/android/app/release-guard.gradle`), then:
+Remove `CAPACITOR_DEV_SERVER_URL` from the shell, `.env.local` and `.env`: while it's set,
+`npx cap sync android` stops with an explanation, because it would turn the app into a
+live-reload shell for your computer instead of bundling the screens (it then shows "Web page not
+available" whenever that computer isn't reachable). Live reload on purpose is `npm run cap:live`,
+and release builds also refuse a live-reload shell (`frontend/android/app/release-guard.gradle`).
+Then:
 
 ```bash
 npm run build:capacitor
@@ -168,7 +172,15 @@ suggested: 10 GB free and no charge for downloads.
 1. **dash.cloudflare.com → R2 → Create bucket** twice:
    - `turnup-media` (public uploads): bucket → **Settings → Public access** → allow the
      `r2.dev` URL, or connect a custom domain such as `media.yourdomain.com` (better: cached by
-     Cloudflare, no rate limit). Copy the public address.
+     Cloudflare, no rate limit). Copy the public address. Then **Settings → CORS policy → Add**:
+
+     ```json
+     [{ "AllowedOrigins": ["http://localhost", "https://<website address>"], "AllowedMethods": ["GET"] }]
+     ```
+
+     This lets the app keep cover photos of your tickets and saved events on the phone for
+     offline use (`http://localhost` is the Android app). Without it, those photos just show a
+     placeholder offline.
    - `turnup-backups` (private): leave public access **off**.
 2. **R2 → Manage API tokens → Create API token**: permission *Object Read & Write*, limited to
    those two buckets. Copy the *Access Key ID*, *Secret Access Key* and the *S3 endpoint*

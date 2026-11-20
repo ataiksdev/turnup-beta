@@ -3,7 +3,9 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { organizerApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
-import { useTicketCache } from "@/store/tickets";
+import { useOfflineCopy, useOfflineStore } from "@/store/tickets";
+import { useOffline } from "@/lib/network";
+import { OfflineImg } from "@/components/ui/OfflineImg";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { ShareButton } from "@/components/ui/ShareButton";
@@ -30,8 +32,9 @@ const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; 
 
 export default function TicketDetailPage() {
   const id = useRouteParam("id");
-  const { token } = useAuthStore();
-  const { tickets, setTicket } = useTicketCache();
+  const { token, user } = useAuthStore();
+  const { tickets } = useOfflineCopy(user?.id);
+  const offline = useOffline();
 
   const { data: ticket, isError } = useQuery({
     queryKey: ["ticket", id],
@@ -39,14 +42,16 @@ export default function TicketDetailPage() {
     enabled: !!token && !!id,
   });
 
+  // Keep the freshest copy of this ticket on the phone.
   useEffect(() => {
-    if (ticket) setTicket(ticket);
-  }, [ticket, setTicket]);
+    if (ticket && user) useOfflineStore.getState().setTicket(user.id, ticket);
+  }, [ticket, user]);
 
-  // Fall back to locally cached version when offline or on error
+  // The copy kept on the phone, whenever the live ticket isn't here (offline, or not loaded yet),
+  // so the QR code opens at the door with no signal.
   const cached = tickets[id];
-  const isOffline = isError && !!cached;
-  const displayTicket = ticket ?? (isError ? cached : undefined);
+  const usingCopy = !ticket && !!cached;
+  const displayTicket = ticket ?? cached;
 
   if (!token) {
     return (
@@ -60,7 +65,7 @@ export default function TicketDetailPage() {
 
   // Until there's a ticket to show (including the moment between the saved login being restored
   // and the request starting, when the query isn't "loading" yet), show the skeleton.
-  if (!displayTicket && !isError) {
+  if (!displayTicket && !isError && !offline) {
     return (
       <div className="flex flex-col">
         <TopBar back title="Ticket" />
@@ -79,7 +84,10 @@ export default function TicketDetailPage() {
         <TopBar back title="Ticket" />
         <div className="flex flex-col items-center justify-center py-24 gap-3 text-center px-8">
           <Ticket size={40} className="text-border-strong" />
-          <p className="text-sm font-black text-text-secondary uppercase tracking-wide">Ticket not found</p>
+          <p className="text-sm font-black text-text-secondary uppercase tracking-wide">
+            {offline ? "You're offline" : "Ticket not found"}
+          </p>
+          {offline && <p className="text-sm text-text-muted">This ticket isn&apos;t saved on this phone yet. Open it once while online.</p>}
           <Link href="/tickets"><Button variant="secondary" size="sm">Back to tickets</Button></Link>
         </div>
       </div>
@@ -105,17 +113,17 @@ export default function TicketDetailPage() {
       <TopBar back title="My Ticket" />
 
       {/* Offline notice */}
-      {isOffline && (
+      {usingCopy && (offline || isError) && (
         <div className="flex items-center gap-2 px-4 py-2 bg-bg-elevated border-b border-border text-xs text-text-muted">
           <WifiOff size={12} />
-          <span>You're offline — showing saved ticket</span>
+          <span>You&apos;re offline. This ticket is saved on your phone and its QR code works at the door.</span>
         </div>
       )}
 
       {/* Cover */}
       {displayTicket!.event_cover && (
         <div className="h-40 w-full overflow-hidden">
-          <img src={displayTicket!.event_cover} alt="" className="w-full h-full object-cover" />
+          <OfflineImg src={displayTicket!.event_cover} alt="" className="w-full h-full object-cover" />
         </div>
       )}
 
@@ -192,7 +200,7 @@ export default function TicketDetailPage() {
               />
             </div>
             <p className="text-xs text-text-muted text-center">
-              Show this at the door. Save the ticket below to keep it for offline access.
+              Show this at the door. It works offline too: it&apos;s kept on this phone.
             </p>
             <p className="font-mono text-xs text-text-muted tracking-widest">
               {displayTicket!.ticket_code.toUpperCase().replace(/-/g, " ")}
@@ -213,7 +221,7 @@ export default function TicketDetailPage() {
           </div>
         ) : null}
 
-        {isConfirmed && displayTicket!.ticket_code && !isOffline && <SaveTicketButton orderId={displayTicket!.id} />}
+        {isConfirmed && displayTicket!.ticket_code && !offline && <SaveTicketButton orderId={displayTicket!.id} />}
         {isConfirmed && !displayTicket!.checked_in_at && <TransferTicket orderId={displayTicket!.id} />}
 
         {/* Share event */}
