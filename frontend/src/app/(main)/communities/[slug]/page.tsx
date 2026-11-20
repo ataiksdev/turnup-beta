@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { CommunityDetailClient } from "./CommunityDetailClient";
+import { staticParams } from "@/lib/staticParams";
 
 // Server-side fetch (link-preview metadata). API_PROXY_ORIGIN is read at runtime, so it can
 // point at the backend's internal address (e.g. http://backend:8000 in docker-compose);
@@ -10,7 +11,7 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
 export const revalidate = 0;
 export function generateStaticParams() {
-  return [];
+  return staticParams("slug");
 }
 
 export async function generateMetadata(

@@ -80,17 +80,30 @@ export function formatMoney(amount: number, currency = "NGN"): string {
   return `${sym}${Number(amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 }
 
+/** Short form for tight spaces: "₦800", "₦3k", "₦2.5k", "₦150k", "₦1.2M". */
+export function formatMoneyShort(amount: number, currency = "NGN"): string {
+  const sym = SYMBOLS[currency] ?? `${currency} `;
+  const n = Number(amount);
+  const short = (v: number, unit: string) => `${sym}${Number(v.toFixed(1)).toLocaleString("en-NG")}${unit}`;
+  if (n >= 1_000_000) return short(n / 1_000_000, "M");
+  if (n >= 1_000) return short(n / 1_000, "k");
+  return formatMoney(n, currency);
+}
+
+/** "Free", "₦5,000" or "₦3,000 – ₦15,000"; with compact, "₦3k – ₦15k" (for narrow cards). */
 export function formatPrice(
   isFree: boolean,
   priceMin?: number | null,
   priceMax?: number | null,
   currency = "NGN",
+  { compact = false }: { compact?: boolean } = {},
 ): string {
   if (isFree) return "Free";
+  const fmt = compact ? formatMoneyShort : formatMoney;
   if (priceMin && priceMax && priceMin !== priceMax) {
-    return `${formatMoney(priceMin, currency)} – ${formatMoney(priceMax, currency)}`;
+    return `${fmt(priceMin, currency)} – ${fmt(priceMax, currency)}`;
   }
-  return formatMoney(priceMin ?? priceMax ?? 0, currency);
+  return fmt(priceMin ?? priceMax ?? 0, currency);
 }
 
 export function formatCount(n: number): string {

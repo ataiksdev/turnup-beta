@@ -26,6 +26,7 @@ const RANK_STYLES: Record<number, string> = {
 
 export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
   const coverSrc = useOfflineImage(event.cover_image); // kept copy while offline
+  const compact = rank !== 1; // #2 and #3 sit side by side at half width
   const { token } = useAuthStore();
   const [saved, setSaved] = useState(event.is_saved);
   const [saving, setSaving] = useState(false);
@@ -132,21 +133,38 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-0.5">
-          <div className="flex items-center gap-2">
-            <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="xs" />
-            <span className="text-[10px] text-text-muted truncate max-w-[100px]">
-              @{event.host.username}
-            </span>
-            <span className="flex items-center gap-0.5 text-[10px] text-text-disabled">
-              <Users size={9} aria-hidden />
-              {event.attendees_count.toLocaleString()}
-            </span>
-          </div>
-          <span className={cn("text-sm font-black", event.is_free ? "text-success" : "text-primary")}>
-            {formatPrice(event.is_free, event.price_min, event.price_max, event.currency)}
-          </span>
-        </div>
+        {(() => {
+          const fullPrice = formatPrice(event.is_free, event.price_min, event.price_max, event.currency);
+          const host = (
+            <div className="flex items-center gap-2 min-w-0">
+              <Avatar src={event.host.avatar_url} name={displayName(event.host)} size="xs" />
+              <span className="text-[10px] text-text-muted truncate min-w-0">@{event.host.username}</span>
+              <span className="flex items-center gap-0.5 text-[10px] text-text-disabled shrink-0">
+                <Users size={9} aria-hidden />
+                {event.attendees_count.toLocaleString()}
+              </span>
+            </div>
+          );
+          const priceCls = cn("font-black whitespace-nowrap", event.is_free ? "text-success" : "text-primary");
+          // Half-width cards (#2, #3): the price gets its own line, in short form ("₦3k – ₦15k"),
+          // so it's never cut off by the host details beside it.
+          return compact ? (
+            <div className="space-y-1.5 pt-0.5">
+              <p className={cn(priceCls, "text-sm")} title={fullPrice}>
+                <span aria-hidden>
+                  {formatPrice(event.is_free, event.price_min, event.price_max, event.currency, { compact: true })}
+                </span>
+                <span className="sr-only">{fullPrice}</span>
+              </p>
+              {host}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              {host}
+              <span className={cn(priceCls, "text-sm shrink-0")}>{fullPrice}</span>
+            </div>
+          );
+        })()}
 
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1 pt-0.5">

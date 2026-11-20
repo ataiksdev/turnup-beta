@@ -104,11 +104,15 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
           {event.title}
         </h3>
         <p className="text-[11px] text-text-muted truncate">{event.venue_name}</p>
-        <div className="flex items-center justify-between pt-1">
-          <span className={cn("text-xs font-black", event.is_free ? "text-success" : "text-primary")}>
-            {formatPrice(event.is_free, event.price_min, event.price_max)}
+        {/* Short price form ("₦3k – ₦15k") so it fits beside the date on narrow cards; the row
+            wraps rather than cutting anything off. Screen readers get the full price. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 pt-1">
+          <span className={cn("text-xs font-black whitespace-nowrap", event.is_free ? "text-success" : "text-primary")}
+            title={formatPrice(event.is_free, event.price_min, event.price_max, event.currency)}>
+            <span aria-hidden>{formatPrice(event.is_free, event.price_min, event.price_max, event.currency, { compact: true })}</span>
+            <span className="sr-only">{formatPrice(event.is_free, event.price_min, event.price_max, event.currency)}</span>
           </span>
-          <span className="text-[10px] text-text-disabled font-medium">
+          <span className="text-[10px] text-text-disabled font-medium whitespace-nowrap">
             {formatEventDateShort(event.start_date)}
           </span>
         </div>
