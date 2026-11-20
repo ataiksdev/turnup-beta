@@ -40,4 +40,23 @@ for (const group of ["(admin)", "(portal)"]) {
   rm(path.join(OUT_DIR, "_next", "static", "chunks", "app", group));
 }
 
+// Placeholder copies of the dynamic pages (/events/__placeholder.html, ...): Next.js 16.3+
+// requires a static export to produce at least one page per dynamic route, and the app opens
+// those screens through its /…/view?id= pages instead (see src/lib/staticParams.ts).
+const PLACEHOLDER = "__placeholder";
+let placeholders = 0;
+function stripPlaceholders(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.name === PLACEHOLDER || entry.name.startsWith(`${PLACEHOLDER}.`)) {
+      fs.rmSync(full, { recursive: true, force: true });
+      placeholders++;
+    } else if (entry.isDirectory() && entry.name !== "_next") {
+      stripPlaceholders(full);
+    }
+  }
+}
+stripPlaceholders(OUT_DIR);
+console.log(`[strip-admin] removed ${placeholders} placeholder page file(s)`);
+
 console.log("[strip-admin] done.");
