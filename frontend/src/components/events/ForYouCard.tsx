@@ -150,7 +150,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
           // so it's never cut off by the host details beside it.
           return compact ? (
             <div className="space-y-1.5 pt-0.5">
-              <p className={cn(priceCls, "text-sm")} title={fullPrice}>
+              <p className={cn(priceCls, "relative text-sm")} title={fullPrice}>
                 <span aria-hidden>
                   {formatPrice(event.is_free, event.price_min, event.price_max, event.currency, { compact: true })}
                 </span>
@@ -171,7 +171,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
             {tags.map((t) => (
               <Link
                 key={t}
-                href={`/search?tag=${encodeURIComponent(t)}`}
+                href={`/discover?tag=${encodeURIComponent(t)}`}
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-0.5 px-1.5 py-0.5 bg-bg-elevated border border-border rounded text-[9px] font-bold text-text-muted hover:text-primary hover:border-primary transition-colors"
               >

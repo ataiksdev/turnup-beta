@@ -64,7 +64,7 @@ const config: CapacitorConfig = {
   appName: 'turnup',
   webDir: 'out',
   // The splash's dark background, so the WebView never flashes white before the page paints.
-  backgroundColor: '#0C0A12',
+  backgroundColor: '#000000',
   server: devServerUrl
     ? { url: devServerUrl, cleartext: true }
     : { androidScheme: 'http' },

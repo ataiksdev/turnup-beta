@@ -176,8 +176,8 @@ async function signup(p, { role, name, username, email }) {
   });
 
   // ── 4. Attendee finds and buys tickets ────────────────────────────────────────
-  await step('attendee finds the event in search', fan, async () => {
-    await fan.goto(BASE + '/search'); await fan.waitForLoadState('networkidle');
+  await step('attendee finds the event on Discover', fan, async () => {
+    await fan.goto(BASE + '/discover'); await fan.waitForLoadState('networkidle');
     await fan.getByPlaceholder(/Events, venues, cities/).fill('Rooftop Jam');
     await fan.waitForTimeout(1500);
     await fan.getByText(title).first().click();
@@ -201,11 +201,11 @@ async function signup(p, { role, name, username, email }) {
     }
   });
   let orderId = null;
-  await step('ticket appears in My Tickets and opens', fan, async () => {
-    await fan.goto(BASE + '/tickets'); await fan.waitForLoadState('networkidle');
+  await step('ticket appears in My Vibes and opens', fan, async () => {
+    await fan.goto(BASE + '/vibes'); await fan.waitForLoadState('networkidle');
     await fan.getByText(title).first().waitFor({ timeout: 10000 });
-    await snap(fan, 'my-tickets');
-    await fan.locator('a[href^="/tickets/"]').filter({ hasText: title }).getByText(/confirmed/i).click();
+    await snap(fan, 'my-vibes');
+    await fan.locator('article').filter({ hasText: title }).getByRole('link', { name: /show ticket|ticket 1/i }).first().click();
     await fan.waitForURL(/\/tickets\//); await fan.waitForLoadState('networkidle');
     orderId = fan.url().split('/').pop();
     await fan.getByText(/entry qr code/i).waitFor();

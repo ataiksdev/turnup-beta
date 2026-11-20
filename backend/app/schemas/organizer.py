@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.schemas.types import WebUrl
 
 
@@ -41,7 +41,15 @@ class TicketTierCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = None
     price: float = Field(ge=0)
+    # Turnup takes payments in naira only (Paystack, amounts in kobo), so every price is
+    # stored as NGN whatever a client sends (old builds and AI drafts sent "USD").
     currency: str = "NGN"
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _naira_only(cls, v: object) -> str:
+        return "NGN"
+
     quantity: int | None = Field(None, ge=1)
     max_per_order: int = Field(10, ge=1, le=100)
     is_active: bool = True

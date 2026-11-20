@@ -40,24 +40,27 @@ export function OfflineSync() {
       if (running.current || !navigator.onLine) return;
       running.current = true;
       try {
-        const [tickets, saved] = await Promise.all([
+        const [tickets, saved, attending] = await Promise.all([
           organizerApi.myTickets(token),
           usersApi.saved(username, token),
+          usersApi.attending(username, token, false, 1, 50),
         ]);
         const now = Date.now();
         const keep = (iso?: string | null) => !iso || new Date(iso).getTime() > now - KEEP_PAST_MS;
         const ids = [...new Set([
           ...tickets.filter((t) => t.status === "confirmed" && keep(t.event_date)).map((t) => t.event_id),
           ...saved.filter((e) => keep(e.end_date ?? e.start_date)).map((e) => e.id),
+          ...attending.map((e) => e.id),
         ])].slice(0, MAX_EVENTS);
         const events = (await Promise.all(ids.map((id) => eventsApi.get(id, token).catch(() => null))))
           .filter((e): e is Event => !!e);
         // Still the same account? (it could have changed while this ran)
         if (useAuthStore.getState().user?.id !== userId) return;
-        useOfflineStore.getState().replaceAll(userId, { tickets, saved, events });
+        useOfflineStore.getState().replaceAll(userId, { tickets, saved, attending, events });
         await syncOfflineImages([
           ...events.map((e) => e.cover_image),
           ...saved.map((e) => e.cover_image),
+          ...attending.map((e) => e.cover_image),
           ...tickets.map((t) => t.event_cover),
         ].filter((u): u is string => !!u));
       } catch { /* offline or server unreachable: keep the copy we have */ }

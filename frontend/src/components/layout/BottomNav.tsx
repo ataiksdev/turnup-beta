@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { Compass, Home, Search, Users, User } from "lucide-react";
+import { Compass, Home, PartyPopper, Users, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -8,13 +8,14 @@ import { useQuery } from "@tanstack/react-query";
 import { socialApi } from "@/lib/api";
 import { routes } from "@/lib/routes";
 
+// `also`: other addresses that belong to the tab (old links, and screens opened from it).
 const navItems = [
-  { href: "/",             icon: Home,    label: "Home" },
-  { href: "/search",       icon: Search,  label: "Search" },
-  { href: "/explore",      icon: Compass, label: "Explore" },
-  { href: "/communities",  icon: Users,   label: "Communities" },
-  { href: "/profile",      icon: User,    label: "Profile" },
-];
+  { href: "/",             icon: Home,        label: "Home" },
+  { href: "/discover",     icon: Compass,     label: "Discover", also: ["/search", "/explore"] },
+  { href: "/vibes",        icon: PartyPopper, label: "My Vibes", also: ["/tickets", "/saved"] },
+  { href: "/communities",  icon: Users,       label: "Communities" },
+  { href: "/profile",      icon: User,        label: "Profile" },
+] as { href: string; icon: typeof Home; label: string; also?: string[] }[];
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -35,13 +36,14 @@ export function BottomNav() {
       className="fixed bottom-0 inset-x-0 z-50 bg-bg-surface border-t-2 border-border safe-bottom"
     >
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
-        {navItems.map(({ href, icon: Icon, label }) => {
+        {navItems.map(({ href, icon: Icon, label, also = [] }) => {
           const resolvedHref = href === "/profile" && user
             ? routes.profile(user.username)
             : href;
           const isActive =
             pathname === resolvedHref ||
-            (href !== "/" && pathname.startsWith(href) && href !== "/profile");
+            (href !== "/" && pathname.startsWith(href) && href !== "/profile") ||
+            also.some((a) => pathname === a || pathname.startsWith(`${a}/`));
           const showBadge = href === "/activity" && unreadCount > 0;
 
           return (

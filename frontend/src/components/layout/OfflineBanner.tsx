@@ -28,7 +28,7 @@ export function OfflineBanner() {
   if (!offline) return null;
   // These screens say they're offline themselves, at the top, and a floating banner must
   // never cover a ticket's QR code at the door.
-  if (pathname === "/" || /^\/(tickets|saved|events)(\/|$)/.test(pathname)) return null;
+  if (pathname === "/" || /^\/(tickets|saved|events|vibes)(\/|$)/.test(pathname)) return null;
   return (
     <div role="status" aria-live="polite"
       className="fixed inset-x-3 z-[55] mx-auto max-w-md flex items-center gap-3 px-3 py-2.5 rounded-md border-2 border-border bg-bg-elevated shadow-brutal animate-slide-up"

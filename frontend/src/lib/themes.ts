@@ -25,26 +25,26 @@ export interface ThemeDef {
 export const THEMES = {
   "turnup": {
     "name": "Turnup",
-    "blurb": "Electric purple, smooth and rounded",
+    "blurb": "Electric purple, smooth and rounded; AMOLED black at night",
     "style": "fluid",
     "swatch": {
       "dark": "#A855F7",
       "light": "#7E22CE"
     },
     "chrome": {
-      "dark": "#0C0A12",
+      "dark": "#000000",
       "light": "#F7F5FB"
     },
     "modes": {
       "dark": {
-        "--bg": "12 10 18",
-        "--bg-surface": "17 14 24",
-        "--bg-card": "21 18 29",
-        "--bg-elevated": "29 25 40",
-        "--bg-overlay": "38 33 51",
-        "--border": "61 53 82",
-        "--border-subtle": "34 30 46",
-        "--border-strong": "61 53 82",
+        "--bg": "0 0 0",
+        "--bg-surface": "7 6 10",
+        "--bg-card": "14 12 18",
+        "--bg-elevated": "23 20 29",
+        "--bg-overlay": "33 29 41",
+        "--border": "46 41 56",
+        "--border-subtle": "26 23 32",
+        "--border-strong": "46 41 56",
         "--text": "255 255 255",
         "--text-secondary": "201 195 214",
         "--text-muted": "154 147 171",
@@ -68,7 +68,7 @@ export const THEMES = {
         "--elevated-alpha": "1.0",
         "--border-alpha": "1.0",
         "--blur": "0px",
-        "--page-bg": "radial-gradient(70rem 40rem at 10% -15%, rgb(28 14 54) 0%, transparent 70%), radial-gradient(50rem 40rem at 100% 20%, rgb(21 16 48) 0%, transparent 65%)"
+        "--page-bg": "none"
       },
       "light": {
         "--bg": "247 245 251",

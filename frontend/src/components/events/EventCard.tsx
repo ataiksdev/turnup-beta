@@ -107,7 +107,9 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
         {/* Short price form ("₦3k – ₦15k") so it fits beside the date on narrow cards; the row
             wraps rather than cutting anything off. Screen readers get the full price. */}
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 pt-1">
-          <span className={cn("text-xs font-black whitespace-nowrap", event.is_free ? "text-success" : "text-primary")}
+          {/* relative: keeps the screen-reader text (sr-only = absolutely positioned) inside the
+              card; unanchored, it sat outside the scrolling row and widened the whole page. */}
+          <span className={cn("relative text-xs font-black whitespace-nowrap", event.is_free ? "text-success" : "text-primary")}
             title={formatPrice(event.is_free, event.price_min, event.price_max, event.currency)}>
             <span aria-hidden>{formatPrice(event.is_free, event.price_min, event.price_max, event.currency, { compact: true })}</span>
             <span className="sr-only">{formatPrice(event.is_free, event.price_min, event.price_max, event.currency)}</span>

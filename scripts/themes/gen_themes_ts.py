@@ -37,6 +37,8 @@ def style_vars(sid, mode, v):
         k = (0.35, 0.50, 0.60) if mode == "dark" else (0.08, 0.14, 0.20)
         page = (f"radial-gradient(70rem 40rem at 10% -15%, rgb({rgb(s1)}) 0%, transparent 70%), "
                 f"radial-gradient(50rem 40rem at 100% 20%, rgb({rgb(s2)}) 0%, transparent 65%)")
+        if v.get("glow") is False:
+            page = "none"  # AMOLED: a flat true-black page
         return {"--radius-sm": "8px", "--radius": "12px", "--radius-md": "14px", "--radius-lg": "20px",
                 "--shadow-sm": f"0 1px 3px rgb(var(--shadow-color) / {k[0]})",
                 "--shadow": f"0 8px 24px -10px rgb(var(--shadow-color) / {k[1]}), 0 1px 2px rgb(var(--shadow-color) / {k[0] / 2})",

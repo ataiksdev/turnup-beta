@@ -2,5 +2,5 @@
 <resources>
     <!-- The Turnup theme's dark page colour: the launch screen and the WebView background, so the
          app goes straight from this to the animated splash (in the web app) with no white flash. -->
-    <color name="splash_background">#0C0A12</color>
+    <color name="splash_background">#000000</color>
 </resources>
