@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from app.schemas.user import UserSummary
 from app.schemas.types import WebUrl
 
@@ -29,7 +29,15 @@ class EventCreate(BaseModel):
     is_free: bool = True
     price_min: float | None = Field(None, ge=0)
     price_max: float | None = Field(None, ge=0)
+    # Turnup takes payments in naira only (Paystack, amounts in kobo), so every price is
+    # stored as NGN whatever a client sends (old builds and AI drafts sent "USD").
     currency: str = "NGN"
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _naira_only(cls, v: object) -> str:
+        return "NGN"
+
     capacity: int | None = Field(None, ge=1)
     waitlist_enabled: bool = False
     category_id: str | None = None

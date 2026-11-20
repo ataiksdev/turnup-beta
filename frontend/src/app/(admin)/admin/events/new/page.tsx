@@ -285,7 +285,8 @@ export default function AdminCreateEventPage() {
             <div className="grid grid-cols-3 gap-2">
               <Input type="number" value={form.price_min} onChange={(e) => set("price_min")(e.target.value)} placeholder="Min" icon={<DollarSign size={16} />} />
               <Input type="number" value={form.price_max} onChange={(e) => set("price_max")(e.target.value)} placeholder="Max" />
-              <Input value={form.currency} onChange={(e) => set("currency")(e.target.value)} placeholder="NGN" />
+              {/* Payments are in naira only; the API stores NGN whatever is sent. */}
+              <div className="flex items-center justify-center h-10 rounded border-2 border-border-subtle text-sm font-bold text-text-muted">NGN (₦)</div>
             </div>
           )}
         </FieldWrap>

@@ -185,7 +185,7 @@
   }
 
   .snap-scroll {
-    @apply flex gap-3 overflow-x-auto;
+    @apply relative flex gap-3 overflow-x-auto;   /* relative: positioned content stays clipped inside */
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;

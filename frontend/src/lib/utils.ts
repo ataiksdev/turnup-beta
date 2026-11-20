@@ -72,17 +72,19 @@ export function formatEventDateShort(dateStr: string): string {
   return format(date, "MMM d");
 }
 
-const SYMBOLS: Record<string, string> = { NGN: "₦", USD: "$", EUR: "€", GBP: "£" };
+const NAIRA = "₦";
 
-/** "₦5,000", "₦1,250.50". */
-export function formatMoney(amount: number, currency = "NGN"): string {
-  const sym = SYMBOLS[currency] ?? `${currency} `;
+/** "₦5,000", "₦1,250.50". Turnup takes payments in naira only, so prices always show in naira:
+ *  the currency argument is ignored (events from the first versions were labelled "USD" by
+ *  mistake and showed as "$3.5k"). */
+export function formatMoney(amount: number, _currency = "NGN"): string {
+  const sym = NAIRA;
   return `${sym}${Number(amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 }
 
 /** Short form for tight spaces: "₦800", "₦3k", "₦2.5k", "₦150k", "₦1.2M". */
 export function formatMoneyShort(amount: number, currency = "NGN"): string {
-  const sym = SYMBOLS[currency] ?? `${currency} `;
+  const sym = NAIRA;
   const n = Number(amount);
   const short = (v: number, unit: string) => `${sym}${Number(v.toFixed(1)).toLocaleString("en-NG")}${unit}`;
   if (n >= 1_000_000) return short(n / 1_000_000, "M");

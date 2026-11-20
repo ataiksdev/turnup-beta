@@ -150,7 +150,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
           // so it's never cut off by the host details beside it.
           return compact ? (
             <div className="space-y-1.5 pt-0.5">
-              <p className={cn(priceCls, "text-sm")} title={fullPrice}>
+              <p className={cn(priceCls, "relative text-sm")} title={fullPrice}>
                 <span aria-hidden>
                   {formatPrice(event.is_free, event.price_min, event.price_max, event.currency, { compact: true })}
                 </span>

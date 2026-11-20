@@ -116,3 +116,49 @@ def test_retired_themes_move_to_the_default(db_url):
     assert eval(read.stdout.strip().splitlines()[-1]) == {
         "m_gold": "gold:dark", "m_lagoon": "turnup:dark", "m_neon": "turnup:light",
         "m_none": None, "m_palm": "turnup:system"}
+
+
+def test_old_usd_prices_become_naira(db_url):
+    """Migration 0006: events and ticket types stored as USD (the first versions' default) are
+    relabelled NGN, the only currency payments are taken in."""
+    assert _alembic("upgrade", "0005", url=db_url).returncode == 0
+    seed = _run([sys.executable, "-c", (
+        "import asyncio, uuid\n"
+        "from datetime import datetime, timedelta, timezone\n"
+        "import app.main  # noqa: F401  (registers every model)\n"
+        "from app.database import AsyncSessionLocal\n"
+        "from app.models.user import User\n"
+        "from app.models.event import Event\n"
+        "from app.models.organizer import TicketTier\n"
+        "async def main():\n"
+        "    async with AsyncSessionLocal() as db:\n"
+        "        uid = str(uuid.uuid4()); now = datetime.now(timezone.utc)\n"
+        "        db.add(User(id=uid, username='usd_host', email='usd@example.com', full_name='Host'))\n"
+        "        db.add(Event(id='ev-usd', slug='ev-usd', title='Old Party', description='d'*30, venue_name='Hall',\n"
+        "                     address='1 Street', city='Lagos', country='NG', start_date=now, end_date=now + timedelta(hours=2),\n"
+        "                     host_id=uid, status='published', currency='USD'))\n"
+        "        db.add(TicketTier(id='tier-usd', event_id='ev-usd', name='Regular', price=3500, currency='USD'))\n"
+        "        await db.commit()\n"
+        "asyncio.run(main())\n"
+    )], db_url)
+    assert seed.returncode == 0, seed.stderr
+    assert _alembic("upgrade", "head", url=db_url).returncode == 0
+    read = _run([sys.executable, "-c", (
+        "import asyncio, sqlalchemy as sa\n"
+        "from app.database import engine\n"
+        "async def main():\n"
+        "    async with engine.connect() as c:\n"
+        "        e = (await c.execute(sa.text(\"SELECT currency FROM events WHERE id='ev-usd'\"))).scalar()\n"
+        "        t = (await c.execute(sa.text(\"SELECT currency FROM ticket_tiers WHERE id='tier-usd'\"))).scalar()\n"
+        "        print(e, t)\n"
+        "asyncio.run(main())\n"
+    )], db_url)
+    assert read.returncode == 0, read.stderr
+    assert read.stdout.strip().splitlines()[-1] == "NGN NGN"
+
+
+def test_api_stores_prices_in_naira_whatever_is_sent():
+    from app.schemas.event import EventCreate
+    from app.schemas.organizer import TicketTierCreate
+    assert TicketTierCreate(name="VIP", price=5000, currency="USD").currency == "NGN"
+    assert EventCreate.model_fields["currency"].default == "NGN"
