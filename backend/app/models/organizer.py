@@ -85,7 +85,9 @@ class TicketOrder(Base):
     payment_reference: Mapped[str | None] = mapped_column(String(100), index=True)
     payment_channel: Mapped[str | None] = mapped_column(String(30))
     ticket_code: Mapped[str | None] = mapped_column(String(36), unique=True, index=True)
-    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # first admission
+    # People admitted so far on this order (a "General × 3" ticket can come in one at a time).
+    admitted_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Shared across every row created by one checkout call (identifies a retried/resubmitted
     # cart, not a single tier line) -- see services/tickets.py's checkout idempotency replay.
     idempotency_key: Mapped[str | None] = mapped_column(String(64), index=True)

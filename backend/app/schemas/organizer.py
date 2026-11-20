@@ -119,6 +119,7 @@ class TicketOrderOut(BaseModel):
     payment_reference: str | None = None
     ticket_code: str | None = None
     checked_in_at: datetime | None = None
+    admitted_count: int = 0
     # enriched fields returned by my-tickets endpoint
     event_title: str | None = None
     event_slug: str | None = None
@@ -245,6 +246,9 @@ class DashboardOut(BaseModel):
 
 class CheckInRequest(BaseModel):
     ticket_code: str
+    # How many people to admit now. Omitted: admit the only person left, or (for a ticket with
+    # several people still to come in) return needs_choice so staff pick how many are here.
+    admit: int | None = Field(None, ge=1, le=100)
 
 
 class CheckInResult(BaseModel):
@@ -255,6 +259,18 @@ class CheckInResult(BaseModel):
     quantity: int
     checked_in_at: datetime
     fast_lane: bool = False  # Turnup+ member at an event with a fast lane
+    admitted_count: int = 0      # people in so far on this ticket
+    admitted_now: int = 0        # people admitted by this request
+    remaining: int = 0           # still to come in
+    needs_choice: bool = False   # nothing admitted yet: ask how many are at the door
+
+
+class CheckInStats(BaseModel):
+    people_in: int
+    people_expected: int
+    tickets_in: int
+    tickets_total: int
+    recent: list[dict]
 
 
 class ReviewCreate(BaseModel):

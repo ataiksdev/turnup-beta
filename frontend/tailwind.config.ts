@@ -42,8 +42,8 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
-      // Themed radii: near-square for the neo-brutalist themes, soft for Glass, very round for
-      // Fluffy (values in src/lib/themes.ts). "full" stays a circle/pill everywhere.
+      // Themed radii: rounded for Turnup/Game Night/Glass, near-square for the neo-brutalist
+      // themes, very round for Fluffy (values in src/lib/themes.ts). "full" stays a circle/pill everywhere.
       borderRadius: {
         none:    "0px",
         DEFAULT: "var(--radius)",
@@ -69,8 +69,8 @@ const config: Config = {
         shimmer: { from: { backgroundPosition: "-200% 0" },
                    to:   { backgroundPosition: "200% 0" } },
       },
-      // Themed shadows: hard offsets for neo-brutalist themes, soft diffuse ones for Glass
-      // and Fluffy. Class names kept as-is so every component follows the theme.
+      // Themed shadows: soft for Turnup/Glass/Fluffy, a solid 3D edge for Game Night, hard
+      // offsets for the neo-brutalist themes. Class names kept as-is so every component follows the theme.
       boxShadow: {
         brutal:           "var(--shadow)",
         "brutal-sm":      "var(--shadow-sm)",

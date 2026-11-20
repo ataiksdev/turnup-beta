@@ -44,7 +44,7 @@ POST_BASELINE_COLUMNS = {
     "events": {"host_venue_id", "venue_id", "members_only", "fast_lane_enabled",            # 0003
                "allow_ticket_transfers"},
     "ticket_tiers": {"members_only", "plus_presale_ends_at", "presale_then"},               # 0003
-    "ticket_orders": {"venue_id", "recovery_kobo"},                                         # 0003
+    "ticket_orders": {"venue_id", "recovery_kobo", "admitted_count"},                       # 0003, 0004
     "platform_settings": {"venue_commission_percent", "featured_state_week_kobo",           # 0003
                           "featured_area_week_kobo", "featured_max_per_state", "featured_max_per_area",
                           "max_recovery_percent", "refund_funding_hours", "refund_suspend_days",

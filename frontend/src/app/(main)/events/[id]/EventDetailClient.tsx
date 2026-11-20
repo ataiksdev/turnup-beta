@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ShareButton } from "@/components/ui/ShareButton";
 import { EventDetailSkeleton } from "@/components/ui/Skeleton";
-import { formatEventDate, formatPrice, parseTags, timeAgo, displayName, safeHref } from "@/lib/utils";
+import { formatEventDate, formatMoney, formatPrice, parseTags, timeAgo, displayName, safeHref } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
@@ -113,6 +113,8 @@ export function EventDetailClient() {
   const [comment, setComment]   = useState("");
   const [saved, setSaved]       = useState(event?.is_saved ?? false);
   const [attendance, setAttend] = useState(event?.attendance_status ?? null);
+  // The event loads after first render: keep the button in step with it (e.g. "Going" after buying).
+  useEffect(() => { setAttend(event?.attendance_status ?? null); }, [event?.attendance_status]);
   const [actionError, setActionError] = useState("");
 
   // Ticket cart state: tier id -> quantity (0/absent = not in cart). Several tiers can be
@@ -255,6 +257,12 @@ export function EventDetailClient() {
           const script = document.createElement("script");
           script.src = "https://js.paystack.co/v1/inline.js";
           script.onload = () => openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference);
+          // Bad connection or a blocked script: don't leave the button stuck on "Opening payment…".
+          script.onerror = () => {
+            script.remove();
+            setPaymentPending(false);
+            flashError("Couldn't open the payment window. Check your connection and try again. Your tickets are held for 30 minutes.");
+          };
           document.body.appendChild(script);
         } else {
           openPaystack(data.paystack_public_key, data.email, data.amount_kobo, data.payment_reference);
@@ -630,7 +638,7 @@ export function EventDetailClient() {
                         "text-base font-black shrink-0 ml-3",
                         tier.price === 0 ? "text-success" : "text-primary",
                       )}>
-                        {tier.price === 0 ? "Free" : `${tier.currency} ${tier.price}`}
+                        {tier.price === 0 ? "Free" : formatMoney(tier.price, tier.currency)}
                       </p>
                     </div>
 

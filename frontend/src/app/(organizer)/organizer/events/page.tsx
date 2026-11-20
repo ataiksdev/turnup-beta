@@ -49,7 +49,8 @@ function EventRow({ event }: { event: Event }) {
             "px-2 py-1 rounded border text-[10px] font-black uppercase tracking-widest",
             STATUS_STYLES[event.status] ?? STATUS_STYLES.draft,
           )}>
-            {event.status}
+            {event.review_status === "pending" && event.status === "draft" ? "in review"
+              : event.review_status === "rejected" ? "needs changes" : event.status}
           </span>
           {event.series_id && (
             <Link
@@ -104,7 +105,10 @@ export default function OrganizerEventsPage() {
   });
 
   const published = events?.filter((e) => e.status === "published") ?? [];
-  const drafts    = events?.filter((e) => e.status === "draft")     ?? [];
+  // Submitted with "Publish" but not approved yet (or sent back): not drafts.
+  const awaiting  = events?.filter((e) => e.status === "draft" && e.review_status === "pending") ?? [];
+  const rejected  = events?.filter((e) => e.review_status === "rejected") ?? [];
+  const drafts    = events?.filter((e) => e.status === "draft" && !["pending", "rejected"].includes(e.review_status ?? "")) ?? [];
   const past      = events?.filter((e) => e.status === "completed" || e.status === "cancelled") ?? [];
 
   return (
@@ -140,6 +144,25 @@ export default function OrganizerEventsPage() {
                 Published <span className="text-primary">({published.length})</span>
               </h2>
               {published.map((e) => <EventRow key={e.id} event={e} />)}
+            </section>
+          )}
+
+          {awaiting.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-xs font-black text-text uppercase tracking-widest">
+                Waiting for approval <span className="text-text-muted">({awaiting.length})</span>
+              </h2>
+              <p className="text-xs text-text-muted">Turnup checks new events before they go live. You'll get a notification.</p>
+              {awaiting.map((e) => <EventRow key={e.id} event={e} />)}
+            </section>
+          )}
+
+          {rejected.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-xs font-black text-error uppercase tracking-widest">
+                Needs changes <span className="text-text-muted">({rejected.length})</span>
+              </h2>
+              {rejected.map((e) => <EventRow key={e.id} event={e} />)}
             </section>
           )}
 

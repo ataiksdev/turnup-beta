@@ -80,3 +80,39 @@ def test_pre_alembic_database_is_adopted(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "(head)" in _alembic("current", url=url).stdout
     assert _alembic("check", url=url).returncode == 0
+
+
+def test_retired_themes_move_to_the_default(db_url):
+    """Migration 0005: Lagoon, Palm and Neon Night were removed; people on them get the
+    default theme with their light/dark/system choice kept."""
+    assert _alembic("upgrade", "0004", url=db_url).returncode == 0
+    seed = _run([sys.executable, "-c", (
+        "import asyncio, uuid\n"
+        "from app.database import AsyncSessionLocal\n"
+        "import app.main  # noqa: F401  (registers every model, so relationships resolve)\n"
+        "from app.models.user import User\n"
+        "async def main():\n"
+        "    async with AsyncSessionLocal() as db:\n"
+        "        for name, pref in [('m_neon', 'neon:light'), ('m_palm', 'palm:system'),\n"
+        "                           ('m_lagoon', 'lagoon:dark'), ('m_gold', 'gold:dark'), ('m_none', None)]:\n"
+        "            db.add(User(id=str(uuid.uuid4()), username=name, email=f'{name}@example.com',\n"
+        "                        full_name=name, theme_preference=pref))\n"
+        "        await db.commit()\n"
+        "asyncio.run(main())\n"
+    )], db_url)
+    assert seed.returncode == 0, seed.stderr
+    assert _alembic("upgrade", "head", url=db_url).returncode == 0
+    read = _run([sys.executable, "-c", (
+        "import asyncio, sqlalchemy as sa\n"
+        "from app.database import engine\n"
+        "async def main():\n"
+        "    async with engine.connect() as c:\n"
+        "        rows = (await c.execute(sa.text(\"SELECT username, theme_preference FROM users \"\n"
+        "                                         \"WHERE username LIKE 'm\\\\_%' ESCAPE '\\\\' ORDER BY username\"))).all()\n"
+        "        print(dict(rows))\n"
+        "asyncio.run(main())\n"
+    )], db_url)
+    assert read.returncode == 0, read.stderr
+    assert eval(read.stdout.strip().splitlines()[-1]) == {
+        "m_gold": "gold:dark", "m_lagoon": "turnup:dark", "m_neon": "turnup:light",
+        "m_none": None, "m_palm": "turnup:system"}

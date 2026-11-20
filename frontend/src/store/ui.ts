@@ -48,7 +48,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "turnup-ui",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => {
         // SSR safety
         if (typeof window === "undefined") return { getItem: () => null, setItem: () => {}, removeItem: () => {} };
@@ -56,6 +56,7 @@ export const useUIStore = create<UIState>()(
       }),
       partialize: (s) => ({ palette: s.palette, mode: s.mode, seenAccountTheme: s.seenAccountTheme }),
       // v0 stored only { theme: "dark" | "light" }: keep that choice on the default palette.
+      // v2 removed the Lagoon, Palm and Neon Night themes: anyone on one moves to the default.
       migrate: (persisted, version) => {
         const old = (persisted ?? {}) as { theme?: unknown; palette?: unknown; mode?: unknown };
         if (version === 0) {

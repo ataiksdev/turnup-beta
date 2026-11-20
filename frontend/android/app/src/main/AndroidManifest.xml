@@ -39,4 +39,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Door check-in scanner (the web view's camera). Android asks the user the first time. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Not required: the app installs on devices without a camera (manual code entry). -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

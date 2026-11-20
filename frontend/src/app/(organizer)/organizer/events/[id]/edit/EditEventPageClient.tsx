@@ -1,4 +1,5 @@
 "use client";
+import * as React from "react";
 import { useState, useEffect } from "react";
 import {useRouter} from "next/navigation";
 import { eventsApi } from "@/lib/api";
@@ -108,11 +109,19 @@ function StepBar({ current }: { current: number }) {
   );
 }
 
+// Each field is a labelled group, so screen readers announce the label with its input.
+const LabelId = React.createContext<string | undefined>(undefined);
 function Label({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5">{children}</p>;
+  const id = React.useContext(LabelId);
+  return <p id={id} className="text-[10px] font-black text-text-muted uppercase tracking-widest mb-1.5">{children}</p>;
 }
 function FieldWrap({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("space-y-1", className)}>{children}</div>;
+  const id = React.useId();
+  return (
+    <LabelId.Provider value={id}>
+      <div role="group" aria-labelledby={id} className={cn("space-y-1", className)}>{children}</div>
+    </LabelId.Provider>
+  );
 }
 function Textarea({ value, onChange, placeholder, rows = 4, maxLength }: {
   value: string; onChange: (v: string) => void; placeholder?: string; rows?: number; maxLength?: number;
@@ -154,7 +163,7 @@ export default function EditEventPage() {
 
   const [form, setForm] = useState<FormState>({
     title: "", category_id: "", description: "", cover_image: "",
-    event_type: "physical", venue_name: "", address: "", city: "", country: "US", meeting_url: "",
+    event_type: "physical", venue_name: "", address: "", city: "", country: "NG", meeting_url: "",
     start_date: "", end_date: "", timezone: "Africa/Lagos",
     capacity: "", waitlist_enabled: false,
     members_only: false, fast_lane_enabled: false, allow_ticket_transfers: true,

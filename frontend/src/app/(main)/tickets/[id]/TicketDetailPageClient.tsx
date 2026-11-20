@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { TransferTicket } from "@/components/events/TransferTicket";
+import { SaveTicketButton } from "@/components/events/SaveTicketButton";
 
 const STATUS_STYLES: Record<string, { icon: typeof CheckCircle2; label: string; cls: string }> = {
   confirmed: { icon: CheckCircle2, label: "Confirmed", cls: "text-success bg-success/10 border-success/30" },
@@ -32,7 +33,7 @@ export default function TicketDetailPage() {
   const { token } = useAuthStore();
   const { tickets, setTicket } = useTicketCache();
 
-  const { data: ticket, isLoading, isError } = useQuery({
+  const { data: ticket, isError } = useQuery({
     queryKey: ["ticket", id],
     queryFn: () => organizerApi.getTicket(token!, id),
     enabled: !!token && !!id,
@@ -57,7 +58,9 @@ export default function TicketDetailPage() {
     );
   }
 
-  if (isLoading && !cached) {
+  // Until there's a ticket to show (including the moment between the saved login being restored
+  // and the request starting, when the query isn't "loading" yet), show the skeleton.
+  if (!displayTicket && !isError) {
     return (
       <div className="flex flex-col">
         <TopBar back title="Ticket" />
@@ -70,7 +73,7 @@ export default function TicketDetailPage() {
     );
   }
 
-  if (isError && !cached) {
+  if (!displayTicket) {
     return (
       <div className="flex flex-col">
         <TopBar back title="Ticket" />
@@ -189,7 +192,7 @@ export default function TicketDetailPage() {
               />
             </div>
             <p className="text-xs text-text-muted text-center">
-              Show this at the door. Screenshot it for offline access.
+              Show this at the door. Save the ticket below to keep it for offline access.
             </p>
             <p className="font-mono text-xs text-text-muted tracking-widest">
               {displayTicket!.ticket_code.toUpperCase().replace(/-/g, " ")}
@@ -197,7 +200,9 @@ export default function TicketDetailPage() {
             {displayTicket!.checked_in_at && (
               <div className="flex items-center gap-1.5 text-xs font-bold text-success">
                 <CheckCircle2 size={14} />
-                Checked in {format(new Date(displayTicket!.checked_in_at), "MMM d · h:mm a")}
+                {displayTicket!.quantity > 1 && (displayTicket!.admitted_count ?? 0) < displayTicket!.quantity
+                  ? `${displayTicket!.admitted_count} of ${displayTicket!.quantity} checked in · first at ${format(new Date(displayTicket!.checked_in_at), "h:mm a")}`
+                  : `Checked in ${format(new Date(displayTicket!.checked_in_at), "MMM d · h:mm a")}`}
               </div>
             )}
           </div>
@@ -208,6 +213,7 @@ export default function TicketDetailPage() {
           </div>
         ) : null}
 
+        {isConfirmed && displayTicket!.ticket_code && !isOffline && <SaveTicketButton orderId={displayTicket!.id} />}
         {isConfirmed && !displayTicket!.checked_in_at && <TransferTicket orderId={displayTicket!.id} />}
 
         {/* Share event */}

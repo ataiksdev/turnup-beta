@@ -92,13 +92,9 @@ export default function TicketsPage() {
 
                 <div className="p-3 space-y-2">
                   {/* Event title */}
-                  {t.event_slug ? (
-                    <Link href={routes.event(t.event_slug)} className="font-black text-text text-sm hover:text-primary transition-colors line-clamp-1">
-                      {t.event_title ?? "Event"}
-                    </Link>
-                  ) : (
-                    <p className="font-black text-text text-sm line-clamp-1">{t.event_title ?? "Event"}</p>
-                  )}
+                  {/* Plain text: the whole card opens the ticket (a link inside a link is invalid
+                      and made tapping the title open the event instead). */}
+                  <p className="font-black text-text text-sm line-clamp-1">{t.event_title ?? "Event"}</p>
 
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
                     {eventDate && (

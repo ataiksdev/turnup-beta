@@ -56,6 +56,14 @@ export function formatEventDateShort(dateStr: string): string {
   return format(date, "MMM d");
 }
 
+const SYMBOLS: Record<string, string> = { NGN: "₦", USD: "$", EUR: "€", GBP: "£" };
+
+/** "₦5,000", "₦1,250.50". */
+export function formatMoney(amount: number, currency = "NGN"): string {
+  const sym = SYMBOLS[currency] ?? `${currency} `;
+  return `${sym}${Number(amount).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
+}
+
 export function formatPrice(
   isFree: boolean,
   priceMin?: number | null,
@@ -63,11 +71,10 @@ export function formatPrice(
   currency = "NGN",
 ): string {
   if (isFree) return "Free";
-  const sym = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : `${currency} `;
   if (priceMin && priceMax && priceMin !== priceMax) {
-    return `${sym}${priceMin}–${sym}${priceMax}`;
+    return `${formatMoney(priceMin, currency)} – ${formatMoney(priceMax, currency)}`;
   }
-  return `${sym}${priceMin ?? priceMax ?? 0}`;
+  return formatMoney(priceMin ?? priceMax ?? 0, currency);
 }
 
 export function formatCount(n: number): string {

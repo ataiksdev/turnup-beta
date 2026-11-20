@@ -26,7 +26,7 @@ from app.schemas.event import (
     AttendRequest, CategoryOut, EventCreate, EventDetail, EventOut, EventUpdate,
 )
 from app.schemas.organizer import (
-    AnalyticsOut, CheckInRequest, CheckInResult, CheckoutInitOut, CheckoutRequest,
+    AnalyticsOut, CheckInRequest, CheckInResult, CheckInStats, CheckoutInitOut, CheckoutRequest,
     CoHostInviteRequest, CoHostOut, CoHostRespondRequest, DailyViewOut,
     ReviewCreate, ReviewOut, TicketOrderOut, TicketTierCreate, TicketTierOut,
     TicketTierUpdate, VerifyPaymentRequest, WaitlistEntryOut, WaitlistNotifyRequest,
@@ -1610,27 +1610,80 @@ async def check_in_ticket(
         raise HTTPException(404, "Ticket not found for this event")
     if order.status != "confirmed":
         raise HTTPException(400, f"Ticket is not confirmed (status: {order.status})")
-    if order.checked_in_at is not None:
-        raise HTTPException(409, "Ticket already checked in")
+    # Tickets checked in before partial admission existed count as fully admitted.
+    admitted = order.quantity if (order.checked_in_at and not order.admitted_count) else (order.admitted_count or 0)
+    remaining = order.quantity - admitted
+    if remaining <= 0:
+        who = f"all {order.quantity}" if order.quantity > 1 else "already"
+        raise HTTPException(409, f"Ticket already checked in ({who} in)" if order.quantity > 1 else "Ticket already checked in")
 
-    order.checked_in_at = datetime.now(timezone.utc)
-    await db.flush()
-
+    from app.services.plus import is_plus
     attendee_name = (
         order.user.display_name or order.user.full_name or order.user.username
         if order.user else "Attendee"
     )
 
-    from app.services.plus import is_plus
-    return CheckInResult(
-        order_id=order.id,
-        ticket_code=order.ticket_code,
-        attendee_name=attendee_name,
-        tier_name=order.tier.name,
-        quantity=order.quantity,
-        checked_in_at=order.checked_in_at,
-        # Checked at scan time, so a lapsed membership doesn't get the fast lane.
-        fast_lane=bool(event.fast_lane_enabled and is_plus(order.user)),
+    def result(admitted_now: int, needs_choice: bool = False) -> CheckInResult:
+        return CheckInResult(
+            order_id=order.id, ticket_code=order.ticket_code, attendee_name=attendee_name,
+            tier_name=order.tier.name, quantity=order.quantity,
+            checked_in_at=order.checked_in_at or datetime.now(timezone.utc),
+            # Checked at scan time, so a lapsed membership doesn't get the fast lane.
+            fast_lane=bool(event.fast_lane_enabled and is_plus(order.user)),
+            admitted_count=admitted + admitted_now, admitted_now=admitted_now,
+            remaining=remaining - admitted_now, needs_choice=needs_choice,
+        )
+
+    if payload.admit is None and remaining > 1:
+        return result(0, needs_choice=True)  # staff choose how many are at the door
+    n = payload.admit or 1
+    if n > remaining:
+        raise HTTPException(409, f"Only {remaining} of this ticket's {order.quantity} still to come in")
+
+    # Atomic, so two door phones scanning the same ticket can't admit more than it covers.
+    now = datetime.now(timezone.utc)
+    done = await db.execute(
+        update(TicketOrder)
+        .where(TicketOrder.id == order.id, TicketOrder.admitted_count == (order.admitted_count or 0))
+        .values(admitted_count=admitted + n,
+                checked_in_at=func.coalesce(TicketOrder.checked_in_at, now))
+    )
+    if done.rowcount == 0:
+        raise HTTPException(409, "This ticket was just scanned at another door. Scan it again.")
+    await db.refresh(order)
+    return result(n)
+
+
+@router.get("/{event_id}/checkin/stats", response_model=CheckInStats)
+async def check_in_stats(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Live door count shared by everyone scanning: people in vs expected, and the latest
+    check-ins (any door)."""
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if not await _has_event_access(event, user, db, venue_role="viewer"):
+        raise HTTPException(403, "Only the event's team can see the door count")
+    orders = (await db.execute(
+        select(TicketOrder).options(selectinload(TicketOrder.tier), selectinload(TicketOrder.user))
+        .where(TicketOrder.event_id == event_id, TicketOrder.status == "confirmed")
+    )).scalars().all()
+
+    def admitted(o: TicketOrder) -> int:
+        return o.quantity if (o.checked_in_at and not o.admitted_count) else (o.admitted_count or 0)
+
+    recent = sorted((o for o in orders if o.checked_in_at), key=lambda o: o.checked_in_at, reverse=True)[:30]
+    return CheckInStats(
+        people_in=sum(admitted(o) for o in orders),
+        people_expected=sum(o.quantity for o in orders),
+        tickets_in=sum(1 for o in orders if admitted(o) >= o.quantity),
+        tickets_total=len(orders),
+        recent=[{"order_id": o.id, "code": (o.ticket_code or "")[:8].upper(), "tier": o.tier.name,
+                 "name": (o.user.display_name or o.user.full_name or o.user.username) if o.user else "Attendee",
+                 "admitted": admitted(o), "quantity": o.quantity, "first_in": o.checked_in_at} for o in recent],
     )
 
 

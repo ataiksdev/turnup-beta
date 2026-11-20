@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Nunito } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { SkipNav } from "@/components/layout/SkipNav";
@@ -7,6 +7,8 @@ import { PWASetup } from "@/components/layout/PWASetup";
 import { themeBootScript } from "@/lib/themes";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// Rounded, bold type for the Game Night theme (only downloaded when that theme is on).
+const nunito = Nunito({ subsets: ["latin"], variable: "--font-pop", weight: ["500", "700", "800", "900"], preload: false });
 
 export const metadata: Metadata = {
   title: { default: "Turnup", template: "%s · Turnup" },
@@ -42,8 +44,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   themeColor: [
-    { media: "(prefers-color-scheme: dark)",  color: "#09090B" },
-    { media: "(prefers-color-scheme: light)", color: "#FAFAFA" },
+    { media: "(prefers-color-scheme: dark)",  color: "#0C0A12" },
+    { media: "(prefers-color-scheme: light)", color: "#F7F5FB" },
   ],
 };
 
@@ -56,7 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             default theme never flashes. Generated from src/lib/themes.ts. */}
         <script dangerouslySetInnerHTML={{ __html: themeBootScript() }} />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${nunito.variable} font-sans antialiased`}>
         <SkipNav />
         <Providers>
           {children}

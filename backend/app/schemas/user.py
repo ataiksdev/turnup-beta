@@ -10,7 +10,7 @@ from app.schemas.types import WebUrl
 NameStr = Annotated[str, BeforeValidator(lambda v: v or "")]
 
 # Must match the theme ids in frontend/src/lib/themes.ts (tests/test_themes.py checks this).
-THEME_IDS = ("turnup", "sunset", "lagoon", "palm", "gold", "neon", "glass", "fluffy")
+THEME_IDS = ("turnup", "pop", "sunset", "gold", "glass", "fluffy")
 THEME_PREFERENCE_PATTERN = rf"^({'|'.join(THEME_IDS)}):(light|dark|system)$"
 
 

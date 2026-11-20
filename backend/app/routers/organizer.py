@@ -217,7 +217,7 @@ async def my_events(
             "views_count": e.views_count, "cover_image": e.cover_image,
             "category": e.category, "is_free": e.is_free,
             "price_min": e.price_min, "price_max": e.price_max,
-            "created_at": e.created_at,
+            "created_at": e.created_at, "review_status": e.review_status, "review_note": e.review_note,
         }
         for e in events
     ]
@@ -271,7 +271,7 @@ async def my_ticket_orders(
             unit_price=o.unit_price, total_price=o.total_price,
             status=o.status, payment_reference=o.payment_reference,
             ticket_code=o.ticket_code,
-            checked_in_at=o.checked_in_at,
+            checked_in_at=o.checked_in_at, admitted_count=o.admitted_count or (o.quantity if o.checked_in_at else 0),
             event_title=o.event.title if o.event else None,
             event_slug=o.event.slug if o.event else None,
             event_cover=o.event.cover_image if o.event else None,
@@ -283,6 +283,62 @@ async def my_ticket_orders(
         )
         for o in orders
     ]
+
+
+# ── Saved ticket image ─────────────────────────────────────────────────────────
+
+async def _cover_bytes(url: str | None) -> bytes | None:
+    """The event cover for the ticket image: our own uploads read directly, anything else
+    fetched with the SSRF-safe fetcher (public addresses only), small and fast, or skipped."""
+    from app.services import storage
+    from app.services.url_safety import fetch_safely
+    if not url:
+        return None
+    m = storage.NAME.search(url)
+    if m and "/api/uploads/" in url:
+        path = storage.upload_dir() / m.group(0)
+        if path.is_file():
+            return path.read_bytes()
+    try:
+        resp = await fetch_safely(url, timeout=4.0, user_agent="Turnup ticket image")
+        if resp.status_code == 200 and len(resp.content) <= 8 * 1024 * 1024:
+            return resp.content
+    except Exception:
+        return None
+    return None
+
+
+@router.get("/tickets/{order_id}/image.png")
+async def ticket_image(
+    order_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The ticket as a PNG, styled like a real ticket with a tear-off stub holding the QR code."""
+    from fastapi.responses import Response
+    from app.services.plus import is_plus
+    from app.services.ticket_image import render_ticket
+    o = (await db.execute(
+        select(TicketOrder).options(selectinload(TicketOrder.tier), selectinload(TicketOrder.event))
+        .where(TicketOrder.id == order_id, TicketOrder.user_id == user.id)
+    )).scalar_one_or_none()
+    if not o:
+        raise HTTPException(404, "Ticket not found")
+    if o.status != "confirmed" or not o.ticket_code:
+        raise HTTPException(409, "Only confirmed tickets can be saved.")
+    ev = o.event
+    png = render_ticket(
+        event_title=ev.title, start=ev.start_date, timezone_name=ev.timezone, venue=ev.venue_name,
+        address=ev.address, city=ev.city, tier=o.tier.name, quantity=o.quantity,
+        holder=user.display_name or user.full_name or user.username, ticket_code=o.ticket_code,
+        order_id=o.id, event_id=ev.id, status=o.status, checked_in_at=o.checked_in_at,
+        admitted=o.admitted_count or (o.quantity if o.checked_in_at else 0),
+        fast_lane=bool(ev.fast_lane_enabled and is_plus(user)), cover=await _cover_bytes(ev.cover_image),
+    )
+    return Response(png, media_type="image/png", headers={
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": f'attachment; filename="turnup-ticket-{o.id[:8]}.png"',
+    })
 
 
 # ── Single ticket order detail ────────────────────────────────────────────────
@@ -307,7 +363,7 @@ async def get_ticket_order(
         unit_price=o.unit_price, total_price=o.total_price,
         status=o.status, payment_reference=o.payment_reference,
         ticket_code=o.ticket_code,
-        checked_in_at=o.checked_in_at,
+        checked_in_at=o.checked_in_at, admitted_count=o.admitted_count or (o.quantity if o.checked_in_at else 0),
         event_title=o.event.title if o.event else None,
         event_slug=o.event.slug if o.event else None,
         event_cover=o.event.cover_image if o.event else None,

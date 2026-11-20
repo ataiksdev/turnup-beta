@@ -16,7 +16,7 @@ export interface TicketOrder {
   id: string; event_id: string; tier_id: string; tier_name: string;
   quantity: number; unit_price: number; total_price: number;
   status: string; payment_reference?: string; created_at: string;
-  ticket_code?: string; checked_in_at?: string;
+  ticket_code?: string; checked_in_at?: string; admitted_count?: number;
   event_title?: string; event_slug?: string; event_cover?: string;
   event_date?: string; event_city?: string; event_address?: string; event_venue?: string;
 }
@@ -56,6 +56,15 @@ export interface CheckInResult {
   quantity: number;
   checked_in_at: string;
   fast_lane?: boolean;
+  admitted_count?: number;  // people in so far on this ticket
+  admitted_now?: number;
+  remaining?: number;       // still to come in
+  needs_choice?: boolean;   // several people still to come in: ask how many are here
+}
+
+export interface CheckInStats {
+  people_in: number; people_expected: number; tickets_in: number; tickets_total: number;
+  recent: { order_id: string; code: string; tier: string; name: string; admitted: number; quantity: number; first_in: string }[];
 }
 
 export interface Review {
@@ -383,10 +392,14 @@ export const eventsApi = {
       method: "POST", body: JSON.stringify({ reference }),
     }, token),
 
-  checkIn: (token: string, eventId: string, ticketCode: string) =>
+  checkIn: (token: string, eventId: string, ticketCode: string, admit?: number) =>
     request<CheckInResult>(`/events/${eventId}/checkin`, {
-      method: "POST", body: JSON.stringify({ ticket_code: ticketCode }),
+      method: "POST", body: JSON.stringify({ ticket_code: ticketCode, ...(admit ? { admit } : {}) }),
     }, token),
+
+  /** Live door count shared by every phone scanning this event. */
+  checkInStats: (token: string, eventId: string) =>
+    request<CheckInStats>(`/events/${eventId}/checkin/stats`, {}, token),
 
   waitlistJoin: (token: string, eventId: string) =>
     request<{ status: string; position: number; waitlist_count: number }>(
