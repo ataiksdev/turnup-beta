@@ -290,7 +290,7 @@ export default function ProfilePage() {
       {isOwnProfile && (
         <div className="px-4 pb-4 space-y-2">
           <Link
-            href="/tickets"
+            href="/vibes"
             className="flex items-center justify-between p-3 rounded border-2 border-border bg-bg-card hover:border-primary transition-colors"
           >
             <div className="flex items-center gap-2">

@@ -38,7 +38,7 @@ export function CategoryTile({ category, size = "lg", onClick }: {
     </span>
   );
   return (
-    <Link href={`/search?category=${slug}`} onClick={onClick} style={style}
+    <Link href={`/discover?category=${slug}`} onClick={onClick} style={style}
       className={cn(
         "relative overflow-hidden rounded-md border-2 border-border shadow-brutal-sm transition-all duration-150",
         "hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal",

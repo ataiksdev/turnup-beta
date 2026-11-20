@@ -171,7 +171,7 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
             {tags.map((t) => (
               <Link
                 key={t}
-                href={`/search?tag=${encodeURIComponent(t)}`}
+                href={`/discover?tag=${encodeURIComponent(t)}`}
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-0.5 px-1.5 py-0.5 bg-bg-elevated border border-border rounded text-[9px] font-bold text-text-muted hover:text-primary hover:border-primary transition-colors"
               >

@@ -6,7 +6,8 @@ import type { Event } from "@/types";
 
 /**
  * What the app keeps on the phone for offline use, for ONE signed-in account: their tickets
- * (with the codes the door scans), their saved events, and the full event pages for both.
+ * (with the codes the door scans), their saved events, their upcoming RSVPs (going /
+ * interested), and the full event pages for all of them (My Vibes works offline from this).
  * Filled by OfflineSync when the app opens online and after buying or saving; wiped on logout
  * (and whenever a different account signs in), so the next person on the phone can't see it.
  * Cover photos are kept separately in the browser's Cache Storage (lib/offlineImages.ts).
@@ -15,26 +16,28 @@ interface OfflineState {
   userId: string | null;
   tickets: Record<string, TicketOrder>;
   saved: Event[];
+  attending: Event[];
   events: Record<string, Event>;
   syncedAt: string | null;
   /** Replace everything for this account (a full sync). */
-  replaceAll: (userId: string, data: { tickets: TicketOrder[]; saved: Event[]; events: Event[] }) => void;
+  replaceAll: (userId: string, data: { tickets: TicketOrder[]; saved: Event[]; attending: Event[]; events: Event[] }) => void;
   /** Keep one ticket / event the user just looked at. */
   setTicket: (userId: string, ticket: TicketOrder) => void;
   setEvent: (userId: string, event: Event) => void;
   clear: () => void;
 }
 
-const EMPTY = { userId: null, tickets: {}, saved: [], events: {}, syncedAt: null };
+const EMPTY = { userId: null, tickets: {}, saved: [], attending: [], events: {}, syncedAt: null };
 
 export const useOfflineStore = create<OfflineState>()(
   persist(
     (set, get) => ({
       ...EMPTY,
-      replaceAll: (userId, { tickets, saved, events }) => set({
+      replaceAll: (userId, { tickets, saved, attending, events }) => set({
         userId,
         tickets: Object.fromEntries(tickets.map((t) => [t.id, t])),
         saved,
+        attending,
         events: Object.fromEntries(events.map((e) => [e.id, e])),
         syncedAt: new Date().toISOString(),
       }),
@@ -60,7 +63,7 @@ export const useOfflineStore = create<OfflineState>()(
         try { localStorage.removeItem("turnup-tickets"); } catch { /* storage blocked */ }
         return localStorage;
       }),
-      partialize: (s) => ({ userId: s.userId, tickets: s.tickets, saved: s.saved, events: s.events, syncedAt: s.syncedAt }),
+      partialize: (s) => ({ userId: s.userId, tickets: s.tickets, saved: s.saved, attending: s.attending, events: s.events, syncedAt: s.syncedAt }),
     },
   ),
 );
@@ -72,6 +75,7 @@ export function useOfflineCopy(userId: string | undefined | null) {
   return {
     tickets: mine ? s.tickets : {},
     saved: mine ? s.saved : [],
+    attending: mine ? (s.attending ?? []) : [],
     events: mine ? s.events : {},
     syncedAt: mine ? s.syncedAt : null,
   };

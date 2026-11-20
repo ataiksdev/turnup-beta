@@ -88,7 +88,7 @@ export default function TicketDetailPage() {
             {offline ? "You're offline" : "Ticket not found"}
           </p>
           {offline && <p className="text-sm text-text-muted">This ticket isn&apos;t saved on this phone yet. Open it once while online.</p>}
-          <Link href="/tickets"><Button variant="secondary" size="sm">Back to tickets</Button></Link>
+          <Link href="/vibes"><Button variant="secondary" size="sm">Back to My Vibes</Button></Link>
         </div>
       </div>
     );
@@ -243,8 +243,8 @@ export default function TicketDetailPage() {
         )}
 
         {/* Back link */}
-        <Link href="/tickets">
-          <Button variant="secondary" fullWidth>← All tickets</Button>
+        <Link href="/vibes">
+          <Button variant="secondary" fullWidth>← My Vibes</Button>
         </Link>
       </div>
     </div>

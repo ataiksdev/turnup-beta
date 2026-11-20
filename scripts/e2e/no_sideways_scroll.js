@@ -9,7 +9,7 @@
 const { chromium } = require('playwright');
 const APP = process.env.APP || 'http://localhost:8090';
 const API = process.env.API || 'http://localhost:8000/api';
-const PAGES = ['/', '/explore', '/search', '/communities', '/saved', '/tickets', '/for-you', '/venues'];
+const PAGES = ['/', '/discover', '/discover?free=true', '/vibes', '/vibes?tab=past', '/communities', '/for-you', '/venues'];
 
 (async () => {
   const login = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' },

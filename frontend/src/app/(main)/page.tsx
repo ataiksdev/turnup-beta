@@ -10,7 +10,7 @@ import { parsePreferences, displayName as getDisplayName } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Users, Lock, CheckCircle2, WifiOff, Ticket, Bookmark } from "lucide-react";
+import { Users, Lock, CheckCircle2, WifiOff, Ticket } from "lucide-react";
 import { useOffline } from "@/lib/network";
 import type { Event, User } from "@/types";
 import { routes } from "@/lib/routes";
@@ -184,11 +184,8 @@ export default function DiscoverPage() {
             </div>
             {user && (
               <div className="flex gap-2">
-                <Link href="/tickets" className="inline-flex items-center gap-1.5 h-8 px-3 rounded border-2 border-border bg-bg-card text-xs font-bold text-text">
-                  <Ticket size={13} aria-hidden /> My tickets
-                </Link>
-                <Link href="/saved" className="inline-flex items-center gap-1.5 h-8 px-3 rounded border-2 border-border bg-bg-card text-xs font-bold text-text">
-                  <Bookmark size={13} aria-hidden /> Saved
+                <Link href="/vibes" className="inline-flex items-center gap-1.5 h-8 px-3 rounded border-2 border-border bg-bg-card text-xs font-bold text-text">
+                  <Ticket size={13} aria-hidden /> My Vibes: tickets &amp; saved
                 </Link>
               </div>
             )}
@@ -257,7 +254,7 @@ export default function DiscoverPage() {
           title="Trending Now"
           events={trending}
           loading={loadingTrending}
-          seeAllHref="/search?trending=true"
+          seeAllHref="/discover?trending=true"
         />
       )}
 
@@ -276,7 +273,7 @@ export default function DiscoverPage() {
           title="Free to Attend"
           events={free}
           loading={loadingFree}
-          seeAllHref="/search?free=true"
+          seeAllHref="/discover?free=true"
         />
       )}
     </div>
