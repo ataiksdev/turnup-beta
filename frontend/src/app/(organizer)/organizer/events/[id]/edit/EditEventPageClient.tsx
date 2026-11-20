@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { TopBar } from "@/components/layout/TopBar";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { cn } from "@/lib/utils";
+import { cn, randomId } from "@/lib/utils";
 import {
   AlignLeft, Calendar, CheckCircle2, DollarSign, FileEdit, Image, MapPin, Plus, Tag,
   Ticket, Trash2, ToggleLeft, ToggleRight, Users, Globe,
@@ -74,7 +74,7 @@ const EVENT_TYPES: { type: EventType; icon: React.ElementType; label: string; de
 function toLocal(iso: string) {
   try { return new Date(iso).toISOString().slice(0, 16); } catch { return ""; }
 }
-function uid() { return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2); }
+const uid = randomId;
 function newTier(): TierDraft {
   return { id: uid(), name: "", description: "", price: "", quantity: "", max_per_order: "10" };
 }

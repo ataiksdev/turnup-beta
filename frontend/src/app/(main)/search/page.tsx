@@ -8,8 +8,7 @@ import { EventCard } from "@/components/events/EventCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import {
-  Search, X, Music, Moon, Palette, Utensils, Monitor,
-  Trophy, Laugh, Leaf, MapPin, Shuffle, Tag, Hash,
+  Search, X, Monitor, MapPin, Shuffle, Tag, Hash,
   Calendar, ArrowUpDown, ChevronDown,
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -17,21 +16,12 @@ import { useState, Suspense, useEffect, useRef } from "react";
 import { cn, parsePreferences } from "@/lib/utils";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { CATEGORIES, CategoryTile } from "@/components/events/CategoryTile";
 import type { EventFilters } from "@/types";
 import { startOfDay, endOfDay, addDays, nextSaturday, nextSunday, endOfMonth, isSaturday, isSunday } from "date-fns";
 
 // ── Static config ─────────────────────────────────────────────────────────────
 
-const CATEGORIES: { label: string; slug: string; icon: LucideIcon; color: string }[] = [
-  { label: "Music",     slug: "music",     icon: Music,    color: "bg-[#1a472a]" },
-  { label: "Nightlife", slug: "nightlife", icon: Moon,     color: "bg-[#2d1b69]" },
-  { label: "Arts",      slug: "arts",      icon: Palette,  color: "bg-[#6b2d2d]" },
-  { label: "Food",      slug: "food",      icon: Utensils, color: "bg-[#6b4c1a]" },
-  { label: "Tech",      slug: "tech",      icon: Monitor,  color: "bg-[#0d3b59]" },
-  { label: "Sports",    slug: "sports",    icon: Trophy,   color: "bg-[#1a5c2d]" },
-  { label: "Comedy",    slug: "comedy",    icon: Laugh,    color: "bg-[#5c3d1a]" },
-  { label: "Wellness",  slug: "wellness",  icon: Leaf,     color: "bg-[#2d4a1a]" },
-];
 
 const EVENT_TYPES: { label: string; value: string; icon?: LucideIcon }[] = [
   { label: "All types", value: "" },
@@ -406,22 +396,8 @@ function SearchContent() {
         <div className="px-4 pt-4 space-y-3">
           <h2 className="text-xs font-black text-text uppercase tracking-widest">Browse categories</h2>
           <div className="grid grid-cols-2 gap-3">
-            {CATEGORIES.map(({ label, slug, icon: CatIcon, color }) => (
-              <Link
-                key={slug}
-                href={`/search?category=${slug}`}
-                onClick={() => setActiveCategory(slug)}
-                className={cn(
-                  "relative h-24 rounded border-2 border-border shadow-brutal overflow-hidden",
-                  "hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal-lg transition-all duration-100",
-                  color,
-                )}
-              >
-                <CatIcon size={36} className="absolute bottom-2 right-3 text-white opacity-60" aria-hidden />
-                <span className="absolute top-3 left-3 text-sm font-black text-white uppercase tracking-wide">
-                  {label}
-                </span>
-              </Link>
+            {CATEGORIES.map((c) => (
+              <CategoryTile key={c.slug} category={c} onClick={() => setActiveCategory(c.slug)} />
             ))}
           </div>
         </div>

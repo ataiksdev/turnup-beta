@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { ShareButton } from "@/components/ui/ShareButton";
 import { EventDetailSkeleton } from "@/components/ui/Skeleton";
-import { formatEventDate, formatMoney, formatPrice, parseTags, timeAgo, displayName, safeHref } from "@/lib/utils";
+import { formatEventDate, formatMoney, formatPrice, parseTags, timeAgo, displayName, safeHref, randomId } from "@/lib/utils";
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
@@ -239,7 +239,7 @@ export function EventDetailClient() {
     mutationFn: () => {
       if (!token || cartItems.length === 0) return Promise.reject();
       if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = crypto.randomUUID();
+        idempotencyKeyRef.current = randomId();
       }
       return eventsApi.checkout(token, eid, cartItems, idempotencyKeyRef.current);
     },
@@ -339,6 +339,8 @@ export function EventDetailClient() {
   const tags    = parseTags(event.tags);
   const isGoing = attendance === "going";
   const isInterested = attendance === "interested";
+  // Past events still open (e.g. from an organizer's profile) but can't be bought or RSVP'd to.
+  const hasEnded = new Date(event.end_date ?? event.start_date).getTime() <= Date.now();
   const shareUrl = typeof window !== "undefined"
     ? `${publicOrigin()}/events/${id}`
     : `${SITE}/events/${id}`;
@@ -466,8 +468,18 @@ export function EventDetailClient() {
           </a>
         )}
 
+        {hasEnded && (
+          <div role="status" className="flex items-center gap-3 px-4 py-3 rounded border-2 border-border-subtle bg-bg-elevated">
+            <Clock size={18} className="text-text-muted shrink-0" aria-hidden />
+            <p className="text-sm text-text-secondary">
+              <span className="font-bold text-text">This event has ended.</span>{" "}
+              {isGoing ? "You were there." : "Tickets and RSVPs are closed."}
+            </p>
+          </div>
+        )}
+
         {/* RSVP */}
-        {user && (
+        {user && !hasEnded && (
           <div className="space-y-2">
             <div className="flex gap-2" role="group" aria-label="RSVP options">
               <Button
@@ -599,7 +611,7 @@ export function EventDetailClient() {
         <GuestVenueReview event={event} />
 
         {/* Ticket tiers */}
-        {tiers && tiers.length > 0 && (
+        {tiers && tiers.length > 0 && !hasEnded && (
           <section aria-labelledby="tickets-heading">
             <h2 id="tickets-heading" className="text-base font-bold text-text flex items-center gap-2 mb-3">
               <Ticket size={18} className="text-primary" /> Tickets
@@ -713,7 +725,7 @@ export function EventDetailClient() {
         )}
 
         {/* Waitlist */}
-        {event?.waitlist_enabled && user && !purchaseSuccess && (tiers?.every(t => (t.available !== null && t.available <= 0)) || !tiers?.length) && (
+        {event?.waitlist_enabled && user && !purchaseSuccess && !hasEnded && (tiers?.every(t => (t.available !== null && t.available <= 0)) || !tiers?.length) && (
           <section className="bg-bg-card border-2 border-border rounded p-4 shadow-brutal-sm space-y-3">
             <div className="flex items-center gap-2">
               <Clock size={16} className="text-primary" />
