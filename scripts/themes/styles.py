@@ -9,10 +9,12 @@ def blend(fg, bg, a):  # fg over bg at alpha a -> hex
 # Optional surface/elevated/overlay give the solid styles (fluid, pop) their layer colours.
 S = {
  # The default. Fluid: rounded corners, thin soft borders, diffuse shadows, a faint purple glow.
- "turnup": {"name": "Turnup", "blurb": "Electric purple, smooth and rounded", "style": "fluid",
-   "dark": dict(bg="0C0A12", page=["0C0A12", "1C0E36", "151030"], card="15121D", card_alpha=1.0,
-                surface="110E18", elevated="1D1928", overlay="262133", elevated_alpha=1.0,
-                border="3D3552", border_alpha=1.0, subtle="221E2E",
+ "turnup": {"name": "Turnup", "blurb": "Electric purple, smooth and rounded; AMOLED black at night", "style": "fluid",
+   # Dark is AMOLED black: a true-black page with no glow (black pixels switch off on AMOLED
+   # screens), near-black cards so they still stand out.
+   "dark": dict(bg="000000", page=["000000", "000000", "000000"], glow=False, card="0E0C12", card_alpha=1.0,
+                surface="07060A", elevated="17141D", overlay="211D29", elevated_alpha=1.0,
+                border="2E2938", border_alpha=1.0, subtle="1A1720",
                 text="FFFFFF", text2="C9C3D6", muted="9A93AB", disabled="4A4458",
                 primary="A855F7", hover="9333EA", plight="EDE9FE", pmuted="3B1764", on="FFFFFF", shadow="000000"),
    "light": dict(bg="F7F5FB", page=["F7F5FB", "EFE6FD", "EAEEFF"], card="FFFFFF", card_alpha=1.0,
