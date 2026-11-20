@@ -3,6 +3,7 @@
     python -m app.cli migrate          # upgrade the schema to the latest migration + seed defaults
     python -m app.cli seed             # load demo data into an EMPTY database (test/staging)
     python -m app.cli seed --reset     # WIPE the database, then load demo data
+    python -m app.cli seed-venues      # add the venue demo data to an already-seeded demo database
     python -m app.cli backup-offsite   # encrypt + copy the newest DB dump and KYC files off the server now
     python -m app.cli decrypt-backup IN OUT   # decrypt an off-server backup (needs BACKUP_PASSPHRASE)
     python -m app.cli prune-uploads [--dry-run]   # delete public uploads nothing refers to
@@ -34,6 +35,15 @@ def main(argv: list[str]) -> int:
             return 1
         try:
             asyncio.run(run(reset="--reset" in args))
+        except SeedRefused as e:
+            print(e)
+            return 1
+        return 0
+    if args == ["seed-venues"]:
+        from app.demo_data import SeedRefused
+        from app.demo_marketplace import run_venues_only
+        try:
+            asyncio.run(run_venues_only())
         except SeedRefused as e:
             print(e)
             return 1

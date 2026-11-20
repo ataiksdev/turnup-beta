@@ -37,6 +37,7 @@ npm run dev                   # http://localhost:3003; /api/* is proxied to loca
 cd backend
 python -m app.cli seed            # into an empty database
 python -m app.cli seed --reset    # wipe everything first (only allowed with DEBUG=true)
+python -m app.cli seed-venues     # add the venue demo data to a database seeded before venues existed
 ```
 
 With Docker: `docker compose run --rm migrate python -m app.cli seed`. It creates an admin

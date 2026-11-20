@@ -146,6 +146,23 @@ async def my_communities(
     return result
 
 
+@router.get("/my/shared-event/{event_id}")
+async def my_communities_with_event(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    """Which of my communities already have this event, so the share sheet can mark them
+    as shared instead of offering to share it again."""
+    rows = (await db.execute(
+        select(Community.slug)
+        .join(CommunityMember, CommunityMember.community_id == Community.id)
+        .join(CommunityEvent, CommunityEvent.community_id == Community.id)
+        .where(CommunityMember.user_id == me.id, CommunityEvent.event_id == event_id)
+    )).scalars().all()
+    return {"slugs": list(rows)}
+
+
 # ── Create ─────────────────────────────────────────────────────────────────────
 
 @router.post("", response_model=CommunityOut, status_code=201)
@@ -537,6 +554,9 @@ async def share_event(
     )).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found or not published")
+    end = event.end_date or event.start_date
+    if (end if end.tzinfo else end.replace(tzinfo=timezone.utc)) <= datetime.now(timezone.utc):
+        raise HTTPException(400, "This event has ended, so it can't be shared to communities.")
 
     existing = (await db.execute(
         select(CommunityEvent).where(

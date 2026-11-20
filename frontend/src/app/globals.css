@@ -212,8 +212,9 @@
    fluid (Turnup, the default), pop (Game Night), brutal (Sunset, Gold), glass, fluffy.
    No component needs theme-specific code. */
 @layer utilities {
-  /* Page-level backgrounds become transparent so the theme's gradient shows through. */
-  html:is([data-style="glass"], [data-style="fluffy"], [data-style="fluid"], [data-style="pop"]) .bg-bg {
+  /* Full-page backgrounds become transparent so the theme's gradient shows through. Only
+     page wrappers (min-h-screen): sheets, sticky bars and fields using bg-bg stay solid. */
+  html:is([data-style="glass"], [data-style="fluffy"], [data-style="fluid"], [data-style="pop"]) :is(body, .bg-bg.min-h-screen) {
     background-color: transparent;
   }
 

@@ -234,6 +234,7 @@ unpack it into the `kyc` volume.
 | Logs | `docker compose logs -f backend` (or `worker`, `proxy`, `backup`) |
 | Deploy now / apply `.env` changes | `./deploy/oracle/deploy.sh` |
 | Load demo data (empty database only) | `docker compose run --rm migrate python -m app.cli seed` |
+| Add demo venues to an already-seeded demo database | `docker compose run --rm migrate python -m app.cli seed-venues` |
 | Restart one service | `docker compose restart backend` |
 | List backups | `docker compose exec backup ls -lh /backups` |
 | Copy a backup to your PC | on your PC: `ssh ubuntu@<server-ip> 'cd /opt/turnup && docker compose exec -T backup cat /backups/turnup-YYYY-MM-DD.sql.gz' > turnup-backup.sql.gz` |
