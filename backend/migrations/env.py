@@ -19,6 +19,14 @@ def _url() -> str:
     return context.get_x_argument(as_dictionary=True).get("url") or settings.database_url
 
 
+def _include_object(obj, name, type_, reflected, compare_to):
+    # Postgres-only search indexes on expressions (migration 0008, app/services/search.py).
+    # The models can't describe them, so they'd otherwise show up as "removed" on every check.
+    if type_ == "index" and reflected and compare_to is None and (name or "").startswith("ix_search_"):
+        return False
+    return True
+
+
 def _configure(connection=None, url=None):
     is_sqlite = (url or str(connection.engine.url)).startswith("sqlite")
     context.configure(
@@ -26,6 +34,7 @@ def _configure(connection=None, url=None):
         url=url,
         target_metadata=target_metadata,
         compare_type=True,
+        include_object=_include_object,
         # SQLite can't ALTER most things in place; batch mode copies the table instead.
         render_as_batch=is_sqlite,
         literal_binds=connection is None,

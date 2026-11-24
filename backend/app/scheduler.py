@@ -77,6 +77,11 @@ async def run_weekend_picks():
     await _run("Weekend picks", send_weekend_picks)
 
 
+async def run_search_alerts():
+    from app.services.search_alerts import send_search_alerts
+    await _run("Search alerts", send_search_alerts)
+
+
 def build_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     # Ticket-order expiry is core payment hygiene, so it always runs; the scout is added
@@ -98,6 +103,9 @@ def build_scheduler() -> AsyncIOScheduler:
                       replace_existing=True, max_instances=1, coalesce=True)
     # Thursdays 16:00 Lagos (15:00 UTC).
     scheduler.add_job(run_weekend_picks, CronTrigger(day_of_week="thu", hour=15, minute=7), id="weekend_picks",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    # "Notify me" searches: hourly, against events created since the last check.
+    scheduler.add_job(run_search_alerts, IntervalTrigger(hours=1), id="search_alerts",
                       replace_existing=True, max_instances=1, coalesce=True)
     if settings.ai_provider_api_key:
         scheduler.add_job(

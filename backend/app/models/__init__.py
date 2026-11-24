@@ -10,6 +10,7 @@ from app.models.organizer import (
 )
 
 from app.models import venue as _venue  # noqa: F401  (registers venue marketplace tables)
+from app.models.discovery import HiddenItem, SearchAlert
 
 __all__ = [
     "User", "Category", "Event", "EventAttendee", "EventSave",
@@ -18,4 +19,5 @@ __all__ = [
     "MagicLink", "TwoFactor", "OAuthAccount", "PhoneOTP",
     "OrganizerProfile", "TicketTier", "TicketOrder", "EventTemplate",
     "EventCoHost", "EventWaitlist", "EventView", "EventReview",
+    "HiddenItem", "SearchAlert",
 ]

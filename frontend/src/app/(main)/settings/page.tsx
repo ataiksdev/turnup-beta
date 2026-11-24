@@ -2,8 +2,9 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, KeyRound, Laptop, Lock, LogOut, Mail, ShieldCheck, Trash2, AlertTriangle } from "lucide-react";
-import { authApi, type SessionInfo } from "@/lib/api";
+import { CheckCircle2, KeyRound, Laptop, Lock, LogOut, Mail, ShieldCheck, Trash2, AlertTriangle, EyeOff, BellRing, FileText } from "lucide-react";
+import { authApi, discoveryApi, type SessionInfo } from "@/lib/api";
+import { routes } from "@/lib/routes";
 import { useLogout } from "@/lib/session";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
@@ -317,6 +318,109 @@ function SessionsSection() {
   );
 }
 
+// ── Hidden events and organizers ────────────────────────────────────────────────
+function HiddenSection() {
+  const { token } = useAuthStore();
+  const qc = useQueryClient();
+  const { data: items, isLoading } = useQuery({
+    queryKey: ["hidden"], queryFn: () => discoveryApi.hidden(token!), enabled: !!token,
+  });
+  const unhide = useMutation({
+    mutationFn: (i: { kind: "event" | "organizer"; target_id: string }) => discoveryApi.unhide(token!, i.kind, i.target_id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["hidden"] }); qc.invalidateQueries({ queryKey: ["events"] }); },
+  });
+  return (
+    <Section icon={<EyeOff size={16} />} title="Hidden events and organizers">
+      <p className="text-sm text-text-muted">
+        Things you marked &quot;Not interested&quot; or &quot;Hide this organizer&quot;. They stay out of your feeds and
+        searches until you unhide them.
+      </p>
+      {isLoading && <p className="text-sm text-text-muted">Loading…</p>}
+      {items && items.length === 0 && <p className="text-sm text-text-muted">Nothing hidden.</p>}
+      {unhide.isError && <Notice tone="error">{msg(unhide.error, "Could not unhide that.")}</Notice>}
+      <ul className="divide-y-2 divide-border">
+        {items?.map((i) => (
+          <li key={`${i.kind}:${i.target_id}`} className="py-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-text truncate">
+                {i.link ? (
+                  <Link href={i.kind === "event" ? routes.event(i.link) : routes.profile(i.link)} className="hover:underline">
+                    {i.label}
+                  </Link>
+                ) : i.label}
+              </p>
+              <p className="text-xs text-text-muted truncate">
+                {i.kind === "event" ? "Event" : "Organizer"}{i.detail ? ` · ${i.detail}` : ""}
+              </p>
+            </div>
+            <Button size="xs" variant="secondary"
+              loading={unhide.isPending && unhide.variables?.target_id === i.target_id}
+              onClick={() => unhide.mutate(i)}>
+              Unhide
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+// ── Search alerts ───────────────────────────────────────────────────────────────
+function SearchAlertsSection() {
+  const { token } = useAuthStore();
+  const qc = useQueryClient();
+  const { data: alerts, isLoading } = useQuery({
+    queryKey: ["search-alerts"], queryFn: () => discoveryApi.searchAlerts(token!), enabled: !!token,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => discoveryApi.deleteSearchAlert(token!, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["search-alerts"] }),
+  });
+  return (
+    <Section icon={<BellRing size={16} />} title="Search alerts">
+      <p className="text-sm text-text-muted">
+        Searches you asked us to watch. We&apos;ll notify you when a new event matches, for up to 60 days.
+      </p>
+      {isLoading && <p className="text-sm text-text-muted">Loading…</p>}
+      {alerts && alerts.length === 0 && (
+        <p className="text-sm text-text-muted">
+          None yet. When a search on <Link href="/discover" className="text-primary hover:underline">Discover</Link>{" "}
+          finds nothing, tap &quot;Notify me&quot;.
+        </p>
+      )}
+      {remove.isError && <Notice tone="error">{msg(remove.error, "Could not remove the alert.")}</Notice>}
+      <ul className="divide-y-2 divide-border">
+        {alerts?.map((a) => (
+          <li key={a.id} className="py-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-text truncate">&quot;{a.query}&quot;{a.city ? ` in ${a.city}` : ""}</p>
+              <p className="text-xs text-text-muted">
+                Since {timeAgo(a.created_at)}{a.notified_count > 0 ? ` · ${a.notified_count} alert${a.notified_count !== 1 ? "s" : ""} sent` : ""}
+              </p>
+            </div>
+            <Button size="xs" variant="secondary" loading={remove.isPending && remove.variables === a.id}
+              onClick={() => remove.mutate(a.id)}>
+              Remove
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+// ── Privacy ─────────────────────────────────────────────────────────────────────
+function PrivacySection() {
+  return (
+    <Section icon={<FileText size={16} />} title="Privacy">
+      <p className="text-sm text-text-muted">
+        What we collect, why, and your rights under the Nigeria Data Protection Act.
+      </p>
+      <Link href="/privacy" className="text-sm text-primary font-medium hover:underline">Read the Privacy Policy</Link>
+    </Section>
+  );
+}
+
 // ── Delete account ──────────────────────────────────────────────────────────────
 function DeleteSection() {
   const { token, user, logout } = useAuthStore();
@@ -392,6 +496,9 @@ export default function SettingsPage() {
         <PasswordSection />
         <TwoFactorSection />
         <SessionsSection />
+        <HiddenSection />
+        <SearchAlertsSection />
+        <PrivacySection />
         <Button variant="secondary" fullWidth onClick={logoutEverywhere}>
           <LogOut size={16} /> Log out
         </Button>

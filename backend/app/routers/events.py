@@ -33,6 +33,8 @@ from app.schemas.organizer import (
     WaitlistStatusOut,
 )
 from app.services.email import send_ticket_email
+from app.services.hidden import exclude_hidden, hidden_for
+from app.services.search import text_search
 from app.services.paystack import PaystackConfigError, initialize_transaction, verify_transaction
 from app.services.tickets import (
     auto_rsvp, confirm_order, notify_buyer, reserve_inventory, settle_paid_orders, to_kobo,
@@ -182,14 +184,17 @@ async def list_events(
     }
     order_clause = _sort_map.get(sort, Event.start_date.asc())
 
-    stmt = (select(Event).options(*_load())
-            .where(Event.status == "published")
-            .order_by(order_clause))
+    stmt = select(Event).options(*_load()).where(Event.status == "published")
+    stmt = exclude_hidden(stmt, await hidden_for(db, user))
 
     if q:
-        stmt = stmt.where(or_(Event.title.ilike(f"%{q}%"), Event.city.ilike(f"%{q}%"),
-                              Event.tags.ilike(f"%{q}%"), Event.venue_name.ilike(f"%{q}%"),
-                              Event.description.ilike(f"%{q}%")))
+        # Full-text with typo tolerance on Postgres (app/services/search.py).
+        match, rank = await text_search(db, q)
+        if match is not None:
+            stmt = stmt.where(match)
+            if sort == "relevance" and rank is not None:
+                order_clause = rank.desc()
+    stmt = stmt.order_by(order_clause, Event.start_date.asc())
     if tag:
         stmt = stmt.where(Event.tags.ilike(f"%{tag}%"))
     if city:
@@ -233,6 +238,7 @@ async def trending_events(
     stmt = (select(Event).options(*_load())
             .where(Event.status == "published", Event.is_trending == True)
             .order_by(Event.attendees_count.desc()).limit(limit))
+    stmt = exclude_hidden(stmt, await hidden_for(db, user))
     return [_serialize(e) for e in (await db.execute(stmt)).scalars().all()]
 
 
@@ -245,6 +251,7 @@ async def featured_events(
     stmt = (select(Event).options(*_load())
             .where(Event.status == "published", Event.is_featured == True)
             .order_by(Event.start_date.asc()).limit(limit))
+    stmt = exclude_hidden(stmt, await hidden_for(db, user))
     return [_serialize(e) for e in (await db.execute(stmt)).scalars().all()]
 
 
@@ -261,11 +268,11 @@ async def for_you_events(
     """
     now = datetime.now(timezone.utc)
 
-    candidates = (await db.execute(
+    candidates = (await db.execute(exclude_hidden(
         select(Event).options(*_load())
         .where(Event.status == "published", Event.start_date > now)
         .order_by(Event.start_date.asc())
-        .limit(300)
+        .limit(300), await hidden_for(db, user))
     )).scalars().all()
 
     if not user:
@@ -478,11 +485,12 @@ async def following_events(
     if not candidate_ids:
         return []
 
-    stmt = (
+    stmt = exclude_hidden(
         select(Event).options(*_load())
         .where(Event.id.in_(candidate_ids), Event.status == "published", Event.start_date > now)
         .order_by(Event.start_date.asc())
-        .limit(limit)
+        .limit(limit),
+        await hidden_for(db, user),
     )
     events = (await db.execute(stmt)).scalars().all()
 

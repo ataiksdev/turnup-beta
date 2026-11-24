@@ -176,5 +176,5 @@ export interface EventFilters extends PaginatedParams {
   free?: boolean;
   date_from?: string;
   date_to?: string;
-  sort?: "date" | "popular" | "price_asc" | "price_desc" | "newest";
+  sort?: "date" | "relevance" | "popular" | "price_asc" | "price_desc" | "newest";
 }
