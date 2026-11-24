@@ -1,13 +1,13 @@
 """Event text search.
 
-Postgres (production): full-text search over title, venue, city, tags and description, with
-prefix matching ("afrob" finds "afrobeats"), plus trigram word similarity on the short fields
-for typos ("afrobeets", "lekki phse 1"). Both are backed by GIN indexes created in migration
+Postgres (production): full-text search over title, venue, city, tags, description and the
+category's name, with prefix matching ("afrob" finds "afrobeats"), plus trigram word
+similarity on the short fields for typos ("afrobeets", "lekki phse 1"). Both are backed by GIN indexes created in migration
 0009 (named ix_search_*; see migrations/env.py for why Alembic leaves them alone).
 
 Anything else (SQLite in development and tests): every word must appear in one of the fields,
 and words that match nothing are widened to close spellings of words that do exist in event
-titles, tags, venues and cities.
+titles, tags, venues, cities and category names.
 """
 import difflib
 import re
@@ -15,7 +15,7 @@ import re
 from sqlalchemy import ColumnElement, Text, and_, func, literal, literal_column, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.event import Event
+from app.models.event import Category, Event
 
 MAX_TOKENS = 8
 _WORD = re.compile(r"\w+", re.UNICODE)
@@ -75,17 +75,24 @@ def _postgres(words: list[str], trigrams: bool):
     # nothing in them is tsquery syntax.
     tsq = func.to_tsquery(config, literal(" & ".join(f"{w}:*" for w in words), Text))
     phrase = literal(" ".join(words), Text)  # already lower case
-    matches = tsv.op("@@")(tsq)
     rank = func.ts_rank(tsv, tsq)
-    if not trigrams:
-        return matches, rank
-    # Every word must still match, each either as a prefix or close in spelling to a word in the
-    # title, tags, venue or city: word_similarity >= pg_trgm.word_similarity_threshold (0.6).
     names = name_document()
-    per_word = [or_(tsv.op("@@")(func.to_tsquery(config, literal(f"{w}:*", Text))),
-                    literal(w, Text).op("<%")(names))
-                for w in words]
-    return and_(*per_word), rank + func.word_similarity(phrase, names)
+
+    def word_matches(w: str):
+        prefix = func.to_tsquery(config, literal(f"{w}:*", Text))
+        # The event's category counts too ("arts culture" finds Arts & Culture events).
+        in_category = Event.category_id.in_(select(Category.id).where(
+            func.to_tsvector(config, _c(Category.name) + " " + _c(Category.slug)).op("@@")(prefix)))
+        options = [tsv.op("@@")(prefix), in_category]
+        if trigrams:
+            # Close in spelling to a word in the title, tags, venue or city:
+            # word_similarity >= pg_trgm.word_similarity_threshold (0.6).
+            options.append(literal(w, Text).op("<%")(names))
+        return or_(*options)
+
+    # Every word must match, each as a prefix, in the category, or (with pg_trgm) despite a typo.
+    clause = and_(*[word_matches(w) for w in words])
+    return clause, (rank + func.word_similarity(phrase, names)) if trigrams else rank
 
 
 _FIELDS = (Event.title, Event.venue_name, Event.city, Event.tags, Event.description)
@@ -100,6 +107,8 @@ async def _vocabulary(db: AsyncSession) -> set[str]:
     for row in rows:
         for value in row:
             vocab.update(tokens(value or ""))
+    for name, slug in (await db.execute(select(Category.name, Category.slug))).all():
+        vocab.update(tokens(f"{name} {slug}"))
     return vocab
 
 
@@ -113,5 +122,7 @@ async def _portable(db: AsyncSession, words: list[str]):
                 vocab = await _vocabulary(db)
             if not any(v.startswith(w) for v in vocab):
                 variants += difflib.get_close_matches(w, vocab, n=3, cutoff=0.75)
-        per_word.append(or_(*[f.ilike(f"%{v}%") for v in variants for f in _FIELDS]))
+        in_category = Event.category_id.in_(select(Category.id).where(
+            or_(*[c.ilike(f"%{v}%") for v in variants for c in (Category.name, Category.slug)])))
+        per_word.append(or_(in_category, *[f.ilike(f"%{v}%") for v in variants for f in _FIELDS]))
     return and_(*per_word)

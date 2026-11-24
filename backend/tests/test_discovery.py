@@ -208,3 +208,21 @@ async def test_search_alert_validation_and_limit(client, db):
     for i in range(20):
         assert (await client.post("/api/search-alerts", headers=h, json={"q": f"thing {i}"})).status_code == 201
     assert (await client.post("/api/search-alerts", headers=h, json={"q": "one too many"})).status_code == 409
+
+
+async def test_search_matches_the_category_name(client, db):
+    from app.models.event import Category
+    _, host = await make_user(db, "organizer")
+    w = _word()
+    cat = Category(id=str(uuid.uuid4()), name=f"{w.title()} & Culture", slug=f"{w}-culture")
+    db.add(cat)
+    await db.commit()
+    hit = await _event(db, host, "Gallery Night")
+    hit_row = await db.get(Event, hit.id)
+    hit_row.category_id = cat.id
+    await db.commit()
+    miss = await _event(db, host, "Gallery Morning")
+    found = await _search(client, f"{w} culture")
+    assert hit.id in found and miss.id not in found
+    # A word in the category and a word in the title together.
+    assert hit.id in await _search(client, f"{w} gallery")
