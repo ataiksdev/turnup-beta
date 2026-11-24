@@ -1043,3 +1043,26 @@ export const discoveryApi = {
   deleteSearchAlert: (token: string, id: string) =>
     request<void>(`/search-alerts/${encodeURIComponent(id)}`, { method: "DELETE" }, token),
 };
+
+// ── Share links with a ref code ─────────────────────────────────────────────────
+
+export type ShareChannel = "whatsapp" | "native" | "copy_link";
+
+export interface MyShares {
+  people_brought: number;
+  opens: number;
+  events: { event_id: string; title: string; slug: string; start_date: string;
+            opens: number; saved: number; going: number; bought: number }[];
+}
+
+export const shareApi = {
+  link: (token: string, eventId: string, channel: ShareChannel) =>
+    request<{ code: string; url: string }>("/share", {
+      method: "POST", body: JSON.stringify({ event_id: eventId, channel }),
+    }, token),
+  open: (code: string, token?: string) =>
+    request<void>("/share/open", {
+      method: "POST", body: JSON.stringify({ code }), headers: { "X-Anonymous-Id": getAnonymousId() },
+    }, token),
+  mine: (token: string) => request<MyShares>("/share/mine", {}, token),
+};

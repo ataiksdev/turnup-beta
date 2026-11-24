@@ -118,6 +118,8 @@ async def confirm_order(db: AsyncSession, order_id: str, payment_channel: str | 
     order.platform_fee_percent = fee_percent
     order.platform_fee_amount = fee_amount
     await _record_order_completed(db, order)
+    from app.services.sharing import credit
+    await credit(db, order.user_id, order.event_id, "order")  # a share link that brought them
     await db.flush()
     return order
 

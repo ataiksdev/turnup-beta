@@ -456,8 +456,10 @@ async def _co_attendees(db: AsyncSession, consenting: set[str], now: datetime) -
 
 
 async def _tastemaker_scores(db: AsyncSession, consenting: set[str], now: datetime) -> dict[str, float]:
-    """How often a person's followers commit to an event within 7 days after they did, over the
-    last 90 days, on a 0..1 log scale."""
+    """How many people a person brings out, over the last 90 days, on a 0..1 log scale:
+    followers who commit to an event within 7 days after they did, plus (counted double,
+    since it's direct evidence) people who RSVP'd or bought through their share links
+    (app/services/sharing.py)."""
     since = now - timedelta(days=90)
     going = (await db.execute(select(EventAttendee.user_id, EventAttendee.event_id, EventAttendee.created_at).where(
         EventAttendee.status == "going", EventAttendee.created_at >= since, EventAttendee.created_at < now,
@@ -474,10 +476,13 @@ async def _tastemaker_scores(db: AsyncSession, consenting: set[str], now: dateti
     for (uid, eid), at in first.items():
         by_event[eid].append((uid, at))
         by_user[uid].append((eid, at))
+    from app.services.sharing import people_brought
+    brought = await people_brought(db, consenting, since, now)
     scores = {}
     for uid in consenting:
         n = sum(1 for eid, at in by_user[uid] for other, other_at in by_event[eid]
                 if other in followers[uid] and at < other_at <= at + timedelta(days=7))
+        n += 2 * brought.get(uid, 0)
         scores[uid] = round(min(math.log1p(n) / math.log1p(50), 1.0), 4)
     return scores
 

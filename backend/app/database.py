@@ -64,9 +64,9 @@ POST_BASELINE_COLUMNS = {
 
 def _post_baseline_tables() -> set[str]:
     """Every table defined in app/models/venue.py (migration 0003), app/models/activity.py
-    (migration 0008) and app/models/discovery.py (migration 0009)."""
-    from app.models import activity, discovery, venue
-    return {m.__tablename__ for mod in (venue, activity, discovery) for m in vars(mod).values()
+    (0008), app/models/discovery.py (0009) and app/models/sharing.py (0011)."""
+    from app.models import activity, discovery, sharing, venue
+    return {m.__tablename__ for mod in (venue, activity, discovery, sharing) for m in vars(mod).values()
             if isinstance(m, type) and issubclass(m, Base) and m is not Base and hasattr(m, "__tablename__")}
 
 

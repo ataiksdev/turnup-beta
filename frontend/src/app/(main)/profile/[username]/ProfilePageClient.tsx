@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EventCard } from "@/components/events/EventCard";
+import { YourShares } from "@/components/events/YourShares";
 import { parsePreferences, formatCount, displayName, safeHref } from "@/lib/utils";
 import { Globe, MapPin, Bookmark, CheckCircle2, Heart, Ticket, UserX, LogOut, X, Star, Users, SlidersHorizontal, Settings, type LucideIcon } from "lucide-react";
 import {useRouter} from "next/navigation";
@@ -285,6 +286,8 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
+      {isOwnProfile && <YourShares />}
 
       {/* Tickets + Personalization quick-links (own profile) */}
       {isOwnProfile && (

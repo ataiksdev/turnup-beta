@@ -688,6 +688,9 @@ async def attend(
     record_activity(db, "rsvp_changed", user_id=user.id, event_id=event_id,
                     props={"status": payload.status, "from": old_status,
                            "days_until_event": _days_until(event)})
+    if becoming_going:
+        from app.services.sharing import credit
+        await credit(db, user.id, event_id, "going")  # a share link that brought them
 
     # Notify host when someone RSVPs going (skip if user is the host)
     if becoming_going and event.host_id != user.id:
@@ -775,6 +778,8 @@ async def toggle_save(
     event.saves_count += 1
     record_activity(db, "event_saved", user_id=user.id, event_id=event_id,
                     props={"days_until_event": _days_until(event)})
+    from app.services.sharing import credit
+    await credit(db, user.id, event_id, "save")
     return {"saved": True}
 
 

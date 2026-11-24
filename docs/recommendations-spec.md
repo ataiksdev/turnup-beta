@@ -72,7 +72,8 @@ location permission (the tracker never asks for it).
 | `ticket_transferred` | `POST /tickets/{id}/transfer` | `order_id`, `to_user_id` |
 | `event_checked_in` | `POST /events/{id}/checkin` | `order_id`, `admitted`, `minutes_from_start` |
 | `event_reviewed` | `POST /events/{id}/reviews` | `rating`, `has_text` |
-| `recs_served` | every `GET /events/for-you` | `ranker` version, `event_ids` in order, `personal`, `has_location` |
+| `recs_served` | every `GET /events/for-you` (and the weekend picks page) | `ranker` version, `event_ids` in order, `personal`, `has_location`, `discovery_ids` |
+| `share_link_opened` | `POST /share/open` (event page opened with `?ref=`) | `code`, `channel`, `sharer_id` |
 
 ### How the app sends it
 
@@ -150,7 +151,7 @@ Every function takes `as_of` and reads only data from before it.
 | `conversion_propensity` | 0–1, high for people browsing and saving but not buying |
 | **With consent only:** `peak_hours` | their 3 most common hours to open the app |
 | `co_attendee_ids` | opted-in people they've gone to 2+ events with (events under 300 people) |
-| `tastemaker_score` | how often their followers commit to an event within 7 days after they do (90 days, log scale 0–1) |
+| `tastemaker_score` | followers who commit to an event within 7 days after they do, plus 2× people who went or bought through their share links (90 days, log scale 0–1) |
 | `segments` | `weekend_warrior`, `planner`/`spontaneous`, `big_spender` (₦30k+), `free_event_hunter`, `vip_buyer`, `tastemaker`, `lapsing_cooling`/`lapsing_dormant`, `age_18-24`…`age_45+`, `gender_*`, and category labels (`nightlife_regular`, `live_music_fan`, `tech_professional`, `foodie`, `arts_and_culture`, `comedy_fan`, `wellness`, `sports_fan`) for categories at least half as strong as their top one |
 
 ## 4. The For You ranker (`recommender.py`, version `v2.0`)
@@ -246,7 +247,13 @@ These use the data above but are features, not data collection:
    on sale is 15%+ below the price when saved (`event_saves.price_seen`), "Almost sold out"
    at 85%+ sold with tickets left. At most 1 a day and 3 a week per person, never the same
    alert twice, not within 3 hours of the start, and off with `users.event_alerts`.
-6. WhatsApp share links with a ref code (feeds a real `tastemaker_score`).
+6. ~~WhatsApp share links with a ref code~~ (done: `services/sharing.py`, `routers/share.py`).
+   Signed-in shares use `/events/<slug>?ref=<code>` (one code per sharer, event and channel:
+   `whatsapp`, `native`, `copy_link`). Opening one writes a `share_link_opened` server event
+   under the device id, claimed by the account on sign-in like any signed-out activity. A
+   save, "going" or ticket within 7 days credits the sharer (`share_conversions`, never
+   yourself). People brought ("going" or bought) count double in `tastemaker_score`, and
+   own profiles show "You've brought N people to events".
 7. Organizer insights: zero-result searches, best day and time, price benchmarks, booking curves.
 8. ~~Better search (Postgres full-text, typo tolerance, "notify me")~~ (done: `services/search.py`, `search_alerts`).
 9. Data rights: export, consent history, Privacy Policy and cookie notice.
