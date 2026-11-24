@@ -130,6 +130,7 @@ class Settings(BaseSettings):
     # Activity tracking and recommendations (docs/recommendations-spec.md)
     activity_retention_days: int = 180       # activity rows older than this are deleted daily
     anonymous_stitch_days: int = 30          # how far back signing in claims a device's browsing
+    weather_enabled: bool = True             # hourly rain forecast from api.open-meteo.com for the ranker
 
     @property
     def origins(self) -> list[str]:

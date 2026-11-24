@@ -82,6 +82,11 @@ async def run_event_alerts():
     await _run("Saved-event alerts", send_event_alerts)
 
 
+async def run_weather():
+    from app.services.lagos_context import fetch_forecasts
+    await _run("Weather forecasts", fetch_forecasts)
+
+
 async def run_search_alerts():
     from app.services.search_alerts import send_search_alerts
     await _run("Search alerts", send_search_alerts)
@@ -126,6 +131,9 @@ def build_scheduler() -> AsyncIOScheduler:
                       replace_existing=True, max_instances=1, coalesce=True)
     # "Almost sold out" / "price dropped" for saved events: 10:07 and 18:07 Lagos, never at night.
     scheduler.add_job(run_event_alerts, CronTrigger(hour="9,17", minute=7), id="event_alerts",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    # Rain chances for the ranker (Open-Meteo, no key); skipped quietly if unreachable.
+    scheduler.add_job(run_weather, IntervalTrigger(hours=1), id="weather",
                       replace_existing=True, max_instances=1, coalesce=True)
     # "Notify me" searches: hourly, against events created since the last check.
     scheduler.add_job(run_search_alerts, IntervalTrigger(hours=1), id="search_alerts",

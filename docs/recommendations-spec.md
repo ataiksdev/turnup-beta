@@ -162,7 +162,7 @@ Every function takes `as_of` and reads only data from before it.
 | `tastemaker_score` | followers who commit to an event within 7 days after they do, plus 2× people who went or bought through their share links (90 days, log scale 0–1) |
 | `segments` | `weekend_warrior`, `planner`/`spontaneous`, `big_spender` (₦30k+), `free_event_hunter`, `vip_buyer`, `tastemaker`, `lapsing_cooling`/`lapsing_dormant`, `age_18-24`…`age_45+`, `gender_*`, and category labels (`nightlife_regular`, `live_music_fan`, `tech_professional`, `foodie`, `arts_and_culture`, `comedy_fan`, `wellness`, `sports_fan`) for categories at least half as strong as their top one |
 
-## 4. The For You ranker (`recommender.py`, version `v2.0`)
+## 4. The For You ranker (`recommender.py`, version `v2.1`)
 
 1. **Candidates** (up to 600): published events not yet ended, from the soonest 200, top
    150 by demand, 150 in their top categories, 150 in their city, events by organizers in
@@ -278,7 +278,25 @@ These use the data above but are features, not data collection:
     event and people features were last computed, click-through by feed position (one
     count per feed load and event), discovery-slot click-through against the rest of For
     You, and searches that found nothing.
-11. Lagos context: travel time, rain, payday, holidays.
+11. ~~Lagos context~~ (done: `services/lagos_context.py`, ranker `v2.1`).
+    - **Travel time:** when the person and the event are both in Greater Lagos, `place`
+      uses estimated minutes instead of kilometres: road distance (×1.4) at 15 km/h in
+      weekday rush hours (6–10, 16–21), 22 by day and 32 at night, plus 35/15/8 minutes to
+      cross the lagoon between the mainland and the island side. The card says "About 45
+      min away".
+    - **Holidays:** Nigerian public holidays (fixed dates, Easter, and expected Eid and
+      Mawlid dates, which need adding each year), moved to Monday when they fall on a
+      weekend. A holiday or its eve counts as weekend for `goes_out_when`, and events on
+      one get `holiday` (+0.5, "On Independence Day").
+    - **Payday:** from the 25th to the 3rd paid events get `payday` (+0.4), and from the
+      15th to the 24th free ones get +0.3. Only for people without a spending history:
+      applied to everyone it cost NDCG on the synthetic data.
+    - **Rain:** the worker fetches hourly rain chances for seven cities from Open-Meteo
+      (`weather_forecasts`, `WEATHER_ENABLED`). Outdoor events (beach, rooftop, park,
+      festival… in the title, tags or venue) get `rain` = −1.0 × chance when it's 50%+
+      around the start.
+    - Synthetic evaluation at the same cut-off: 0.5193 NDCG@10 without context, 0.5205
+      with it, recall unchanged.
 12. Embeddings (pgvector) and a trained LightGBM ranker, once real data exists.
 
 ## Scaling

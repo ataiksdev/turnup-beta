@@ -32,11 +32,14 @@ from app.models.organizer import TicketOrder
 from app.models.social import Follow
 from app.models.user import User
 from app.services.activity import new_request_id, record
+from app.services.lagos_context import (
+    free_next_day, holiday, in_lagos, is_outdoor, payday_phase, rain_at, rain_chances, travel_minutes,
+)
 from app.services.rec_features import (
     LAGOS, PRIOR_CTR, PRIOR_SAVE_RATE, compute_user_features, haversine_km,
 )
 
-RANKER_VERSION = "v2.0"
+RANKER_VERSION = "v2.1"  # v2.1: discovery slots, hidden items, Lagos context
 MAX_CANDIDATES = 600
 
 WEIGHTS = {
@@ -47,6 +50,8 @@ WEIGHTS = {
     "friends": 2.0, "organizer": 1.5, "crew": 1.0,
     "quality": 1.0, "organizer_quality": 0.7, "popular": 1.2, "surge": 0.6,
     "scarce": 0.4, "sold_out": -3.0, "ignored": -0.3, "featured": 0.3,
+    # Local context (app/services/lagos_context.py)
+    "holiday": 0.5, "payday": 0.4, "rain": -1.0,
 }
 # Without a history (signed out, new, or personalisation off) place, time and popularity
 # carry the feed.
@@ -84,6 +89,7 @@ class Viewer:
     friends_going: Counter = field(default_factory=Counter)
     crew_going: Counter = field(default_factory=Counter)
     ignored: Counter = field(default_factory=Counter)
+    rain: dict = field(default_factory=dict)  # (city, UTC hour) -> chance, from weather_forecasts
 
     @property
     def local_hour(self) -> int:
@@ -96,6 +102,7 @@ class Scored:
     score: float
     parts: dict
     distance_km: float | None = None
+    travel_min: float | None = None
     reason: str | None = None
 
 
@@ -133,6 +140,9 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
         candidates = [e for e in candidates if e.host_id not in hidden_hosts]
     feats = await _event_features(db, [e.id for e in candidates])
     await _load_context(db, viewer, [e.id for e in candidates])
+    if candidates:
+        latest = max(_utc(e.start_date) for e in candidates)
+        viewer.rain = await rain_chances(db, now, min(latest, now + timedelta(days=8)) + timedelta(hours=3))
     scored = [score_event(viewer, e, feats.get(e.id)) for e in candidates]
     picked = rerank(scored, limit)
     picked, discovery = add_discovery(picked, scored, feats, now, limit)
@@ -334,7 +344,7 @@ def score_event(v: Viewer, e: Event, f: EventFeatures | None) -> Scored:
             parts["tags"] = w["tags"] * max(min(overlap, 1.0), -1.0)
 
     # Place
-    distance = None
+    distance = travel = None
     if e.event_type == "virtual":
         parts["online"] = w["online"]
     else:
@@ -343,7 +353,12 @@ def score_event(v: Viewer, e: Event, f: EventFeatures | None) -> Scored:
         if origin and e.latitude is not None and e.longitude is not None:
             distance = haversine_km(origin[0], origin[1], e.latitude, e.longitude)
             radius = (feats.preferred_radius_km if feats and feats.preferred_radius_km else 15.0)
-            parts["place"] = w["place"] * math.exp(-distance / radius)
+            if in_lagos(*origin) and in_lagos(e.latitude, e.longitude):
+                # In Lagos the bridge and the traffic matter more than the kilometres.
+                travel = travel_minutes(origin, (e.latitude, e.longitude), _utc(e.start_date))
+                parts["place"] = w["place"] * math.exp(-travel / max(25.0, radius * 3))
+            else:
+                parts["place"] = w["place"] * math.exp(-distance / radius)
         elif v.city:
             ec, uc = (e.city or "").lower(), v.city.strip().lower()
             if uc and (uc in ec or ec in uc):
@@ -359,11 +374,27 @@ def score_event(v: Viewer, e: Event, f: EventFeatures | None) -> Scored:
         parts["tonight"] = w["tonight"] * spont * 2
     elif 0 < hours <= 7 * 24:
         parts["soon"] = w["soon"]
+    local_day = _utc(e.start_date).astimezone(LAGOS).date()
     when = user.goes_out_when if user else None
     if when and when != "any":
-        weekend = _utc(e.start_date).astimezone(LAGOS).weekday() >= 4
+        # Public holidays and their eves count as weekend.
+        weekend = local_day.weekday() >= 4 or holiday(local_day) is not None or free_next_day(local_day)
         if (when == "weekends") == weekend:
             parts["day"] = w["day"]
+    if holiday(local_day) and 0 < hours <= 14 * 24:
+        parts["holiday"] = w["holiday"]
+    # Payday is a prior for people we know nothing about; anyone with a history already has
+    # their own spending in "price" (on synthetic data it cost NDCG when applied to everyone).
+    phase = payday_phase(local_day)
+    if cold and not (feats and feats.median_ticket_spend):
+        if phase == "payday" and not e.is_free:
+            parts["payday"] = w["payday"]
+        elif phase == "tight" and e.is_free:
+            parts["payday"] = w["payday"] * 0.75
+    if e.event_type != "virtual" and is_outdoor(e.title, e.tags, e.venue_name):
+        chance = rain_at(v.rain, e.city, _utc(e.start_date))
+        if chance is not None and chance >= 0.5:
+            parts["rain"] = w["rain"] * chance
 
     # Money
     sensitivity = user.price_sensitivity if user else None
@@ -419,7 +450,7 @@ def score_event(v: Viewer, e: Event, f: EventFeatures | None) -> Scored:
 
     key = f"{v.user.id if v.user else v.anonymous_id}:{e.id}:{v.now.date()}"
     jitter = int(hashlib.md5(key.encode()).hexdigest()[:4], 16) / 65535 * 0.1
-    s = Scored(event=e, score=sum(parts.values()) + jitter, parts=parts, distance_km=distance)
+    s = Scored(event=e, score=sum(parts.values()) + jitter, parts=parts, distance_km=distance, travel_min=travel)
     s.reason = _reason(v, s)
     return s
 
@@ -438,8 +469,10 @@ def _reason(v: Viewer, s: Scored) -> str | None:
         "tonight": "Happening tonight",
         "surge": "Selling fast",
         "scarce": "Almost sold out",
-        "place": (f"{s.distance_km:.0f} km away" if s.distance_km is not None and s.distance_km >= 1
+        "place": (f"About {s.travel_min:.0f} min away" if s.travel_min is not None and s.travel_min >= 15
+                  else f"{s.distance_km:.0f} km away" if s.distance_km is not None and s.distance_km >= 1
                   else "Right around you"),
+        "holiday": f"On {holiday(_utc(e.start_date).astimezone(LAGOS).date())}",
         "city": f"In {e.city}",
         "popular": "Popular right now",
     }

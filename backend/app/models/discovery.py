@@ -6,7 +6,7 @@ brings back an event someone said they weren't interested in.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -63,3 +63,15 @@ class ConsentLog(Base):
     value: Mapped[bool] = mapped_column(Boolean, nullable=False)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="settings")  # settings | onboarding
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WeatherForecast(Base):
+    """Hourly rain chance per city for the next week (app/services/lagos_context.py), refreshed
+    hourly by the worker. The ranker nudges outdoor events down when rain is likely."""
+    __tablename__ = "weather_forecasts"
+    __table_args__ = (UniqueConstraint("city", "hour"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    city: Mapped[str] = mapped_column(String(40), nullable=False)
+    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)  # UTC
+    rain_chance: Mapped[float] = mapped_column(Float, nullable=False)                           # 0..1
