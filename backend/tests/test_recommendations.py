@@ -272,3 +272,20 @@ async def test_personalisation_off_gives_the_same_feed_as_signed_out_taste(clien
     r = await client.get("/api/events/for-you?limit=50", headers=auth)
     row = next((e for e in r.json() if e["id"] == match), None)
     assert row is None or row["rec_reason"] != f"Because you like Cat {slug}"
+
+
+async def test_offline_evaluation_scores_the_ranker_and_leaves_live_features_alone(db, host):
+    from app.services.rec_eval import evaluate
+    cat_id, slug = await make_category(db)
+    _, uid = await make_user(db, category_preferences=slug, created_at=NOW() - timedelta(days=30))
+    liked = await make_event(db, host[1], category_id=cat_id, start=NOW() + timedelta(days=5),
+                             created_at=NOW() - timedelta(days=20))
+    db.add(EventSave(id=str(uuid.uuid4()), user_id=uid, event_id=liked, created_at=NOW() - timedelta(days=2)))
+    db.add(EventFeatures(event_id=liked, demand_score=0.123))
+    await db.commit()
+
+    result = await evaluate(db, holdout_days=10, k=10)
+    assert result["people"] >= 1 and set(result) >= {"ranker", "popular", "random"}
+    assert result["ranker"]["recall@10"] is not None
+    db.expire_all()
+    assert (await db.get(EventFeatures, liked)).demand_score == 0.123  # rolled back

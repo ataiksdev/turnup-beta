@@ -102,16 +102,18 @@ class RecResult:
 async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | None = None,
                     lat: float | None = None, lon: float | None = None, city: str | None = None,
                     limit: int = 20, now: datetime | None = None,
-                    log: bool = True, surface: str = "for_you") -> RecResult:
+                    log: bool = True, surface: str = "for_you", persist: bool = True) -> RecResult:
+    """persist=False (offline evaluation) never commits: a missing user_features row is worked
+    out inside the caller's transaction."""
     now = _utc(now) if now else datetime.now(timezone.utc)
     viewer = Viewer(user=user, anonymous_id=anonymous_id, now=now, lat=lat, lon=lon,
                     city=(city or (user.city if user else None) or
                           ((user.location or "").split(",")[0] if user else None) or None))
     viewer.personal = bool(user and user.personalized_recs)
 
-    excluded = await _exclusions(db, user)
+    excluded = await _exclusions(db, user, now)
     if viewer.personal:
-        await _load_profile(db, viewer)
+        await _load_profile(db, viewer, persist)
     candidates = await _candidates(db, viewer, excluded)
     feats = await _event_features(db, [e.id for e in candidates])
     await _load_context(db, viewer, [e.id for e in candidates])
@@ -133,16 +135,18 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
 # ── 1. Candidates ───────────────────────────────────────────────────────────────
 
 
-async def _exclusions(db: AsyncSession, user: User | None) -> set[str]:
-    """Events they've already committed to (going, saved, bought)."""
+async def _exclusions(db: AsyncSession, user: User | None, now: datetime) -> set[str]:
+    """Events they'd already committed to (going, saved, bought) by `now`."""
     if not user:
         return set()
     excluded = set((await db.execute(select(EventAttendee.event_id).where(
-        EventAttendee.user_id == user.id, EventAttendee.status == "going"))).scalars().all())
+        EventAttendee.user_id == user.id, EventAttendee.status == "going",
+        EventAttendee.created_at <= now))).scalars().all())
     excluded |= set((await db.execute(select(EventSave.event_id).where(
-        EventSave.user_id == user.id))).scalars().all())
+        EventSave.user_id == user.id, EventSave.created_at <= now))).scalars().all())
     excluded |= set((await db.execute(select(TicketOrder.event_id).where(
-        TicketOrder.user_id == user.id, TicketOrder.status == "confirmed"))).scalars().all())
+        TicketOrder.user_id == user.id, TicketOrder.status == "confirmed",
+        TicketOrder.created_at <= now))).scalars().all())
     return excluded
 
 
@@ -150,7 +154,7 @@ def _base(now: datetime):
     return (select(Event).options(selectinload(Event.host).selectinload(User.organizer_profile),
                                   selectinload(Event.category))
             .where(Event.status == "published", Event.end_date > now,
-                   Event.start_date > now - timedelta(hours=2)))
+                   Event.start_date > now - timedelta(hours=2), Event.created_at <= now))
 
 
 async def _candidates(db: AsyncSession, v: Viewer, excluded: set[str]) -> list[Event]:
@@ -173,7 +177,8 @@ async def _candidates(db: AsyncSession, v: Viewer, excluded: set[str]) -> list[E
     if v.user:
         following = select(Follow.following_id).where(Follow.follower_id == v.user.id)
         friends_events = select(EventAttendee.event_id).where(
-            EventAttendee.user_id.in_(following), EventAttendee.status == "going")
+            EventAttendee.user_id.in_(following), EventAttendee.status == "going",
+            EventAttendee.created_at <= now)
         queries.append(_base(now).where(Event.id.in_(friends_events)).limit(150))
 
     seen: dict[str, Event] = {}
@@ -191,12 +196,12 @@ async def _candidates(db: AsyncSession, v: Viewer, excluded: set[str]) -> list[E
 # ── 2. Hydrate ──────────────────────────────────────────────────────────────────
 
 
-async def _load_profile(db: AsyncSession, v: Viewer) -> None:
+async def _load_profile(db: AsyncSession, v: Viewer, persist: bool = True) -> None:
     user = v.user
     feats = (await db.execute(select(UserFeatures).where(UserFeatures.user_id == user.id))).scalar_one_or_none()
     if feats is None:
         # New since last night's run: work theirs out now (a handful of queries, once).
-        await compute_user_features(db, user_ids=[user.id])
+        await compute_user_features(db, as_of=v.now, user_ids=[user.id], commit=persist)
         feats = (await db.execute(select(UserFeatures).where(UserFeatures.user_id == user.id))).scalar_one_or_none()
     v.feats = feats
     slugs = [p.strip() for p in (user.category_preferences or "").split(",") if p.strip()]
@@ -252,7 +257,7 @@ async def _load_context(db: AsyncSession, v: Viewer, ids: list[str]) -> None:
         for eid, n in (await db.execute(
             select(EventAttendee.event_id, func.count()).where(
                 EventAttendee.event_id.in_(ids), EventAttendee.status == "going",
-                EventAttendee.user_id.in_(following))
+                EventAttendee.user_id.in_(following), EventAttendee.created_at <= v.now)
             .group_by(EventAttendee.event_id))).all():
             v.friends_going[eid] = n
         crew = (v.feats.co_attendee_ids if v.feats and v.user.profiling_consent else None) or []

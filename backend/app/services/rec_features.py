@@ -74,8 +74,9 @@ def _tags(raw: str | None) -> list[str]:
 # ── Event features ──────────────────────────────────────────────────────────────
 
 
-async def compute_event_features(db: AsyncSession, as_of: datetime | None = None) -> dict:
-    """For every event that hasn't ended (as of `as_of`)."""
+async def compute_event_features(db: AsyncSession, as_of: datetime | None = None, commit: bool = True) -> dict:
+    """For every event that hasn't ended (as of `as_of`). commit=False leaves the rows in the
+    caller's transaction (the offline evaluation rolls them back)."""
     now = _now(as_of)
     events = (await db.execute(select(Event).where(
         Event.status == "published", Event.end_date > now, Event.created_at <= now,
@@ -185,7 +186,7 @@ async def compute_event_features(db: AsyncSession, as_of: datetime | None = None
     db.add_all(out)
     # Rows for events that have ended aren't needed any more.
     await db.execute(delete(EventFeatures).where(EventFeatures.event_id.notin_(ids)))
-    await db.commit()
+    await (db.commit() if commit else db.flush())
     return {"events": len(out)}
 
 
@@ -228,7 +229,7 @@ async def _organizer_scores(db: AsyncSession, host_ids: set[str], now: datetime)
 
 
 async def compute_user_features(db: AsyncSession, as_of: datetime | None = None,
-                                user_ids: list[str] | None = None) -> dict:
+                                user_ids: list[str] | None = None, commit: bool = True) -> dict:
     """For `user_ids`, or everyone active in the last 180 days."""
     now = _now(as_of)
     lookback = now - timedelta(days=180)
@@ -306,7 +307,7 @@ async def compute_user_features(db: AsyncSession, as_of: datetime | None = None,
 
     await db.execute(delete(UserFeatures).where(UserFeatures.user_id.in_(list(users))))
     db.add_all(out)
-    await db.commit()
+    await (db.commit() if commit else db.flush())
     return {"users": len(out)}
 
 
@@ -511,9 +512,11 @@ def _segments(user: User, row: UserFeatures, cat: Counter, slugs: dict, now: dat
         out.append(f"age_{band}")
     if user.gender and user.gender != "prefer_not_to_say":
         out.append(f"gender_{user.gender}")
+    # Category labels only for real favourites: at least half as strong as their top one.
+    peak = max(cat.values(), default=0)
     for cid, w in cat.most_common(3):
         label = SEGMENT_CATEGORY_SLUGS.get(slugs.get(cid, ""))
-        if w > 0 and label:
+        if peak > 0 and w >= 0.5 * peak and label:
             out.append(label)
     return out
 

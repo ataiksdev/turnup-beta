@@ -4,6 +4,10 @@
     python -m app.cli seed             # load demo data into an EMPTY database (test/staging)
     python -m app.cli seed --reset     # WIPE the database, then load demo data
     python -m app.cli seed-venues      # add the venue demo data to an already-seeded demo database
+    python -m app.cli seed-activity [--users N] [--events N] [--days N]
+                                       # synthetic people + weeks of app activity (DEBUG=true only)
+    python -m app.cli recs-features    # recompute recommendation features now (the worker does this)
+    python -m app.cli recs-eval [--holdout-days N] [--k N]   # offline ranker evaluation
     python -m app.cli backup-offsite   # encrypt + copy the newest DB dump and KYC files off the server now
     python -m app.cli decrypt-backup IN OUT   # decrypt an off-server backup (needs BACKUP_PASSPHRASE)
     python -m app.cli prune-uploads [--dry-run]   # delete public uploads nothing refers to
@@ -17,6 +21,13 @@ import asyncio
 import sys
 
 from app.database import init_db
+
+
+def _int_opts(args: list[str], allowed: set[str]) -> dict[str, int]:
+    """`--name 5` pairs -> {"--name": 5}."""
+    if len(args) % 2 or any(a not in allowed for a in args[::2]):
+        raise ValueError(f"Options: {', '.join(sorted(allowed))} followed by a number")
+    return {k: int(v) for k, v in zip(args[::2], args[1::2])}
 
 
 def main(argv: list[str]) -> int:
@@ -47,6 +58,46 @@ def main(argv: list[str]) -> int:
         except SeedRefused as e:
             print(e)
             return 1
+        return 0
+    if args and args[0] == "seed-activity":
+        from app.demo_activity import run as seed_activity
+        from app.demo_data import SeedRefused
+        try:
+            opts = _int_opts(args[1:], {"--users", "--events", "--days"})
+        except ValueError as e:
+            print(e)
+            return 2
+        try:
+            print(asyncio.run(seed_activity(**{k[2:]: v for k, v in opts.items()})))
+        except SeedRefused as e:
+            print(e)
+            return 1
+        return 0
+    if args == ["recs-features"]:
+        import app.main  # noqa: F401  (registers every model)
+        from app.database import AsyncSessionLocal
+        from app.services.rec_features import run_event_features, run_user_features
+
+        async def _features():
+            async with AsyncSessionLocal() as db:
+                return await run_event_features(db), await run_user_features(db)
+        print(asyncio.run(_features()))
+        return 0
+    if args and args[0] == "recs-eval":
+        import json
+        import app.main  # noqa: F401  (registers every model)
+        from app.database import AsyncSessionLocal
+        from app.services.rec_eval import evaluate
+        try:
+            opts = _int_opts(args[1:], {"--holdout-days", "--k"})
+        except ValueError as e:
+            print(e)
+            return 2
+
+        async def _eval():
+            async with AsyncSessionLocal() as db:
+                return await evaluate(db, **{k[2:].replace("-", "_"): v for k, v in opts.items()})
+        print(json.dumps(asyncio.run(_eval()), indent=2))
         return 0
     if args == ["backup-offsite"]:
         from app.services.storage_jobs import run_offsite_backup_sync
