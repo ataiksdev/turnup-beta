@@ -68,6 +68,8 @@ class User(Base):
     # segments for partners. Off until the user turns it on.
     profiling_consent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     profiling_consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # "Almost sold out" and "price dropped" alerts for saved events (app/services/nudges.py).
+    event_alerts: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

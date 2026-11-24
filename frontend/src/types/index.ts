@@ -39,6 +39,7 @@ export interface User {
   personalized_recs?: boolean;
   profiling_consent?: boolean;
   profiling_consent_at?: string | null;
+  event_alerts?: boolean;
   /** Public profiles: a member who shows the badge. */
   plus_badge?: boolean;
   created_at?: string;

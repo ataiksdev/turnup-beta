@@ -46,7 +46,8 @@ async def get_db():
 POST_BASELINE_COLUMNS = {
     "users": {"theme_preference", "plus_until", "show_plus_badge", "wrapped_opt_in",        # 0002, 0003
               "birth_year", "gender", "personalized_recs", "profiling_consent",            # 0008
-              "profiling_consent_at"},
+              "profiling_consent_at", "event_alerts"},                                     # 0008, 0010
+    "event_saves": {"price_seen"},                                                          # 0010
     "events": {"host_venue_id", "venue_id", "members_only", "fast_lane_enabled",            # 0003
                "allow_ticket_transfers"},
     "ticket_tiers": {"members_only", "plus_presale_ends_at", "presale_then"},               # 0003

@@ -768,7 +768,10 @@ async def toggle_save(
         event.saves_count = max(0, event.saves_count - 1)
         record_activity(db, "event_unsaved", user_id=user.id, event_id=event_id)
         return {"saved": False}
-    db.add(EventSave(id=str(uuid.uuid4()), user_id=user.id, event_id=event_id))
+    save = EventSave(id=str(uuid.uuid4()), user_id=user.id, event_id=event_id)
+    from app.services.nudges import record_price_on_save
+    await record_price_on_save(db, save, event)  # for "price dropped" alerts
+    db.add(save)
     event.saves_count += 1
     record_activity(db, "event_saved", user_id=user.id, event_id=event_id,
                     props={"days_until_event": _days_until(event)})

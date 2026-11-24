@@ -951,6 +951,7 @@ class PreferencesUpdate(BaseModel):
     # Data choices (docs/recommendations-spec.md). birth_year and gender can be cleared with null.
     personalized_recs: bool | None = None
     profiling_consent: bool | None = None
+    event_alerts: bool | None = None
     birth_year: int | None = Field(None, ge=1900, le=datetime.now(timezone.utc).year - 13)
     gender: Literal["female", "male", "non_binary", "prefer_not_to_say"] | None = None
 
@@ -970,7 +971,8 @@ async def update_preferences(
 
     if payload.category_preferences is not None:
         put("category_preferences", ",".join(payload.category_preferences))
-    for field in ("city", "price_sensitivity", "event_format_pref", "goes_out_when", "personalized_recs"):
+    for field in ("city", "price_sensitivity", "event_format_pref", "goes_out_when", "personalized_recs",
+                  "event_alerts"):
         if getattr(payload, field) is not None:
             put(field, getattr(payload, field))
     for field in ("birth_year", "gender"):          # null clears these

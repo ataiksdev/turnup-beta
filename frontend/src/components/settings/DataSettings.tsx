@@ -57,6 +57,12 @@ export function DataSettings() {
         onChange={(v) => save.mutate({ personalized_recs: v })}
       />
       <Toggle
+        label="Alerts about events you saved"
+        help="Tell me when an event I saved is almost sold out or its tickets get cheaper. At most one a day."
+        checked={user.event_alerts ?? true} disabled={busy}
+        onChange={(v) => save.mutate({ event_alerts: v })}
+      />
+      <Toggle
         label="Insights and partner offers"
         help="Also use your precise location (if you've allowed it), when you usually go out, who you
           often go with (if they've opted in too) and audience groups for brands that sponsor events.

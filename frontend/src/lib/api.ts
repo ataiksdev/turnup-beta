@@ -283,6 +283,7 @@ export const authApi = {
     // Data choices (docs/recommendations-spec.md); null clears birth year / gender.
     personalized_recs?: boolean;
     profiling_consent?: boolean;
+    event_alerts?: boolean;
     birth_year?: number | null;
     gender?: User["gender"];
   }) =>

@@ -75,6 +75,7 @@ class Viewer:
     lat: float | None = None
     lon: float | None = None
     city: str | None = None
+    window: tuple[datetime, datetime] | None = None  # only events overlapping it (weekend picks)
     personal: bool = False
     feats: UserFeatures | None = None
     picked_categories: set[str] = field(default_factory=set)
@@ -112,7 +113,8 @@ class RecResult:
 async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | None = None,
                     lat: float | None = None, lon: float | None = None, city: str | None = None,
                     limit: int = 20, now: datetime | None = None,
-                    log: bool = True, surface: str = "for_you", persist: bool = True) -> RecResult:
+                    log: bool = True, surface: str = "for_you", persist: bool = True,
+                    window: tuple[datetime, datetime] | None = None) -> RecResult:
     """persist=False (offline evaluation) never commits: a missing user_features row is worked
     out inside the caller's transaction."""
     now = _utc(now) if now else datetime.now(timezone.utc)
@@ -120,6 +122,7 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
                     city=(city or (user.city if user else None) or
                           ((user.location or "").split(",")[0] if user else None) or None))
     viewer.personal = bool(user and user.personalized_recs)
+    viewer.window = window
 
     excluded = await _exclusions(db, user, now)
     if viewer.personal:
@@ -208,6 +211,10 @@ async def _candidates(db: AsyncSession, v: Viewer, excluded: set[str]) -> list[E
             EventAttendee.user_id.in_(following), EventAttendee.status == "going",
             EventAttendee.created_at <= now)
         queries.append(_base(now).where(Event.id.in_(friends_events)).limit(150))
+
+    if v.window:
+        start, end = v.window
+        queries = [q.where(Event.start_date < end, Event.end_date >= start) for q in queries]
 
     seen: dict[str, Event] = {}
     for q in queries:

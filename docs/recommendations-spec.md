@@ -106,6 +106,7 @@ shapes its feed too.
 |---|---|---|
 | `personalized_recs` | on | Off: the feed ignores their history and preferences (place, time and popularity only). Tracking continues. |
 | `profiling_consent` (+ `profiling_consent_at`) | **off** | On: coordinates are stored, and `peak_hours`, `co_attendee_ids`, `tastemaker_score` and `segments` are computed. Turning it off clears those at once and removes stored coordinates. |
+| `event_alerts` | on | "Almost sold out" and "price dropped" alerts for saved events. |
 | `birth_year`, `gender` | not given | Self-reported only; never inferred. Used only in `segments`, so only with consent. |
 
 - **Deleting an account** removes its activity rows (including what its devices did while
@@ -237,7 +238,14 @@ These use the data above but are features, not data collection:
    committed people), with at least 2 people in common so a suggestion never reveals one
    person's plans; then same category, tags, city and price, weighted by demand. At most two
    per organizer; never the viewer's own, committed or hidden events.
-5. Ranker-driven weekend picks and "almost sold out" / price-drop alerts, with frequency caps.
+5. ~~Ranker-driven weekend picks and "almost sold out" / price-drop alerts, with frequency
+   caps~~ (done). Weekend picks (`services/picks.py`) are `recommend(window=...)` over the
+   coming weekend, in the member's city or online, with events at followed venues first;
+   the page logs `recs_served` with surface `weekend_picks`. Saved-event alerts
+   (`services/nudges.py`, 10:07 and 18:07 Lagos): "Price dropped" when the cheapest ticket
+   on sale is 15%+ below the price when saved (`event_saves.price_seen`), "Almost sold out"
+   at 85%+ sold with tickets left. At most 1 a day and 3 a week per person, never the same
+   alert twice, not within 3 hours of the start, and off with `users.event_alerts`.
 6. WhatsApp share links with a ref code (feeds a real `tastemaker_score`).
 7. Organizer insights: zero-result searches, best day and time, price benchmarks, booking curves.
 8. ~~Better search (Postgres full-text, typo tolerance, "notify me")~~ (done: `services/search.py`, `search_alerts`).
