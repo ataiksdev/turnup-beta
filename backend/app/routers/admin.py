@@ -709,3 +709,15 @@ async def run_scout_source_now(
         skipped_no_event=summary.skipped_no_event,
         failed=summary.failed,
     )
+
+
+@router.get("/data-health")
+async def data_health_report(
+    days: int = Query(14, ge=1, le=60),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """Tracking volume and delay, feature freshness, clicks by feed position, discovery-slot
+    click-through and searches that found nothing (app/services/data_health.py)."""
+    from app.services.data_health import data_health
+    return await data_health(db, days=days)

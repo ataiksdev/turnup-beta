@@ -272,7 +272,12 @@ These use the data above but are features, not data collection:
    are never shown individually.
 8. ~~Better search (Postgres full-text, typo tolerance, "notify me")~~ (done: `services/search.py`, `search_alerts`).
 9. ~~Data rights: export, consent history, Privacy Policy and cookie notice~~ (done: section 2).
-10. Admin data-health page.
+10. ~~Admin data-health page~~ (done: `/admin/data-health`, `GET /admin/data-health`,
+    `services/data_health.py`). Events recorded per day (app and server), the most common
+    in the last 24 h, how late app events arrive (median, 95th percentile, slowest), when
+    event and people features were last computed, click-through by feed position (one
+    count per feed load and event), discovery-slot click-through against the rest of For
+    You, and searches that found nothing.
 11. Lagos context: travel time, rain, payday, holidays.
 12. Embeddings (pgvector) and a trained LightGBM ranker, once real data exists.
 

@@ -1105,3 +1105,23 @@ export const meApi = {
   consents: (token: string) => request<ConsentEntry[]>("/me/consents", {}, token),
   exportData: (token: string) => request<Record<string, unknown>>("/me/export", {}, token),
 };
+
+// ── Admin: data health ──────────────────────────────────────────────────────────
+
+export interface PositionStat { position: number; impressions: number; clicks: number; ctr: number | null; }
+export interface DataHealth {
+  days: number; generated_at: string;
+  events_per_day: { date: string; client: number; server: number }[];
+  top_events_24h: { name: string; count: number }[];
+  ingestion: { sample: number; p50_seconds: number | null; p95_seconds: number | null; max_seconds: number | null;
+               last_received_at: string | null };
+  features: Record<"event_features" | "user_features", { rows: number; computed_at: string | null }>;
+  recs_served_7d: number;
+  clicks_by_position: Record<string, PositionStat[]>;
+  discovery_slots: Record<"discovery" | "other", { impressions: number; clicks: number; ctr: number | null }>;
+  zero_result_searches: { query: string; people: number }[];
+}
+
+export const dataHealthApi = {
+  get: (token: string, days = 14) => request<DataHealth>(`/admin/data-health?days=${days}`, {}, token),
+};

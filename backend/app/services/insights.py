@@ -36,9 +36,10 @@ def part_of_day(hour: int) -> str:
 
 
 async def unmet_searches(db: AsyncSession, city: str | None = None, days: int = 30, limit: int = 10,
-                         now: datetime | None = None) -> list[dict]:
+                         now: datetime | None = None, min_people: int = MIN_SEARCHERS) -> list[dict]:
     """Searches that found nothing, by how many different people made them (at least
-    MIN_SEARCHERS). With `city`, only searches filtered to or made from that city."""
+    `min_people`; organizers always get MIN_SEARCHERS). With `city`, only searches filtered to
+    or made from that city."""
     now = now or datetime.now(timezone.utc)
     rows = (await db.execute(select(Activity.props, Activity.user_id, Activity.anonymous_id, Activity.geo_city).where(
         Activity.name == "search_executed", Activity.occurred_at >= now - timedelta(days=days),
@@ -56,7 +57,7 @@ async def unmet_searches(db: AsyncSession, city: str | None = None, days: int = 
             if city.strip().lower() not in where:
                 continue
         people[" ".join(q.split())[:80]].add(uid or anon)
-    ranked = sorted(((q, len(who)) for q, who in people.items() if len(who) >= MIN_SEARCHERS),
+    ranked = sorted(((q, len(who)) for q, who in people.items() if len(who) >= min_people),
                     key=lambda x: (-x[1], x[0]))
     return [{"query": q, "people": n} for q, n in ranked[:limit]]
 
