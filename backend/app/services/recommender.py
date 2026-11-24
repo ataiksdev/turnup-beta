@@ -35,11 +35,24 @@ from app.services.activity import new_request_id, record
 from app.services.lagos_context import (
     free_next_day, holiday, in_lagos, is_outdoor, payday_phase, rain_at, rain_chances, travel_minutes,
 )
+from app.services.embeddings import cosine, taste_vector, vectors_for
 from app.services.rec_features import (
     LAGOS, PRIOR_CTR, PRIOR_SAVE_RATE, compute_user_features, haversine_km,
 )
 
 RANKER_VERSION = "v2.1"  # v2.1: discovery slots, hidden items, Lagos context
+
+
+def learned_model():
+    """The trained ranker if RANKER_MODEL_PATH points at one (app/services/rec_training.py),
+    else None and the hand-set WEIGHTS rank."""
+    from app.services.rec_training import load_model
+    return load_model()
+
+
+def ranker_version() -> str:
+    model = learned_model()
+    return model.version if model is not None else RANKER_VERSION
 MAX_CANDIDATES = 600
 
 WEIGHTS = {
@@ -52,6 +65,8 @@ WEIGHTS = {
     "scarce": 0.4, "sold_out": -3.0, "ignored": -0.3, "featured": 0.3,
     # Local context (app/services/lagos_context.py)
     "holiday": 0.5, "payday": 0.4, "rain": -1.0,
+    # Closeness to what they've committed to, by text embedding (app/services/embeddings.py)
+    "semantic": 1.2,
 }
 # Without a history (signed out, new, or personalisation off) place, time and popularity
 # carry the feed.
@@ -90,6 +105,8 @@ class Viewer:
     crew_going: Counter = field(default_factory=Counter)
     ignored: Counter = field(default_factory=Counter)
     rain: dict = field(default_factory=dict)  # (city, UTC hour) -> chance, from weather_forecasts
+    taste: list | None = None                 # embedding of what they committed to
+    vectors: dict = field(default_factory=dict)  # candidate event_id -> embedding
 
     @property
     def local_hour(self) -> int:
@@ -125,6 +142,31 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
     """persist=False (offline evaluation) never commits: a missing user_features row is worked
     out inside the caller's transaction."""
     now = _utc(now) if now else datetime.now(timezone.utc)
+    viewer, scored, feats = await score_all(db, user=user, anonymous_id=anonymous_id, lat=lat, lon=lon,
+                                            city=city, now=now, persist=persist, window=window)
+    picked = rerank(scored, limit)
+    picked, discovery = add_discovery(picked, scored, feats, now, limit)
+    result = RecResult(events=[s.event for s in picked],
+                       reasons={s.event.id: s.reason for s in picked if s.reason},
+                       request_id=new_request_id(), discovery_ids=discovery)
+    if log:
+        record(db, "recs_served", user_id=user.id if user else None, surface=surface,
+               anonymous_id=anonymous_id, rec_request_id=result.request_id, props={
+                   "ranker": ranker_version(),
+                   "event_ids": [e.id for e in result.events],
+                   "personal": viewer.personal, "has_location": lat is not None,
+                   "discovery_ids": discovery,
+               })
+    return result
+
+
+async def score_all(db: AsyncSession, *, user: User | None, anonymous_id: str | None = None,
+                    lat: float | None = None, lon: float | None = None, city: str | None = None,
+                    now: datetime, persist: bool = True,
+                    window: tuple[datetime, datetime] | None = None, use_model: bool = True,
+                    ) -> tuple["Viewer", list["Scored"], dict[str, EventFeatures]]:
+    """Every candidate, scored (steps 1-3). recommend() re-ranks and cuts these; the training
+    pipeline (app/services/rec_training.py) learns from their parts."""
     viewer = Viewer(user=user, anonymous_id=anonymous_id, now=now, lat=lat, lon=lon,
                     city=(city or (user.city if user else None) or
                           ((user.location or "").split(",")[0] if user else None) or None))
@@ -140,24 +182,19 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
         candidates = [e for e in candidates if e.host_id not in hidden_hosts]
     feats = await _event_features(db, [e.id for e in candidates])
     await _load_context(db, viewer, [e.id for e in candidates])
+    if viewer.personal and candidates:
+        viewer.taste = await taste_vector(db, user.id, now)
+        if viewer.taste:
+            viewer.vectors = await vectors_for(db, [e.id for e in candidates])
     if candidates:
         latest = max(_utc(e.start_date) for e in candidates)
         viewer.rain = await rain_chances(db, now, min(latest, now + timedelta(days=8)) + timedelta(hours=3))
     scored = [score_event(viewer, e, feats.get(e.id)) for e in candidates]
-    picked = rerank(scored, limit)
-    picked, discovery = add_discovery(picked, scored, feats, now, limit)
-    result = RecResult(events=[s.event for s in picked],
-                       reasons={s.event.id: s.reason for s in picked if s.reason},
-                       request_id=new_request_id(), discovery_ids=discovery)
-    if log:
-        record(db, "recs_served", user_id=user.id if user else None, surface=surface,
-               anonymous_id=anonymous_id, rec_request_id=result.request_id, props={
-                   "ranker": RANKER_VERSION,
-                   "event_ids": [e.id for e in result.events],
-                   "personal": viewer.personal, "has_location": lat is not None,
-                   "discovery_ids": discovery,
-               })
-    return result
+    model = learned_model() if use_model else None
+    if model is not None and scored:
+        for s, value in zip(scored, model.score(scored)):
+            s.score = value
+    return viewer, scored, feats
 
 
 # ── 1. Candidates ───────────────────────────────────────────────────────────────
@@ -338,6 +375,10 @@ def score_event(v: Viewer, e: Event, f: EventFeatures | None) -> Scored:
             parts["picked"] = w["picked"]
         if e.category_id in v.session_categories:
             parts["session"] = w["session"]
+    if v.taste and e.id in v.vectors:
+        sim = cosine(v.taste, v.vectors[e.id])
+        if sim > 0.15:
+            parts["semantic"] = w["semantic"] * (sim - 0.15) / 0.85
     if feats and feats.tag_affinity and e.tags:
         overlap = sum(feats.tag_affinity.get(t.strip().lower(), 0.0) for t in e.tags.split(","))
         if overlap:
@@ -466,6 +507,7 @@ def _reason(v: Viewer, s: Scored) -> str | None:
         "picked": f"Because you like {e.category.name}" if e.category else None,
         "session": "Like what you've been looking at",
         "tags": "Matches what you're into",
+        "semantic": "Like events you've been to",
         "tonight": "Happening tonight",
         "surge": "Selling fast",
         "scarce": "Almost sold out",

@@ -6,7 +6,7 @@ brings back an event someone said they weren't interested in.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -75,3 +75,17 @@ class WeatherForecast(Base):
     city: Mapped[str] = mapped_column(String(40), nullable=False)
     hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)  # UTC
     rain_chance: Mapped[float] = mapped_column(Float, nullable=False)                           # 0..1
+
+
+class EventEmbedding(Base):
+    """A vector for each event's text (title, category, tags, venue, description), from
+    app/services/embeddings.py. JSON, not pgvector: the ranker only compares a few hundred
+    candidates at a time, which is cheap in Python (see docs/recommendations-spec.md for when
+    pgvector would be worth it)."""
+    __tablename__ = "event_embeddings"
+
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), primary_key=True)
+    model: Mapped[str] = mapped_column(String(60), nullable=False)
+    vector: Mapped[list] = mapped_column(JSON, nullable=False)
+    text_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # re-embed when the text changes
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

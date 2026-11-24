@@ -131,6 +131,12 @@ class Settings(BaseSettings):
     activity_retention_days: int = 180       # activity rows older than this are deleted daily
     anonymous_stitch_days: int = 30          # how far back signing in claims a device's browsing
     weather_enabled: bool = True             # hourly rain forecast from api.open-meteo.com for the ranker
+    # A LightGBM ranker trained by `python -m app.cli recs-train` (needs requirements-ml.txt).
+    # Empty: the hand-set weights rank. See docs/recommendations-spec.md.
+    ranker_model_path: str = ""
+    # Event text embeddings for the ranker's "semantic" part: auto (OpenAI, then Gemini, if their
+    # key is set, else a local hashing model that needs no key), openai, gemini, hashing or off.
+    embeddings_provider: str = "auto"
 
     @property
     def origins(self) -> list[str]:

@@ -8,6 +8,7 @@
                                        # synthetic people + weeks of app activity (DEBUG=true only)
     python -m app.cli recs-features    # recompute recommendation features now (the worker does this)
     python -m app.cli recs-eval [--holdout-days N] [--k N]   # offline ranker evaluation
+    python -m app.cli recs-train [--weeks N] [--out PATH] [--force]   # train a LightGBM ranker (requirements-ml.txt)
     python -m app.cli backup-offsite   # encrypt + copy the newest DB dump and KYC files off the server now
     python -m app.cli decrypt-backup IN OUT   # decrypt an off-server backup (needs BACKUP_PASSPHRASE)
     python -m app.cli prune-uploads [--dry-run]   # delete public uploads nothing refers to
@@ -98,6 +99,30 @@ def main(argv: list[str]) -> int:
             async with AsyncSessionLocal() as db:
                 return await evaluate(db, **{k[2:].replace("-", "_"): v for k, v in opts.items()})
         print(json.dumps(asyncio.run(_eval()), indent=2))
+        return 0
+    if args and args[0] == "recs-train":
+        import json
+        import app.main  # noqa: F401  (registers every model)
+        from app.database import AsyncSessionLocal
+        from app.services.rec_training import train
+        rest = args[1:]
+        force = "--force" in rest
+        rest = [a for a in rest if a != "--force"]
+        out = "data/models/ranker.txt"
+        if "--out" in rest:
+            i = rest.index("--out")
+            out = rest[i + 1] if i + 1 < len(rest) else out
+            rest = rest[:i] + rest[i + 2:]
+        try:
+            opts = _int_opts(rest, {"--weeks"})
+        except ValueError as e:
+            print(e)
+            return 2
+
+        async def _train():
+            async with AsyncSessionLocal() as db:
+                return await train(db, weeks=opts.get("--weeks", 8), out=out, force=force)
+        print(json.dumps(asyncio.run(_train()), indent=2, default=str))
         return 0
     if args == ["backup-offsite"]:
         from app.services.storage_jobs import run_offsite_backup_sync

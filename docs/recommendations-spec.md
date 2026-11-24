@@ -20,7 +20,8 @@ that changes).
 | Tables | `backend/app/models/activity.py`, migration `0008` |
 | Ingest, server events, linking, deletion, retention | `backend/app/services/activity.py`, `routers/track.py` |
 | Features | `backend/app/services/rec_features.py` |
-| Ranker | `backend/app/services/recommender.py` |
+| Ranker | `backend/app/services/recommender.py` (local context: `lagos_context.py`; embeddings: `embeddings.py`) |
+| Learned ranker | `backend/app/services/rec_training.py` (`recs-train`) |
 | Offline evaluation | `backend/app/services/rec_eval.py` |
 | Synthetic demo activity | `backend/app/demo_activity.py` |
 | App tracker | `frontend/src/lib/track.ts`, `useCardTracking.ts`, `useEventPageTracking.ts` |
@@ -212,9 +213,13 @@ according to tastes the ranker is designed to find, so this is a sanity check, n
 
 | | NDCG@10 | Recall@10 |
 |---|---|---|
+| Ranker v2.1 (hashing embeddings) | 0.53 | 0.84 |
 | Ranker v2.0 | 0.51 | 0.84 |
-| Most popular | 0.29 | 0.64 |
-| Random | 0.19 | 0.44 |
+| Most popular | 0.31 | 0.70 |
+| Random | 0.21 | 0.51 |
+
+(v2.1 measured on 24 Nov 2026 at a later cut-off than v2.0's figures; at the same cut-off, v2.1
+without its local context and embeddings scored 0.519.)
 
 Useful SQL once real traffic arrives:
 
@@ -297,7 +302,33 @@ These use the data above but are features, not data collection:
       around the start.
     - Synthetic evaluation at the same cut-off: 0.5193 NDCG@10 without context, 0.5205
       with it, recall unchanged.
-12. Embeddings (pgvector) and a trained LightGBM ranker, once real data exists.
+12. ~~Embeddings and a trained LightGBM ranker, once real data exists~~ (built, gated on data).
+    - **Embeddings** (`services/embeddings.py`, `event_embeddings`, worker every 30 min):
+      each event's title, category, tags, venue and description, for events from the
+      last 180 days onwards, re-embedded when the text changes. `EMBEDDINGS_PROVIDER=auto`
+      uses OpenAI `text-embedding-3-small` (512 dimensions) or Gemini `text-embedding-004`
+      when their key is set, else a local hashing model (256 dimensions, no key, no
+      network). A person's taste vector is the weighted mean of what they saved (1), went to
+      (2) or bought (3) in 180 days. Candidates get `semantic` = 1.2 × (cosine − 0.15) /
+      0.85 ("Like events you've been to"). On synthetic data the hashing model adds about
+      +0.007 NDCG@10; a trained model should do more on real descriptions.
+    - **Why not pgvector yet:** vectors are stored as JSON and compared in Python, because
+      the ranker only ever compares its ≤600 candidates. pgvector is worth it when searching
+      the whole catalogue by meaning (semantic search, "more like this" across thousands of
+      events). That needs the `pgvector/pgvector:pg16` image instead of `postgres:16-alpine`
+      in docker-compose, `CREATE EXTENSION vector`, and a `vector(512)` column with an HNSW
+      index.
+    - **Learned ranker** (`services/rec_training.py`, `python -m app.cli recs-train`,
+      `requirements-ml.txt`): at weekly cut-offs, every candidate the ranker scored for
+      someone who then acted, with its named parts as features and grades of 3 bought, 2
+      going, 1 saved, 0 nothing. LightGBM lambdarank is trained on all but the latest week
+      and checked on that week against the hand-set weights. It's saved only with 300+
+      people-weeks and 1,000+ actions, and only if it beats the hand-set weights by 0.005
+      NDCG@10 (`--force` skips both, for experiments). Serving it is a separate decision:
+      `RANKER_MODEL_PATH=<file>`. `recs_served.props.ranker` then says `lgbm-<date>`, so its
+      click-through can be compared on the data-health page. On synthetic data (forced: 142
+      people-weeks, 164 actions) it scored 0.599 against 0.541 for the hand-set weights on
+      the held-out week.
 
 ## Scaling
 
