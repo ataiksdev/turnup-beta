@@ -9,14 +9,18 @@ import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { routes } from "@/lib/routes";
 import { useOfflineImage } from "@/lib/offlineImages";
+import { useCardTracking, type CardTracking } from "@/lib/useCardTracking";
 
 interface EventCardProps {
   event: Event;
   size?: "sm" | "md" | "lg";
   className?: string;
+  /** Where it's shown, for impression and click tracking (lib/useCardTracking.ts). */
+  tracking?: CardTracking;
 }
 
-export function EventCard({ event, size = "md", className }: EventCardProps) {
+export function EventCard({ event, size = "md", className, tracking }: EventCardProps) {
+  const { ref, onClick } = useCardTracking<HTMLAnchorElement>(event, tracking);
   const coverSrc = useOfflineImage(event.cover_image); // kept copy while offline
   const { token } = useAuthStore();
   const [saved, setSaved] = useState(event.is_saved);
@@ -41,6 +45,8 @@ export function EventCard({ event, size = "md", className }: EventCardProps) {
 
   return (
     <Link
+      ref={ref}
+      onClick={onClick}
       href={routes.event(event.slug)}
       className={cn(
         "group block bg-bg-card rounded overflow-hidden border-2 border-border",

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ThemeController } from "@/components/layout/ThemeController";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import { OfflineSync } from "@/components/layout/OfflineSync";
+import { TrackingProvider } from "@/components/layout/TrackingProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -27,6 +28,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       {children}
       <OfflineBanner />
       <OfflineSync />
+      <TrackingProvider />
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

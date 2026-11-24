@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 import { CATEGORIES, CategoryTile } from "@/components/events/CategoryTile";
+import { useCardTracking, type CardTracking } from "@/lib/useCardTracking";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -51,10 +52,15 @@ function networkNote(event: any): string | null {
   return null;
 }
 
-function MiniEventCard({ event, showNetworkNote }: { event: any; showNetworkNote?: boolean }) {
+function MiniEventCard({ event, showNetworkNote, tracking }: {
+  event: any; showNetworkNote?: boolean; tracking?: CardTracking;
+}) {
   const note = showNetworkNote ? networkNote(event) : null;
+  const { ref, onClick } = useCardTracking<HTMLAnchorElement>(event, tracking);
   return (
     <Link
+      ref={ref}
+      onClick={onClick}
       href={routes.event(event.slug)}
       className="shrink-0 w-44 rounded border-2 border-border bg-bg-card overflow-hidden hover:border-primary transition-colors shadow-brutal-sm"
     >
@@ -178,7 +184,7 @@ export function BrowseSections() {
         <section className="mt-5">
           <SectionHeader title="Trending Now" href="/discover?trending=true" icon={Flame} />
           <HScrollRow>
-            {trending!.map((e: any) => <MiniEventCard key={e.id} event={e} />)}
+            {trending!.map((e: any, i: number) => <MiniEventCard key={e.id} event={e} tracking={{ surface: "discover_trending", position: i }} />)}
           </HScrollRow>
         </section>
       )}
@@ -188,7 +194,7 @@ export function BrowseSections() {
         <section className="mt-5">
           <SectionHeader title="From Your Network" icon={Users} />
           <HScrollRow>
-            {following!.map((e: any) => <MiniEventCard key={e.id} event={e} showNetworkNote />)}
+            {following!.map((e: any, i: number) => <MiniEventCard key={e.id} event={e} showNetworkNote tracking={{ surface: "discover_following", position: i }} />)}
           </HScrollRow>
         </section>
       )}
@@ -206,7 +212,7 @@ export function BrowseSections() {
         <section className="mt-5">
           <SectionHeader title="Free to Attend" href="/discover?free=true" icon={Tag} />
           <HScrollRow>
-            {free!.map((e: any) => <MiniEventCard key={e.id} event={e} />)}
+            {free!.map((e: any, i: number) => <MiniEventCard key={e.id} event={e} tracking={{ surface: "discover_free", position: i }} />)}
           </HScrollRow>
         </section>
       )}
@@ -216,7 +222,7 @@ export function BrowseSections() {
         <section className="mt-5">
           <SectionHeader title="Just Added" href="/discover?sort=newest" icon={Clock} />
           <HScrollRow>
-            {newest!.map((e: any) => <MiniEventCard key={e.id} event={e} />)}
+            {newest!.map((e: any, i: number) => <MiniEventCard key={e.id} event={e} tracking={{ surface: "discover_new", position: i }} />)}
           </HScrollRow>
         </section>
       )}

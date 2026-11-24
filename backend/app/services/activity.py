@@ -66,14 +66,14 @@ def _occurred_at(ts: datetime | None, received: datetime) -> datetime:
 
 def record(db: AsyncSession, name: str, *, user_id: str | None = None, event_id: str | None = None,
            props: dict | None = None, surface: str | None = None,
-           rec_request_id: str | None = None) -> None:
+           rec_request_id: str | None = None, anonymous_id: str | None = None) -> None:
     """Write a server event. It's added to the caller's transaction, so it's only kept if
     what it describes (the order, the RSVP...) is committed too."""
     assert name in SERVER_EVENTS, name
     now = _now()
     db.add(Activity(
         name=name, source="server", occurred_at=now, received_at=now,
-        user_id=user_id, event_id=event_id, surface=surface,
+        user_id=user_id, anonymous_id=anonymous_id, event_id=event_id, surface=surface,
         rec_request_id=rec_request_id, props=_clean_props(props, MAX_SERVER_PROPS_BYTES),
     ))
 
@@ -85,6 +85,11 @@ async def ingest(db: AsyncSession, batch, user: User | None) -> int:
     keep_coords = bool(user and user.profiling_consent and batch.geo
                        and batch.geo.lat is not None and batch.geo.lon is not None)
     geo_city = (batch.geo.city if batch.geo and batch.geo.city else None) or (user.city if user else None)
+
+    if user:
+        # Anything this device logged signed out (e.g. a feed served before the app had loaded
+        # the saved sign-in) belongs to the account too. Cheap: indexed, usually zero rows.
+        await link_anonymous(db, user, batch.anonymous_id)
 
     events = [e for e in batch.events if e.name in CLIENT_EVENTS]
     ids = {e.id for e in events if e.id}

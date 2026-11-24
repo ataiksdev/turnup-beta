@@ -110,7 +110,8 @@ export default function ForYouPage() {
                 <ForYouCard
                   event={topThree[0]}
                   rank={1}
-                  reason={deriveReason(topThree[0], prefs)}
+                  reason={topThree[0].rec_reason ?? deriveReason(topThree[0], prefs)}
+                  tracking={{ surface: "for_you_page", position: 0 }}
                 />
                 {topThree.length > 1 && (
                   <div className="grid grid-cols-2 gap-3">
@@ -119,7 +120,8 @@ export default function ForYouPage() {
                         key={e.id}
                         event={e}
                         rank={(i + 2) as 2 | 3}
-                        reason={deriveReason(e, prefs)}
+                        reason={e.rec_reason ?? deriveReason(e, prefs)}
+                        tracking={{ surface: "for_you_page", position: i + 1 }}
                       />
                     ))}
                   </div>
@@ -138,8 +140,9 @@ export default function ForYouPage() {
                   <div className="flex-1 h-px bg-border" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  {rest.map((e) => (
-                    <EventCard key={e.id} event={e} size="sm" className="w-full" />
+                  {rest.map((e, i) => (
+                    <EventCard key={e.id} event={e} size="sm" className="w-full"
+                      tracking={{ surface: "for_you_page", position: i + 3 }} />
                   ))}
                 </div>
               </>

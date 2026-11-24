@@ -6,10 +6,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { routes } from "@/lib/routes";
+import { useCardTracking, type CardTracking } from "@/lib/useCardTracking";
 
-export function HeroEvent({ event }: { event: Event }) {
+export function HeroEvent({ event, tracking }: { event: Event; tracking?: CardTracking }) {
+  const { ref, onClick } = useCardTracking<HTMLAnchorElement>(event, tracking);
   return (
     <Link
+      ref={ref}
+      onClick={onClick}
       href={routes.event(event.slug)}
       className="block relative h-[500px] overflow-hidden border-y-2 border-border"
     >

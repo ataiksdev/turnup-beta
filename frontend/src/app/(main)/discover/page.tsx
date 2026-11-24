@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, Suspense, useEffect, useRef } from "react";
+import { track } from "@/lib/track";
 import { cn, parsePreferences } from "@/lib/utils";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -191,6 +192,23 @@ function SearchContent() {
   }, [pageEvents, page]);
 
   const hasMore = (pageEvents?.length ?? 0) === PAGE_SIZE;
+
+  // One search_executed per search the person settles on (not per keystroke): logged once the
+  // first page of results has been on screen for a moment. Zero results show unmet demand.
+  useEffect(() => {
+    if (!isSearching || page !== 1 || !pageEvents) return;
+    const t = setTimeout(() => track("search_executed", {
+      surface: "search",
+      props: {
+        query: queryFilters.q ?? null, tag: queryFilters.tag ?? null,
+        filters: { city: queryFilters.city, category: queryFilters.category, event_type: queryFilters.event_type,
+                   free: queryFilters.free, date: dateFilter || undefined, sort },
+        results_count: pageEvents.length, has_more: pageEvents.length === PAGE_SIZE,
+      },
+    }), 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersKey, pageEvents, page]);
 
   // ── URL sync helpers ──────────────────────────────────────────────────────
   function pushParams(patch: Record<string, string | undefined>) {
@@ -432,8 +450,9 @@ function SearchContent() {
                   : `${allEvents.length} event${allEvents.length !== 1 ? "s" : ""} found`}
               </p>
               <div className="grid grid-cols-2 gap-3">
-                {allEvents.map((e) => (
-                  <EventCard key={e.id} event={e} size="sm" className="w-full" />
+                {allEvents.map((e, i) => (
+                  <EventCard key={e.id} event={e} size="sm" className="w-full"
+                    tracking={{ surface: "search", position: i }} />
                 ))}
               </div>
 

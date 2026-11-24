@@ -122,9 +122,9 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
                        request_id=new_request_id())
     if log:
         record(db, "recs_served", user_id=user.id if user else None, surface=surface,
-               rec_request_id=result.request_id, props={
+               anonymous_id=anonymous_id, rec_request_id=result.request_id, props={
                    "ranker": RANKER_VERSION,
-                   "event_ids": [e.id for e in result.events], "anonymous_id": anonymous_id,
+                   "event_ids": [e.id for e in result.events],
                    "personal": viewer.personal, "has_location": lat is not None,
                })
     return result
