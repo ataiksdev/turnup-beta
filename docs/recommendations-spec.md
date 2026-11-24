@@ -231,7 +231,12 @@ These use the data above but are features, not data collection:
 2. ~~"Not interested" and "Hide this organizer"~~ (done: `hidden_items`, excluded in
    `_exclusions()` and `_hidden_organizers()`).
 3. ~~Discovery slots for new events with few impressions~~ (done: section 4, step 6).
-4. Similar events / "people who went to X also went to Y".
+4. ~~Similar events / "people who went to X also went to Y"~~ (done: `services/similar.py`,
+   `GET /events/{id}/similar`, shown on event and ticket pages). People who committed to X
+   (going, saved, bought) and to another upcoming event, scored by shared people ÷ √(its own
+   committed people), with at least 2 people in common so a suggestion never reveals one
+   person's plans; then same category, tags, city and price, weighted by demand. At most two
+   per organizer; never the viewer's own, committed or hidden events.
 5. Ranker-driven weekend picks and "almost sold out" / price-drop alerts, with frequency caps.
 6. WhatsApp share links with a ref code (feeds a real `tastemaker_score`).
 7. Organizer insights: zero-result searches, best day and time, price benchmarks, booking curves.

@@ -27,6 +27,7 @@ import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { EventMap } from "@/components/events/EventMap";
 import { HideControls } from "@/components/events/HideControls";
+import { SimilarEvents } from "@/components/events/SimilarEvents";
 import { useEventPageTracking } from "@/lib/useEventPageTracking";
 import { EventDeals, EventVenueCard, GuestVenueReview, MembersOnlyNotice, TierPlusBadges } from "@/components/events/EventMarketplace";
 
@@ -938,6 +939,8 @@ export function EventDetailClient() {
             </div>
           </section>
         )}
+
+        <SimilarEvents eventId={event.id} />
 
         {/* Comments */}
         <section aria-labelledby="comments-heading">

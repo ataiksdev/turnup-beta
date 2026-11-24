@@ -330,6 +330,8 @@ export const eventsApi = {
     request<Event[]>(`/events/featured?limit=${limit}`, {}, token),
 
   /** The device id lets a signed-out session's browsing shape its own feed. */
+  similar: (idOrSlug: string, limit = 6, token?: string) =>
+    request<Event[]>(`/events/${encodeURIComponent(idOrSlug)}/similar?limit=${limit}`, {}, token),
   forYou: (limit = 20, token?: string) =>
     request<Event[]>(`/events/for-you?limit=${limit}`, { headers: { "X-Anonymous-Id": getAnonymousId() } }, token),
 

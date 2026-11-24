@@ -1557,6 +1557,30 @@ async def check_in_stats(
 
 # ── Reviews ───────────────────────────────────────────────────────────────────
 
+@router.get("/{event_id}/similar", response_model=list[EventOut])
+async def similar(
+    event_id: str,
+    limit: int = Query(6, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    """"You might also like": people who went to this also went to..., then similar events
+    (app/services/similar.py). The reason is in rec_reason."""
+    from app.services.similar import similar_events
+    source = (await db.execute(select(Event).where(
+        or_(Event.id == event_id, Event.slug == event_id)))).scalar_one_or_none()
+    if not source or source.status != "published":
+        raise HTTPException(404, "Event not found")
+    found = await similar_events(db, source, viewer=user, limit=limit)
+    states = await _user_states([s.event.id for s in found], user, db)
+    out = []
+    for s in found:
+        row = _serialize(s.event, *states.get(s.event.id, (False, None, False)))
+        row["rec_reason"] = s.reason
+        out.append(row)
+    return out
+
+
 @router.get("/{event_id}/reviews", response_model=list[ReviewOut])
 async def list_reviews(event_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
