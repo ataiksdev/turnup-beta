@@ -117,8 +117,26 @@ async def confirm_order(db: AsyncSession, order_id: str, payment_channel: str | 
         fee_amount = round(order.total_price * fee_percent / 100, 2)
     order.platform_fee_percent = fee_percent
     order.platform_fee_amount = fee_amount
+    await _record_order_completed(db, order)
     await db.flush()
     return order
+
+
+async def _record_order_completed(db: AsyncSession, order: TicketOrder) -> None:
+    """The activity-log entry for a confirmed order (written here, the one place every
+    checkout, verify-payment and webhook confirmation passes through)."""
+    from app.services.activity import record
+    start = (await db.execute(select(Event.start_date).where(Event.id == order.event_id))).scalar_one_or_none()
+    lead_hours = None
+    if start is not None:
+        start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+        lead_hours = round((start - datetime.now(timezone.utc)).total_seconds() / 3600, 1)
+    record(db, "order_completed", user_id=order.user_id, event_id=order.event_id, props={
+        "order_id": order.id, "tier_id": order.tier_id, "unit_price": order.unit_price,
+        "total_amount": order.total_price, "fees_amount": order.platform_fee_amount,
+        "ticket_count": order.quantity, "lead_time_hours": lead_hours,
+        "payment_channel": order.payment_channel,
+    })
 
 
 async def cancel_order(db: AsyncSession, order: TicketOrder, reason: str) -> bool:
@@ -167,6 +185,9 @@ async def refund_order(db: AsyncSession, order: TicketOrder) -> bool:
 
     if from_status == "confirmed":
         await release_inventory(db, order.tier_id, order.quantity)
+    from app.services.activity import record
+    record(db, "order_refunded", user_id=order.user_id, event_id=order.event_id,
+           props={"order_id": order.id, "amount": order.total_price})
     return True
 
 

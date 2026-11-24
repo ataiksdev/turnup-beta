@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     rate_limit_comment: str = "20/minute"
     rate_limit_review: str = "10/minute"
     rate_limit_follow: str = "30/minute"
+    rate_limit_track: str = "120/minute"     # app activity batches (POST /api/track)
+
+    # Activity tracking and recommendations (docs/recommendations-spec.md)
+    activity_retention_days: int = 180       # activity rows older than this are deleted daily
+    anonymous_stitch_days: int = 30          # how far back signing in claims a device's browsing
 
     @property
     def origins(self) -> list[str]:

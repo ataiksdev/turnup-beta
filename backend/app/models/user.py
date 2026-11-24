@@ -58,6 +58,17 @@ class User(Base):
     show_plus_badge: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     wrapped_opt_in: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
+    # Recommendations and data (docs/recommendations-spec.md). Age and gender only as the user
+    # gives them; never inferred.
+    birth_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gender: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Personalised /for-you (on by default; off = the same feed everyone nearby gets).
+    personalized_recs: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    # Opt-in: precise location, routine, who they go out with, tastemaker score and audience
+    # segments for partners. Off until the user turns it on.
+    profiling_consent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    profiling_consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

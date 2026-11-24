@@ -200,6 +200,9 @@ async def transfer_ticket(request: Request, order_id: str, payload: TransferIn, 
                           old_ticket_code=order.ticket_code, new_ticket_code=new_code))
     order.user_id = to.id
     order.ticket_code = new_code
+    from app.services.activity import record
+    record(db, "ticket_transferred", user_id=user.id, event_id=event.id,
+           props={"order_id": order.id, "to_user_id": to.id, "recipient_is_existing_user": True})
     from app.services.tickets import auto_rsvp
     await auto_rsvp(event, to, db)
     notify(db, to.id, "ticket_received", f"{user.display_name or user.username} sent you a ticket to {event.title}",
