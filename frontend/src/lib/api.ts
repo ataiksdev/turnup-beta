@@ -1066,3 +1066,33 @@ export const shareApi = {
     }, token),
   mine: (token: string) => request<MyShares>("/share/mine", {}, token),
 };
+
+// ── Organizer insights ──────────────────────────────────────────────────────────
+
+export interface UnmetSearch { query: string; people: number; }
+
+export interface EventInsights {
+  category: string | null;
+  city: string | null;
+  best_times: null | {
+    scope: "city" | "everywhere";
+    best: { day: string; part: string; events: number; avg_turnout: number }[];
+    yours: { day: string; part: string; avg_turnout: number | null };
+  };
+  price: null | {
+    scope: "city" | "everywhere"; comparables: number; free_share: number | null; yours: number | null;
+    p25: number | null; median: number | null; p75: number | null; position: "low" | "typical" | "high" | null;
+  };
+  booking_curve: {
+    so_far: number; comparables: number; projected_total: number | null;
+    points: { days_before: number; yours: number | null; typical_share: number | null }[];
+  };
+  unmet_searches: UnmetSearch[];
+}
+
+export const insightsApi = {
+  event: (token: string, eventId: string) => request<EventInsights>(`/events/${encodeURIComponent(eventId)}/insights`, {}, token),
+  searches: (token: string, city?: string) =>
+    request<{ city: string | null; searches: UnmetSearch[] }>(
+      `/organizer/insights/searches${city ? `?city=${encodeURIComponent(city)}` : ""}`, {}, token),
+};

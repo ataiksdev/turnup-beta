@@ -254,7 +254,14 @@ These use the data above but are features, not data collection:
    save, "going" or ticket within 7 days credits the sharer (`share_conversions`, never
    yourself). People brought ("going" or bought) count double in `tastemaker_score`, and
    own profiles show "You've brought N people to events".
-7. Organizer insights: zero-result searches, best day and time, price benchmarks, booking curves.
+7. ~~Organizer insights~~ (done: `services/insights.py`). `GET /events/{id}/insights` (the
+   event's team; shown on its analytics page): best Lagos day and part of day for the
+   category by average turnout (3+ events per slot; city, else all of Turnup), the
+   cheapest ticket against the 25th–75th percentile of comparable events (5+), and
+   bookings by days before the event against the median share similar past events had by
+   then, with a projected total. `GET /organizer/insights/searches` (dashboard): searches
+   that found nothing in 30 days, made by 3+ different people. Other organizers' events
+   are never shown individually.
 8. ~~Better search (Postgres full-text, typo tolerance, "notify me")~~ (done: `services/search.py`, `search_alerts`).
 9. Data rights: export, consent history, Privacy Policy and cookie notice.
 10. Admin data-health page.

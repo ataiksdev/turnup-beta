@@ -1565,6 +1565,19 @@ async def check_in_stats(
 
 # ── Reviews ───────────────────────────────────────────────────────────────────
 
+@router.get("/{event_id}/insights")
+async def event_insights(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """For the event's team: best day and time, price vs comparable events, booking pace,
+    and searches in its city that found nothing (app/services/insights.py)."""
+    from app.services.insights import event_insights as build
+    event = await _require_event_access(event_id, user, db)
+    return await build(db, event)
+
+
 @router.get("/{event_id}/similar", response_model=list[EventOut])
 async def similar(
     event_id: str,
