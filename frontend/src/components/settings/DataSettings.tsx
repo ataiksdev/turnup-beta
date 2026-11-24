@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Database } from "lucide-react";
-import { authApi } from "@/lib/api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Database, Download, History } from "lucide-react";
+import { authApi, meApi } from "@/lib/api";
+import { format } from "date-fns";
 import { useAuthStore } from "@/store/auth";
 import type { User } from "@/types";
 
@@ -11,6 +12,10 @@ const GENDERS: { id: NonNullable<User["gender"]>; label: string }[] = [
   { id: "non_binary", label: "Non-binary" }, { id: "prefer_not_to_say", label: "Prefer not to say" },
 ];
 const THIS_YEAR = new Date().getFullYear();
+const CONSENT_LABELS: Record<string, string> = {
+  personalized_recs: "Personalised recommendations", profiling_consent: "Insights and partner offers",
+  event_alerts: "Alerts about saved events", wrapped_opt_in: "Turnup Wrapped",
+};
 
 function Toggle({ checked, onChange, label, help, disabled }: {
   checked: boolean; onChange: (v: boolean) => void; label: string; help: string; disabled?: boolean;
@@ -36,6 +41,23 @@ export function DataSettings() {
     mutationFn: (body: Parameters<typeof authApi.updatePreferences>[1]) => authApi.updatePreferences(token!, body),
     onSuccess: (u) => { setUser(u); setError(""); },
     onError: () => setError("Couldn't save that. Check your connection and try again."),
+  });
+  const [showLog, setShowLog] = useState(false);
+  const log = useQuery({
+    queryKey: ["consents", user?.profiling_consent, user?.personalized_recs, user?.event_alerts, user?.wrapped_opt_in],
+    queryFn: () => meApi.consents(token!), enabled: !!token && showLog,
+  });
+  const download = useMutation({
+    mutationFn: () => meApi.exportData(token!),
+    onSuccess: (data) => {
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `turnup-data-${user?.username ?? "me"}-${format(new Date(), "yyyyMMdd")}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    onError: () => setError("Couldn't prepare your data. Try again in a minute."),
   });
   if (!user) return null;
   const busy = save.isPending;
@@ -92,6 +114,31 @@ export function DataSettings() {
         </label>
       </div>
       {error && <p className="text-xs text-error">{error}</p>}
+
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button onClick={() => download.mutate()} disabled={download.isPending}
+          className="flex items-center gap-1.5 px-3 py-2 rounded border-2 border-border text-xs font-bold text-text hover:border-primary disabled:opacity-50">
+          <Download size={14} aria-hidden /> {download.isPending ? "Preparing…" : "Download my data"}
+        </button>
+        <button onClick={() => setShowLog((v) => !v)} aria-expanded={showLog}
+          className="flex items-center gap-1.5 px-3 py-2 rounded border-2 border-border text-xs font-bold text-text hover:border-primary">
+          <History size={14} aria-hidden /> {showLog ? "Hide" : "Show"} consent history
+        </button>
+      </div>
+      {showLog && (
+        log.data && log.data.length > 0 ? (
+          <ul className="text-xs divide-y divide-border">
+            {log.data.map((c, i) => (
+              <li key={i} className="py-1.5 flex justify-between gap-3">
+                <span className="text-text">{CONSENT_LABELS[c.setting] ?? c.setting}: <strong>{c.value ? "on" : "off"}</strong></span>
+                <span className="text-text-muted shrink-0">{format(new Date(c.changed_at), "d MMM yyyy, HH:mm")}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-text-muted">{log.isLoading ? "Loading…" : "You haven't changed any of these yet; they're at their defaults."}</p>
+        )
+      )}
     </section>
   );
 }

@@ -113,8 +113,16 @@ shapes its feed too.
 - **Deleting an account** removes its activity rows (including what its devices did while
   signed out) and its `user_features` row immediately.
 - **Retention:** rows older than `ACTIVITY_RETENTION_DAYS` (180) are deleted daily (03:47 UTC).
-- **Still to do (other branch):** "download my data", a consent-history log, and the Privacy
-  Policy and cookie notice text (section 6).
+- **Consent history:** every change to `personalized_recs`, `profiling_consent`,
+  `event_alerts` and `wrapped_opt_in` is written to `consent_log` (setting, value, source,
+  time). Unlike `activity_log` it isn't pruned, because it is the record of what was agreed and
+  when. Shown in Settings → Your data (`GET /api/me/consents`).
+- **Download my data** (`GET /api/me/export`, 5 an hour): a JSON file of every row in any
+  table that points at the user, plus their `activity_log` and `user_features`
+  (`services/data_rights.py`). New tables are included automatically. Passwords, sign-in
+  tokens, 2FA secrets, one-time codes and staff audit logs are left out, and so are the
+  identities of people their share links brought in.
+- **Privacy Policy** at `/privacy`, and a one-time notice about device storage.
 
 ## 3. Features
 
@@ -263,7 +271,7 @@ These use the data above but are features, not data collection:
    that found nothing in 30 days, made by 3+ different people. Other organizers' events
    are never shown individually.
 8. ~~Better search (Postgres full-text, typo tolerance, "notify me")~~ (done: `services/search.py`, `search_alerts`).
-9. Data rights: export, consent history, Privacy Policy and cookie notice.
+9. ~~Data rights: export, consent history, Privacy Policy and cookie notice~~ (done: section 2).
 10. Admin data-health page.
 11. Lagos context: travel time, rain, payday, holidays.
 12. Embeddings (pgvector) and a trained LightGBM ranker, once real data exists.

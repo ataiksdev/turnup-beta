@@ -92,6 +92,8 @@ export default function PrivacyPage() {
             everywhere.</li>
           <li>Payment and order records, for as long as tax and accounting law requires, even after you delete
             your account.</li>
+          <li>Your app activity (what you view, search and tap), 180 days, then it&apos;s deleted. The
+            record of your data choices is kept while your account exists.</li>
           <li>Search alerts end after 60 days. Hidden events and organizers stay hidden until you unhide them.</li>
           <li>Venue verification documents, only for the retention period set for verification, then they are
             deleted.</li>
@@ -109,7 +111,9 @@ export default function PrivacyPage() {
           <li>complain to the Nigeria Data Protection Commission (NDPC).</li>
         </ul>
         <p>
-          To use any of these rights, email <a href={`mailto:${CONTACT}`} className="text-primary hover:underline">{CONTACT}</a>{" "}
+          You can download a copy of your data, see the history of your data choices, and change them yourself
+          in <Link href="/settings" className="text-primary hover:underline">Settings</Link> under &quot;Your data&quot;.
+          For anything else, email <a href={`mailto:${CONTACT}`} className="text-primary hover:underline">{CONTACT}</a>{" "}
           from the address on your account. We reply within 30 days.
         </p>
 

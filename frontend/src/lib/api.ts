@@ -1096,3 +1096,12 @@ export const insightsApi = {
     request<{ city: string | null; searches: UnmetSearch[] }>(
       `/organizer/insights/searches${city ? `?city=${encodeURIComponent(city)}` : ""}`, {}, token),
 };
+
+// ── Your data ───────────────────────────────────────────────────────────────────
+
+export interface ConsentEntry { setting: string; value: boolean; source: string; changed_at: string; }
+
+export const meApi = {
+  consents: (token: string) => request<ConsentEntry[]>("/me/consents", {}, token),
+  exportData: (token: string) => request<Record<string, unknown>>("/me/export", {}, token),
+};

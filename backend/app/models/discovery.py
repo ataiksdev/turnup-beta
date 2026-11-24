@@ -49,3 +49,17 @@ class SearchAlert(Base):
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     notified_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ConsentLog(Base):
+    """Every change to a data choice (docs/recommendations-spec.md section 2), kept for as
+    long as the account exists: unlike activity_log it isn't pruned after 180 days, because it
+    is the record of what someone agreed to and when."""
+    __tablename__ = "consent_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    setting: Mapped[str] = mapped_column(String(40), nullable=False)  # personalized_recs, profiling_consent...
+    value: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="settings")  # settings | onboarding
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

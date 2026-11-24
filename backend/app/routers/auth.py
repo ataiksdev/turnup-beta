@@ -984,6 +984,8 @@ async def update_preferences(
         if not payload.profiling_consent:
             await clear_profiling(db, user.id)
     if changed:
+        from app.services.data_rights import log_consent
+        log_consent(db, user, changed)  # kept for as long as the account exists
         # The values themselves only for taste fields; age, gender and consent are noted by name.
         sensitive = {"birth_year", "gender", "profiling_consent"}
         record_activity(db, "profile_updated", user_id=user.id, props={
