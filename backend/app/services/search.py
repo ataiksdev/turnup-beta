@@ -3,7 +3,7 @@
 Postgres (production): full-text search over title, venue, city, tags and description, with
 prefix matching ("afrob" finds "afrobeats"), plus trigram word similarity on the short fields
 for typos ("afrobeets", "lekki phse 1"). Both are backed by GIN indexes created in migration
-0008 (named ix_search_*; see migrations/env.py for why Alembic leaves them alone).
+0009 (named ix_search_*; see migrations/env.py for why Alembic leaves them alone).
 
 Anything else (SQLite in development and tests): every word must appear in one of the fields,
 and words that match nothing are widened to close spellings of words that do exist in event
@@ -59,7 +59,7 @@ _trgm_cache: dict[str, bool] = {}
 
 
 async def _has_trigrams(db: AsyncSession) -> bool:
-    """pg_trgm comes from migration 0008. A database built another way (the test suite's
+    """pg_trgm comes from migration 0009. A database built another way (the test suite's
     create_all) may not have it: search then still works, just without typo tolerance."""
     key = str(db.get_bind().url)
     if key not in _trgm_cache:

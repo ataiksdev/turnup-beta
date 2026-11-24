@@ -20,7 +20,7 @@ def _url() -> str:
 
 
 def _include_object(obj, name, type_, reflected, compare_to):
-    # Postgres-only search indexes on expressions (migration 0008, app/services/search.py).
+    # Postgres-only search indexes on expressions (migration 0009, app/services/search.py).
     # The models can't describe them, so they'd otherwise show up as "removed" on every check.
     if type_ == "index" and reflected and compare_to is None and (name or "").startswith("ix_search_"):
         return False

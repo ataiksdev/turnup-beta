@@ -59,7 +59,7 @@ async def test_search_finds_word_prefixes(client, db):
 async def test_search_tolerates_a_typo(client, db):
     from tests.conftest import IS_SQLITE
     if not IS_SQLITE:
-        # The suite builds its schema with create_all; typo tolerance needs migration 0008's pg_trgm.
+        # The suite builds its schema with create_all; typo tolerance needs migration 0009's pg_trgm.
         from sqlalchemy import text
         await db.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await db.commit()
