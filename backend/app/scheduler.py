@@ -82,6 +82,21 @@ async def run_search_alerts():
     await _run("Search alerts", send_search_alerts)
 
 
+async def run_rec_event_features():
+    from app.services.rec_features import run_event_features
+    await _run("Recommendation event features", run_event_features)
+
+
+async def run_rec_user_features():
+    from app.services.rec_features import run_user_features
+    await _run("Recommendation user features", run_user_features)
+
+
+async def run_prune_activity():
+    from app.services.activity import prune_old_activity
+    await _run("Activity retention", prune_old_activity)
+
+
 def build_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     # Ticket-order expiry is core payment hygiene, so it always runs; the scout is added
@@ -106,6 +121,14 @@ def build_scheduler() -> AsyncIOScheduler:
                       replace_existing=True, max_instances=1, coalesce=True)
     # "Notify me" searches: hourly, against events created since the last check.
     scheduler.add_job(run_search_alerts, IntervalTrigger(hours=1), id="search_alerts",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    # Recommendations (docs/recommendations-spec.md): event numbers every 15 minutes, people's
+    # nightly (Lagos 04:00), then old activity past its retention period is deleted.
+    scheduler.add_job(run_rec_event_features, IntervalTrigger(minutes=15), id="rec_event_features",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    scheduler.add_job(run_rec_user_features, CronTrigger(hour=3, minute=3), id="rec_user_features",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    scheduler.add_job(run_prune_activity, CronTrigger(hour=3, minute=47), id="prune_activity",
                       replace_existing=True, max_instances=1, coalesce=True)
     if settings.ai_provider_api_key:
         scheduler.add_job(

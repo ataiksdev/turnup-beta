@@ -3,6 +3,7 @@ import type {
   Notification, OrganizerProfile, Token, User,
 } from "@/types";
 import { OFFLINE_MESSAGE, reportReachable, requestOfflineSync } from "@/lib/network";
+import { getAnonymousId } from "@/lib/track";
 
 export interface TicketTierDetail {
   id: string; event_id: string; name: string; description: string | null;
@@ -279,6 +280,11 @@ export const authApi = {
     goes_out_when?: string;
     price_sensitivity?: string;
     event_format_pref?: string;
+    // Data choices (docs/recommendations-spec.md); null clears birth year / gender.
+    personalized_recs?: boolean;
+    profiling_consent?: boolean;
+    birth_year?: number | null;
+    gender?: User["gender"];
   }) =>
     request<User>("/auth/preferences", { method: "PATCH", body: JSON.stringify(payload) }, token),
 
@@ -323,8 +329,9 @@ export const eventsApi = {
   featured: (limit = 6, token?: string) =>
     request<Event[]>(`/events/featured?limit=${limit}`, {}, token),
 
+  /** The device id lets a signed-out session's browsing shape its own feed. */
   forYou: (limit = 20, token?: string) =>
-    request<Event[]>(`/events/for-you?limit=${limit}`, {}, token),
+    request<Event[]>(`/events/for-you?limit=${limit}`, { headers: { "X-Anonymous-Id": getAnonymousId() } }, token),
 
   following: (token: string, limit = 20) =>
     request<Event[]>(`/events/following?limit=${limit}`, {}, token),

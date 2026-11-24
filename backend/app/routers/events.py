@@ -32,6 +32,7 @@ from app.schemas.organizer import (
     TicketTierUpdate, VerifyPaymentRequest, WaitlistEntryOut, WaitlistNotifyRequest,
     WaitlistStatusOut,
 )
+from app.services.activity import record as record_activity
 from app.services.email import send_ticket_email
 from app.services.hidden import exclude_hidden, hidden_for
 from app.services.search import text_search
@@ -47,6 +48,10 @@ router = APIRouter(prefix="/api/events", tags=["events"])
 def _as_utc(dt: datetime) -> datetime:
     """SQLite hands back naive datetimes; treat those as UTC so comparisons work."""
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _days_until(event: Event) -> float:
+    return round((_as_utc(event.start_date) - datetime.now(timezone.utc)).total_seconds() / 86400, 1)
 
 
 def _slugify(text: str, uid: str) -> str:
@@ -257,200 +262,31 @@ async def featured_events(
 
 @router.get("/for-you", response_model=list[EventOut])
 async def for_you_events(
+    request: Request,
     limit: int = Query(20, ge=1, le=50),
+    lat: float | None = Query(None, ge=-90, le=90),
+    lon: float | None = Query(None, ge=-180, le=180),
+    city: str | None = Query(None, max_length=100),
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
     """
-    Personalised recommendation feed. Scores upcoming events across eight
-    signals. For organizers, preferences are inferred from their hosted events
-    rather than asked during onboarding.
+    Personalised recommendation feed (app/services/recommender.py). Signed out, it ranks by
+    place, time and popularity. `lat`/`lon` (the phone's location, if shared) are used for
+    this request only, never stored. The app sends its device id in X-Anonymous-Id so a
+    signed-out session's browsing counts too.
     """
-    now = datetime.now(timezone.utc)
-
-    candidates = (await db.execute(exclude_hidden(
-        select(Event).options(*_load())
-        .where(Event.status == "published", Event.start_date > now)
-        .order_by(Event.start_date.asc())
-        .limit(300), await hidden_for(db, user))
-    )).scalars().all()
-
-    if not user:
-        candidates.sort(key=lambda e: (e.is_trending, e.is_featured, e.attendees_count), reverse=True)
-        return [_serialize(e) for e in candidates[:limit]]
-
-    # ── Build preference profile ────────────────────────────────────────────────
-
-    if user.role == "organizer":
-        hosted = (await db.execute(
-            select(Event.category_id, Event.city, Event.event_type)
-            .where(Event.host_id == user.id, Event.status == "published")
-        )).all()
-        pref_category_ids = {row[0] for row in hosted if row[0]}
-        from collections import Counter
-        city_counts = Counter(row[1].strip() for row in hosted if row[1])
-        user_city = city_counts.most_common(1)[0][0].lower() if city_counts else (user.city or "").lower()
-        format_counts = Counter(row[2] for row in hosted if row[2])
-        inferred_format = format_counts.most_common(1)[0][0] if format_counts else None
-        price_sensitivity = user.price_sensitivity
-        goes_out_when = user.goes_out_when
-    else:
-        raw_prefs = [p.strip() for p in (user.category_preferences or "").split(",") if p.strip()]
-        pref_category_ids: set[str] = set()
-        if raw_prefs:
-            cats = (await db.execute(select(Category).where(Category.slug.in_(raw_prefs)))).scalars().all()
-            pref_category_ids = {c.id for c in cats}
-
-        saved_ids_all = {
-            r[0] for r in (await db.execute(
-                select(EventSave.event_id).where(EventSave.user_id == user.id)
-            )).all()
-        }
-        if saved_ids_all:
-            saved_cat_ids = {
-                r[0] for r in (await db.execute(
-                    select(Event.category_id).where(
-                        Event.id.in_(saved_ids_all), Event.category_id.isnot(None)
-                    )
-                )).all()
-                if r[0]
-            }
-            pref_category_ids = pref_category_ids | saved_cat_ids
-
-        user_city = (user.city or (user.location or "").split(",")[0]).strip().lower()
-        inferred_format = user.event_format_pref
-        price_sensitivity = user.price_sensitivity
-        goes_out_when = user.goes_out_when
-
-    # ── Signals shared by both roles ────────────────────────────────────────────
-
-    attended_ids = {
-        r[0] for r in (await db.execute(
-            select(EventAttendee.event_id).where(EventAttendee.user_id == user.id)
-        )).all()
-    }
-    saved_ids = {
-        r[0] for r in (await db.execute(
-            select(EventSave.event_id).where(EventSave.user_id == user.id)
-        )).all()
-    }
-    excluded_ids = attended_ids | saved_ids
-
-    history_tags_rows = (await db.execute(
-        select(Event.tags).where(Event.id.in_(attended_ids), Event.tags.isnot(None))
-    )).scalars().all()
-    user_tags: set[str] = set()
-    for row in history_tags_rows:
-        user_tags.update(t.strip().lower() for t in row.split(",") if t.strip())
-
-    if saved_ids:
-        saved_tags_rows = (await db.execute(
-            select(Event.tags).where(Event.id.in_(saved_ids), Event.tags.isnot(None))
-        )).scalars().all()
-        for row in saved_tags_rows:
-            user_tags.update(t.strip().lower() for t in row.split(",") if t.strip())
-
-    followed_ids = {
-        r[0] for r in (await db.execute(
-            select(Follow.following_id).where(Follow.follower_id == user.id)
-        )).all()
-    }
-    social_event_ids: set[str] = set()
-    if followed_ids:
-        social_event_ids = {
-            r[0] for r in (await db.execute(
-                select(EventAttendee.event_id).where(
-                    EventAttendee.user_id.in_(followed_ids),
-                    EventAttendee.status == "going",
-                )
-            )).all()
-        }
-
-    if not price_sensitivity:
-        paid_prices = (await db.execute(
-            select(TicketOrder.unit_price).where(
-                TicketOrder.user_id == user.id,
-                TicketOrder.status == "confirmed",
-                TicketOrder.unit_price > 0,
-            )
-        )).scalars().all()
-        max_spend = max(paid_prices, default=0.0)
-        prefers_free = max_spend == 0 and user.events_attended < 3
-    else:
-        paid_prices = []
-        max_spend = {"free": 0, "budget": 5000, "mid": 20000, "any": 9999999}.get(price_sensitivity, 0)
-        prefers_free = price_sensitivity == "free"
-
-    # ── Score candidates ────────────────────────────────────────────────────────
-
-    scored: list[tuple[float, Event]] = []
-    for e in candidates:
-        if e.id in excluded_ids:
-            continue
-        score = 0.0
-
-        if e.category_id and e.category_id in pref_category_ids:
-            score += 3.0
-
-        if user_city:
-            e_city = (e.city or "").lower()
-            if user_city in e_city or e_city in user_city:
-                score += 2.0
-
-        if e.is_free:
-            score += 1.5 if prefers_free else 0.5
-        elif price_sensitivity == "any":
-            score += 1.0
-        elif max_spend > 0 and e.price_min is not None and e.price_min <= max_spend * 1.3:
-            score += 1.5
-
-        if inferred_format and inferred_format != "both":
-            if e.event_type == inferred_format:
-                score += 1.5
-            elif e.event_type != "hybrid":
-                score -= 0.5
-
-        if goes_out_when and goes_out_when != "any":
-            event_dow = e.start_date.weekday()
-            is_weekend = event_dow >= 4
-            if goes_out_when == "weekends" and is_weekend:
-                score += 1.0
-            elif goes_out_when == "weekdays" and not is_weekend:
-                score += 1.0
-
-        if e.id in social_event_ids:
-            score += 2.0
-
-        if e.tags and user_tags:
-            e_tags = {t.strip().lower() for t in e.tags.split(",") if t.strip()}
-            score += len(e_tags & user_tags) * 0.8
-
-        if e.is_trending:
-            score += 0.8
-        if e.is_featured:
-            score += 0.5
-
-        score += min(e.attendees_count / 50.0, 1.0)
-
-        days_away = max((e.start_date.replace(tzinfo=timezone.utc) - now).days, 0)
-        if days_away <= 7:
-            score += 0.5
-
-        score += (hash(f"{user.id}:{e.id}") % 100) / 1000.0
-
-        scored.append((score, e))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    picked = [e for _, e in scored[:limit]]
-    if len(picked) < limit:
-        seen = {e.id for e in picked} | excluded_ids
-        fallback = [e for e in candidates if e.id not in seen]
-        fallback.sort(key=lambda e: (e.is_trending, e.attendees_count), reverse=True)
-        picked += fallback[: limit - len(picked)]
-
-    states = await _user_states([e.id for e in picked], user, db)
-    return [_serialize(e, *states.get(e.id, (False, None, False))) for e in picked]
+    from app.services.recommender import recommend
+    anon = (request.headers.get("x-anonymous-id") or "")[:64] or None
+    result = await recommend(db, user=user, anonymous_id=anon, lat=lat, lon=lon, city=city, limit=limit)
+    states = await _user_states([e.id for e in result.events], user, db)
+    out = []
+    for e in result.events:
+        row = _serialize(e, *states.get(e.id, (False, None, False)))
+        row["rec_reason"] = result.reasons.get(e.id)
+        row["rec_request_id"] = result.request_id
+        out.append(row)
+    return out
 
 
 @router.get("/following", response_model=list[EventOut])
@@ -849,6 +685,9 @@ async def attend(
     else:
         db.add(EventAttendee(id=str(uuid.uuid4()), user_id=user.id,
                              event_id=event_id, status=payload.status))
+    record_activity(db, "rsvp_changed", user_id=user.id, event_id=event_id,
+                    props={"status": payload.status, "from": old_status,
+                           "days_until_event": _days_until(event)})
 
     # Notify host when someone RSVPs going (skip if user is the host)
     if becoming_going and event.host_id != user.id:
@@ -905,6 +744,8 @@ async def remove_attendance(
             events_attended=decrement_to_zero(User.events_attended)))
     else:
         event.interested_count = max(0, event.interested_count - 1)
+    record_activity(db, "rsvp_changed", user_id=user.id, event_id=event_id,
+                    props={"status": None, "from": att.status})
     await db.delete(att)
     return {"status": None}
 
@@ -925,9 +766,12 @@ async def toggle_save(
     if existing:
         await db.delete(existing)
         event.saves_count = max(0, event.saves_count - 1)
+        record_activity(db, "event_unsaved", user_id=user.id, event_id=event_id)
         return {"saved": False}
     db.add(EventSave(id=str(uuid.uuid4()), user_id=user.id, event_id=event_id))
     event.saves_count += 1
+    record_activity(db, "event_saved", user_id=user.id, event_id=event_id,
+                    props={"days_until_event": _days_until(event)})
     return {"saved": True}
 
 
@@ -1215,6 +1059,10 @@ async def checkout_tickets(
 
     await db.flush()
     total = sum(o.total_price for o in orders)
+    record_activity(db, "checkout_started", user_id=user.id, event_id=event_id, props={
+        "cart_value": total, "ticket_count": sum(o.quantity for o in orders),
+        "tiers": [{"tier_id": o.tier_id, "unit_price": o.unit_price, "quantity": o.quantity} for o in orders],
+    })
 
     if total == 0:
         for order in orders:
@@ -1666,6 +1514,10 @@ async def check_in_ticket(
     )
     if done.rowcount == 0:
         raise HTTPException(409, "This ticket was just scanned at another door. Scan it again.")
+    record_activity(db, "event_checked_in", user_id=order.user_id, event_id=event_id, props={
+        "order_id": order.id, "admitted": n,
+        "minutes_from_start": round((now - _as_utc(event.start_date)).total_seconds() / 60),
+    })
     await db.refresh(order)
     return result(n)
 
@@ -1792,6 +1644,8 @@ async def create_review(
         )
         db.add(r)
         await db.flush()
+    record_activity(db, "event_reviewed", user_id=user.id, event_id=event_id,
+                    props={"rating": payload.rating, "has_text": bool(payload.body)})
 
     return ReviewOut(
         id=r.id, event_id=r.event_id, user_id=r.user_id,

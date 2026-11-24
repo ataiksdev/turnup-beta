@@ -86,6 +86,12 @@ class UserMe(BaseModel):
     plus_until: datetime | None = None
     show_plus_badge: bool = True
     wrapped_opt_in: bool = True
+    # Data choices (docs/recommendations-spec.md)
+    birth_year: int | None = None
+    gender: str | None = None
+    personalized_recs: bool = True
+    profiling_consent: bool = False
+    profiling_consent_at: datetime | None = None
     created_at: datetime
     organizer_profile: OrganizerProfileOut | None = None
     model_config = {"from_attributes": True}

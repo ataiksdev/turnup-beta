@@ -10,12 +10,15 @@ import { useAuthStore } from "@/store/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { routes } from "@/lib/routes";
 import { useOfflineImage } from "@/lib/offlineImages";
+import { useCardTracking, type CardTracking } from "@/lib/useCardTracking";
 
 interface ForYouCardProps {
   event: Event;
   rank: 1 | 2 | 3;
   /** Optional reason label shown as a badge */
   reason?: string;
+  /** Where it's shown, for impression and click tracking (lib/useCardTracking.ts). */
+  tracking?: CardTracking;
 }
 
 const RANK_STYLES: Record<number, string> = {
@@ -24,7 +27,8 @@ const RANK_STYLES: Record<number, string> = {
   3: "bg-bg-elevated text-text border-2 border-border",
 };
 
-export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
+export function ForYouCard({ event, rank, reason, tracking }: ForYouCardProps) {
+  const { ref, onClick } = useCardTracking<HTMLAnchorElement>(event, tracking);
   const coverSrc = useOfflineImage(event.cover_image); // kept copy while offline
   const compact = rank !== 1; // #2 and #3 sit side by side at half width
   const { token } = useAuthStore();
@@ -52,6 +56,8 @@ export function ForYouCard({ event, rank, reason }: ForYouCardProps) {
 
   return (
     <Link
+      ref={ref}
+      onClick={onClick}
       href={routes.event(event.slug)}
       className={cn(
         "group block bg-bg-card rounded border-2 border-border overflow-hidden",

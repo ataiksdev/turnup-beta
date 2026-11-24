@@ -79,9 +79,13 @@ def _postgres(words: list[str], trigrams: bool):
     rank = func.ts_rank(tsv, tsq)
     if not trigrams:
         return matches, rank
-    # word_similarity(phrase, names) >= pg_trgm.word_similarity_threshold (0.6 by default)
-    fuzzy = phrase.op("<%")(name_document())
-    return or_(matches, fuzzy), rank + func.word_similarity(phrase, name_document())
+    # Every word must still match, each either as a prefix or close in spelling to a word in the
+    # title, tags, venue or city: word_similarity >= pg_trgm.word_similarity_threshold (0.6).
+    names = name_document()
+    per_word = [or_(tsv.op("@@")(func.to_tsquery(config, literal(f"{w}:*", Text))),
+                    literal(w, Text).op("<%")(names))
+                for w in words]
+    return and_(*per_word), rank + func.word_similarity(phrase, names)
 
 
 _FIELDS = (Event.title, Event.venue_name, Event.city, Event.tags, Event.description)

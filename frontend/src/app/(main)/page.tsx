@@ -204,7 +204,8 @@ export default function DiscoverPage() {
             <ForYouCard
               event={topPicks[0]}
               rank={1}
-              reason={deriveReason(topPicks[0], prefs)}
+              reason={topPicks[0].rec_reason ?? deriveReason(topPicks[0], prefs)}
+              tracking={{ surface: "for_you", position: 0 }}
             />
             {/* #2 and #3 — side by side */}
             {topPicks.length > 1 && (
@@ -214,7 +215,8 @@ export default function DiscoverPage() {
                     key={e.id}
                     event={e}
                     rank={(i + 2) as 2 | 3}
-                    reason={deriveReason(e, prefs)}
+                    reason={e.rec_reason ?? deriveReason(e, prefs)}
+                    tracking={{ surface: "for_you", position: i + 1 }}
                   />
                 ))}
               </div>
@@ -233,6 +235,7 @@ export default function DiscoverPage() {
         <EventCarousel
           title={`In ${user.city} This Weekend`}
           events={inCity}
+          surface="home_city"
         />
       )}
 
@@ -240,12 +243,13 @@ export default function DiscoverPage() {
         <EventCarousel
           title={`Because You Love ${CAT_LABELS[topCatSlug] ?? topCatSlug}`}
           events={byCat}
+          surface="home_category"
         />
       )}
 
       {/* Hero featured event — full bleed */}
       {!loadingFeatured && heroEvent && (
-        <HeroEvent event={heroEvent} />
+        <HeroEvent event={heroEvent} tracking={{ surface: "featured", position: 0 }} />
       )}
 
       {/* Trending (hidden offline when there's nothing loaded to show) */}
@@ -254,6 +258,7 @@ export default function DiscoverPage() {
           title="Trending Now"
           events={trending}
           loading={loadingTrending}
+          surface="trending"
           seeAllHref="/discover?trending=true"
         />
       )}
@@ -264,6 +269,8 @@ export default function DiscoverPage() {
           title={user ? "More for You" : "You Might Like"}
           events={forYou.slice(3)}
           loading={false}
+          surface="for_you"
+          positionOffset={3}
         />
       )}
 
@@ -273,6 +280,7 @@ export default function DiscoverPage() {
           title="Free to Attend"
           events={free}
           loading={loadingFree}
+          surface="free"
           seeAllHref="/discover?free=true"
         />
       )}

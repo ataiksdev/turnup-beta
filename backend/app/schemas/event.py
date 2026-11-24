@@ -130,6 +130,10 @@ class EventOut(BaseModel):
     # Only populated by GET /events/following (network-based discovery)
     following_count: int = 0
     following_hosted: bool = False
+    # Only populated by GET /events/for-you: why it was picked, and
+    # the id the app sends back with impressions and clicks (docs/recommendations-spec.md).
+    rec_reason: str | None = None
+    rec_request_id: str | None = None
     model_config = {"from_attributes": True}
 
 

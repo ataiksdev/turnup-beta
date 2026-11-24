@@ -18,6 +18,7 @@ from app.routers import communities
 from app.routers import uploads
 from app.routers import discovery
 from app.routers import admin_venues, agents, plus, venue_bookings, venue_portal, venues
+from app.routers import track
 
 os.makedirs("data", exist_ok=True)
 logger = logging.getLogger("turnup")
@@ -80,6 +81,7 @@ app.include_router(agents.router)
 app.include_router(admin_venues.router)
 app.include_router(plus.router)
 app.include_router(discovery.router)
+app.include_router(track.router)
 
 
 @app.get("/api/health")

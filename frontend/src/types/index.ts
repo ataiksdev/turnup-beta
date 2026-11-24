@@ -33,6 +33,12 @@ export interface User {
   plus_until?: string | null;
   show_plus_badge?: boolean;
   wrapped_opt_in?: boolean;
+  /** Data choices (docs/recommendations-spec.md). */
+  birth_year?: number | null;
+  gender?: "female" | "male" | "non_binary" | "prefer_not_to_say" | null;
+  personalized_recs?: boolean;
+  profiling_consent?: boolean;
+  profiling_consent_at?: string | null;
   /** Public profiles: a member who shows the badge. */
   plus_badge?: boolean;
   created_at?: string;
@@ -115,6 +121,9 @@ export interface Event {
   allow_ticket_transfers?: boolean;
   following_count?: number;
   following_hosted?: boolean;
+  /** GET /events/for-you only: why it was picked, and the id sent back with impressions/clicks. */
+  rec_reason?: string | null;
+  rec_request_id?: string | null;
 }
 
 export interface Comment {

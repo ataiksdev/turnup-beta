@@ -73,6 +73,22 @@ Spec and decisions: [`docs/venues-spec.md`](docs/venues-spec.md). In short:
 
 `scripts/e2e/marketplace.js` drives the main journeys in a browser (instructions in the file).
 
+## Recommendations and activity data
+
+Spec: [`docs/recommendations-spec.md`](docs/recommendations-spec.md). The app logs what people
+do (feed impressions, clicks, views, searches, ticket choices, shares) to `POST /api/track`,
+and the API logs saves, RSVPs, orders, check-ins and reviews itself, all into `activity_log`.
+The worker turns that into `event_features` (every 15 minutes) and `user_features` (nightly),
+which the `/events/for-you` ranker reads. People control it in Settings > Your data
+(personalisation on by default, profiling opt-in off by default); activity is kept 180 days.
+
+```bash
+cd backend
+python -m app.cli seed-activity    # synthetic people + 45 days of activity (DEBUG=true only)
+python -m app.cli recs-features    # recompute features now
+python -m app.cli recs-eval        # offline ranker evaluation vs popular/random baselines
+```
+
 ## Database migrations
 
 The schema is managed by Alembic (`backend/migrations/`). The API applies migrations on
