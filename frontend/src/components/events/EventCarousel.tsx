@@ -10,10 +10,13 @@ interface EventCarouselProps {
   loading?: boolean;
   seeAllHref?: string;
   cardSize?: "sm" | "md" | "lg";
+  /** Feed name for impression/click tracking; positions count from `positionOffset`. */
+  surface?: string;
+  positionOffset?: number;
 }
 
 export function EventCarousel({
-  title, events, loading, seeAllHref, cardSize = "md",
+  title, events, loading, seeAllHref, cardSize = "md", surface, positionOffset = 0,
 }: EventCarouselProps) {
   // Don't render the section at all when events loaded as empty
   if (!loading && events !== undefined && events.length === 0) return null;
@@ -35,7 +38,10 @@ export function EventCarousel({
       <div className="snap-scroll px-4 pb-2">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <EventCardSkeleton key={i} />)
-          : events?.map((e) => <EventCard key={e.id} event={e} size={cardSize} />)}
+          : events?.map((e, i) => (
+              <EventCard key={e.id} event={e} size={cardSize}
+                tracking={surface ? { surface, position: positionOffset + i } : undefined} />
+            ))}
       </div>
     </section>
   );

@@ -10,9 +10,11 @@ interface ShareButtonProps {
   className?: string;
   iconClassName?: string;
   size?: number;
+  /** Called after sharing: "native" (the phone's share sheet) or "copy_link". */
+  onShared?: (channel: "native" | "copy_link") => void;
 }
 
-export function ShareButton({ title, text, url, className, iconClassName, size = 18 }: ShareButtonProps) {
+export function ShareButton({ title, text, url, className, iconClassName, size = 18, onShared }: ShareButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
@@ -20,6 +22,7 @@ export function ShareButton({ title, text, url, className, iconClassName, size =
     if (navigator.share) {
       try {
         await navigator.share({ title, text: text ?? title, url });
+        onShared?.("native");
       } catch {
         // User cancelled — not an error
       }
@@ -27,6 +30,7 @@ export function ShareButton({ title, text, url, className, iconClassName, size =
     }
     // Clipboard fallback for desktop / plain-HTTP origins
     copyToClipboard(url);
+    onShared?.("copy_link");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

@@ -13,6 +13,7 @@ import { Notice } from "@/components/layout/AuthShell";
 import { timeAgo } from "@/lib/utils";
 import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { MarketplaceLinks } from "@/components/settings/MarketplaceLinks";
+import { DataSettings } from "@/components/settings/DataSettings";
 
 function Section({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -392,6 +393,7 @@ export default function SettingsPage() {
         <PasswordSection />
         <TwoFactorSection />
         <SessionsSection />
+        <DataSettings />
         <Button variant="secondary" fullWidth onClick={logoutEverywhere}>
           <LogOut size={16} /> Log out
         </Button>

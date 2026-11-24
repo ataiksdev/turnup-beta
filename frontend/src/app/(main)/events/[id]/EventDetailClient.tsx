@@ -26,6 +26,7 @@ import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { EventMap } from "@/components/events/EventMap";
+import { useEventPageTracking } from "@/lib/useEventPageTracking";
 import { EventDeals, EventVenueCard, GuestVenueReview, MembersOnlyNotice, TierPlusBadges } from "@/components/events/EventMarketplace";
 
 function SeriesSection({ seriesId, currentEventId }: { seriesId: string; currentEventId: string }) {
@@ -208,6 +209,8 @@ export function EventDetailClient() {
     idempotencyKeyRef.current = null;
   }
 
+  // Set below by useEventPageTracking (needs the cart, which is worked out after this).
+  const paymentClosedRef = useRef<() => void>(() => {});
   const openPaystack = useCallback((pubKey: string, email: string, amountKobo: number, reference: string) => {
     const PaystackPop = (window as any).PaystackPop;
     if (!PaystackPop) return;
@@ -218,7 +221,7 @@ export function EventDetailClient() {
       ref: reference,
       currency: "NGN",
       channels: ["card", "bank", "ussd", "qr", "bank_transfer", "mobile_money"],
-      onClose: () => setPaymentPending(false),
+      onClose: () => { setPaymentPending(false); paymentClosedRef.current(); },
       callback: async () => {
         try {
           const confirmed = await eventsApi.verifyPayment(token!, eid, reference);
@@ -250,6 +253,14 @@ export function EventDetailClient() {
     const tier = tiers?.find((t) => t.id === item.tier_id);
     return sum + (tier ? tier.price * item.quantity : 0);
   }, 0);
+
+  const pageTracking = useEventPageTracking(
+    event, { value: cartTotal, count: cartItems.reduce((n, i) => n + i.quantity, 0) }, purchaseSuccess);
+  paymentClosedRef.current = pageTracking.onPaymentClosed;
+  function changeQty(tier: { id: string; name: string; price: number }, qty: number) {
+    setCart((c) => ({ ...c, [tier.id]: qty }));
+    pageTracking.onTierChange(tier, qty);
+  }
 
   const purchaseMutation = useMutation({
     mutationFn: () => {
@@ -421,6 +432,7 @@ export function EventDetailClient() {
                 title={event.title}
                 text={`Check out ${event.title} on Turnup!`}
                 url={shareUrl}
+                onShared={pageTracking.onShared}
                 className="bg-bg/60 backdrop-blur-sm hover:bg-bg/80"
                 iconClassName="text-white"
               />
@@ -648,8 +660,10 @@ export function EventDetailClient() {
 
         {/* Venue map + directions (physical and hybrid events) */}
         {event.event_type !== "virtual" && (
-          <EventMap venue={event.venue_name} address={event.address} city={event.city}
-            latitude={event.latitude} longitude={event.longitude} />
+          <div ref={pageTracking.mapRef}>
+            <EventMap venue={event.venue_name} address={event.address} city={event.city}
+              latitude={event.latitude} longitude={event.longitude} />
+          </div>
         )}
 
         {/* Venue marketplace and Turnup+ */}
@@ -660,7 +674,7 @@ export function EventDetailClient() {
 
         {/* Ticket tiers */}
         {tiers && tiers.length > 0 && !hasEnded && (
-          <section aria-labelledby="tickets-heading">
+          <section aria-labelledby="tickets-heading" ref={pageTracking.ticketsRef}>
             <h2 id="tickets-heading" className="text-base font-bold text-text flex items-center gap-2 mb-3">
               <Ticket size={18} className="text-primary" /> Tickets
             </h2>
@@ -707,7 +721,7 @@ export function EventDetailClient() {
                         <span className="text-sm text-text-muted">Quantity</span>
                         <div className="flex items-center gap-3">
                           <button
-                            onClick={() => setCart((c) => ({ ...c, [tier.id]: Math.max(0, (c[tier.id] ?? 0) - 1) }))}
+                            onClick={() => changeQty(tier, Math.max(0, qtyInCart - 1))}
                             disabled={qtyInCart === 0}
                             className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors disabled:opacity-40"
                           >
@@ -715,7 +729,7 @@ export function EventDetailClient() {
                           </button>
                           <span className="font-black text-text w-6 text-center">{qtyInCart}</span>
                           <button
-                            onClick={() => setCart((c) => ({ ...c, [tier.id]: Math.min(maxQty, (c[tier.id] ?? 0) + 1) }))}
+                            onClick={() => changeQty(tier, Math.min(maxQty, qtyInCart + 1))}
                             disabled={qtyInCart >= maxQty}
                             className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors disabled:opacity-40"
                           >

@@ -82,22 +82,40 @@ def test_pre_alembic_database_is_adopted(tmp_path):
     assert _alembic("check", url=url).returncode == 0
 
 
+# Seeds rows into a database held at an OLD revision. The models describe the newest schema,
+# so inserting through them breaks whenever a later migration adds a column. This inserts only
+# the columns the old table has, filling the models' Python-side defaults for the rest.
+OLD_SCHEMA_INSERT = (
+    "import sqlalchemy as sa\n"
+    "import app.main  # noqa: F401  (registers every model)\n"
+    "from app.database import Base, engine\n"
+    "async def insert(table, **values):\n"
+    "    async with engine.begin() as c:\n"
+    "        have = {col['name'] for col in await c.run_sync(lambda s: sa.inspect(s).get_columns(table))}\n"
+    "        row = {}\n"
+    "        for col in Base.metadata.tables[table].columns:\n"
+    "            if col.name not in have:\n"
+    "                continue\n"
+    "            if col.name in values:\n"
+    "                row[col.name] = values[col.name]\n"
+    "            elif col.default is not None:\n"
+    "                arg = col.default.arg\n"
+    "                row[col.name] = arg(None) if callable(arg) else arg\n"
+    "        await c.execute(sa.insert(sa.table(table, *map(sa.column, row))).values(**row))\n"
+)
+
+
 def test_retired_themes_move_to_the_default(db_url):
     """Migration 0005: Lagoon, Palm and Neon Night were removed; people on them get the
     default theme with their light/dark/system choice kept."""
     assert _alembic("upgrade", "0004", url=db_url).returncode == 0
-    seed = _run([sys.executable, "-c", (
+    seed = _run([sys.executable, "-c", OLD_SCHEMA_INSERT + (
         "import asyncio, uuid\n"
-        "from app.database import AsyncSessionLocal\n"
-        "import app.main  # noqa: F401  (registers every model, so relationships resolve)\n"
-        "from app.models.user import User\n"
         "async def main():\n"
-        "    async with AsyncSessionLocal() as db:\n"
-        "        for name, pref in [('m_neon', 'neon:light'), ('m_palm', 'palm:system'),\n"
-        "                           ('m_lagoon', 'lagoon:dark'), ('m_gold', 'gold:dark'), ('m_none', None)]:\n"
-        "            db.add(User(id=str(uuid.uuid4()), username=name, email=f'{name}@example.com',\n"
-        "                        full_name=name, theme_preference=pref))\n"
-        "        await db.commit()\n"
+        "    for name, pref in [('m_neon', 'neon:light'), ('m_palm', 'palm:system'),\n"
+        "                       ('m_lagoon', 'lagoon:dark'), ('m_gold', 'gold:dark'), ('m_none', None)]:\n"
+        "        await insert('users', id=str(uuid.uuid4()), username=name, email=f'{name}@example.com',\n"
+        "                     full_name=name, theme_preference=pref)\n"
         "asyncio.run(main())\n"
     )], db_url)
     assert seed.returncode == 0, seed.stderr
@@ -122,23 +140,16 @@ def test_old_usd_prices_become_naira(db_url):
     """Migration 0006: events and ticket types stored as USD (the first versions' default) are
     relabelled NGN, the only currency payments are taken in."""
     assert _alembic("upgrade", "0005", url=db_url).returncode == 0
-    seed = _run([sys.executable, "-c", (
+    seed = _run([sys.executable, "-c", OLD_SCHEMA_INSERT + (
         "import asyncio, uuid\n"
         "from datetime import datetime, timedelta, timezone\n"
-        "import app.main  # noqa: F401  (registers every model)\n"
-        "from app.database import AsyncSessionLocal\n"
-        "from app.models.user import User\n"
-        "from app.models.event import Event\n"
-        "from app.models.organizer import TicketTier\n"
         "async def main():\n"
-        "    async with AsyncSessionLocal() as db:\n"
-        "        uid = str(uuid.uuid4()); now = datetime.now(timezone.utc)\n"
-        "        db.add(User(id=uid, username='usd_host', email='usd@example.com', full_name='Host'))\n"
-        "        db.add(Event(id='ev-usd', slug='ev-usd', title='Old Party', description='d'*30, venue_name='Hall',\n"
-        "                     address='1 Street', city='Lagos', country='NG', start_date=now, end_date=now + timedelta(hours=2),\n"
-        "                     host_id=uid, status='published', currency='USD'))\n"
-        "        db.add(TicketTier(id='tier-usd', event_id='ev-usd', name='Regular', price=3500, currency='USD'))\n"
-        "        await db.commit()\n"
+        "    uid = str(uuid.uuid4()); now = datetime.now(timezone.utc)\n"
+        "    await insert('users', id=uid, username='usd_host', email='usd@example.com', full_name='Host')\n"
+        "    await insert('events', id='ev-usd', slug='ev-usd', title='Old Party', description='d'*30, venue_name='Hall',\n"
+        "                 address='1 Street', city='Lagos', country='NG', start_date=now, end_date=now + timedelta(hours=2),\n"
+        "                 host_id=uid, status='published', currency='USD')\n"
+        "    await insert('ticket_tiers', id='tier-usd', event_id='ev-usd', name='Regular', price=3500, currency='USD')\n"
         "asyncio.run(main())\n"
     )], db_url)
     assert seed.returncode == 0, seed.stderr
@@ -164,29 +175,19 @@ def test_api_stores_prices_in_naira_whatever_is_sent():
     assert EventCreate.model_fields["currency"].default == "NGN"
 
 
-_SEED_ORDERS = (
+_SEED_ORDERS = OLD_SCHEMA_INSERT + (
     "import asyncio, uuid\n"
     "from datetime import datetime, timedelta, timezone\n"
-    "import app.main  # noqa: F401  (registers every model)\n"
-    "from app.database import AsyncSessionLocal\n"
-    "from app.models.user import User\n"
-    "from app.models.event import Event\n"
-    "from app.models.organizer import TicketOrder, TicketTier\n"
     "async def main():\n"
-    "    async with AsyncSessionLocal() as db:\n"
-    "        uid = str(uuid.uuid4()); now = datetime.now(timezone.utc)\n"
-    "        db.add(User(id=uid, username='code_host', email='code@example.com', full_name='Host'))\n"
-    "        await db.flush()\n"
-    "        db.add(Event(id='ev-code', slug='ev-code', title='Party', description='d'*30, venue_name='Hall',\n"
-    "                     address='1 Street', city='Lagos', country='NG', start_date=now, end_date=now + timedelta(hours=2),\n"
-    "                     host_id=uid, status='published'))\n"
-    "        await db.flush()\n"
-    "        db.add(TicketTier(id='tier-code', event_id='ev-code', name='Regular', price=0))\n"
-    "        await db.flush()\n"
-    "        for oid, status in (('order-confirmed', 'confirmed'), ('order-pending', 'pending')):\n"
-    "            db.add(TicketOrder(id=oid, user_id=uid, event_id='ev-code', tier_id='tier-code', quantity=1,\n"
-    "                               unit_price=0, total_price=0, status=status))\n"
-    "        await db.commit()\n"
+    "    uid = str(uuid.uuid4()); now = datetime.now(timezone.utc)\n"
+    "    await insert('users', id=uid, username='code_host', email='code@example.com', full_name='Host')\n"
+    "    await insert('events', id='ev-code', slug='ev-code', title='Party', description='d'*30, venue_name='Hall',\n"
+    "                 address='1 Street', city='Lagos', country='NG', start_date=now, end_date=now + timedelta(hours=2),\n"
+    "                 host_id=uid, status='published')\n"
+    "    await insert('ticket_tiers', id='tier-code', event_id='ev-code', name='Regular', price=0)\n"
+    "    for oid, status in (('order-confirmed', 'confirmed'), ('order-pending', 'pending')):\n"
+    "        await insert('ticket_orders', id=oid, user_id=uid, event_id='ev-code', tier_id='tier-code', quantity=1,\n"
+    "                     unit_price=0, total_price=0, status=status)\n"
     "asyncio.run(main())\n"
 )
 

@@ -3,7 +3,9 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -36,6 +38,8 @@ from app.services.auth import (
 from app.services.email import (
     send_magic_link_email, send_password_reset_email, send_verification_email,
 )
+from app.services.activity import forget_user, record as record_activity
+from app.services.rec_features import clear_profiling
 from app.services.sms import send_otp_sms
 from app.services.totp import (
     generate_backup_codes, generate_totp_secret, get_qr_svg, get_totp_uri,
@@ -120,6 +124,7 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
     )
     db.add(user)
     await db.flush()
+    record_activity(db, "user_registered", user_id=user.id, props={"method": "email"})
 
     # Send verification email (non-fatal — user is created regardless)
     ev_token = secrets.token_urlsafe(64)
@@ -482,6 +487,8 @@ async def delete_account(
     user.is_deleted = True
     user.is_active = False
     user.deleted_at = datetime.now(timezone.utc)
+    # Their activity log and everything worked out from it goes now, not at the later purge.
+    await forget_user(db, user.id)
     # Revoke all sessions
     await db.execute(delete(UserSession).where(UserSession.user_id == user.id))
     await db.flush()
@@ -926,6 +933,11 @@ async def complete_onboarding(
     if payload.goes_out_when is not None:
         user.goes_out_when = payload.goes_out_when
     user.onboarding_completed = True
+    record_activity(db, "onboarding_completed", user_id=user.id, props={
+        "categories": payload.category_preferences, "city": payload.city,
+        "budget": payload.price_sensitivity, "format": payload.event_format_pref,
+        "goes_out_when": payload.goes_out_when,
+    })
     await db.flush()
     return user
 
@@ -936,6 +948,11 @@ class PreferencesUpdate(BaseModel):
     price_sensitivity: str | None = None
     event_format_pref: str | None = None
     goes_out_when: str | None = None
+    # Data choices (docs/recommendations-spec.md). birth_year and gender can be cleared with null.
+    personalized_recs: bool | None = None
+    profiling_consent: bool | None = None
+    birth_year: int | None = Field(None, ge=1900, le=datetime.now(timezone.utc).year - 13)
+    gender: Literal["female", "male", "non_binary", "prefer_not_to_say"] | None = None
 
 
 @router.patch("/preferences", response_model=UserMe)
@@ -944,15 +961,32 @@ async def update_preferences(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    changed: dict = {}
+
+    def put(field: str, value):
+        if getattr(user, field) != value:
+            changed[field] = value
+            setattr(user, field, value)
+
     if payload.category_preferences is not None:
-        user.category_preferences = ",".join(payload.category_preferences)
-    if payload.city is not None:
-        user.city = payload.city
-    if payload.price_sensitivity is not None:
-        user.price_sensitivity = payload.price_sensitivity
-    if payload.event_format_pref is not None:
-        user.event_format_pref = payload.event_format_pref
-    if payload.goes_out_when is not None:
-        user.goes_out_when = payload.goes_out_when
+        put("category_preferences", ",".join(payload.category_preferences))
+    for field in ("city", "price_sensitivity", "event_format_pref", "goes_out_when", "personalized_recs"):
+        if getattr(payload, field) is not None:
+            put(field, getattr(payload, field))
+    for field in ("birth_year", "gender"):          # null clears these
+        if field in payload.model_fields_set:
+            put(field, getattr(payload, field))
+    if payload.profiling_consent is not None and payload.profiling_consent != user.profiling_consent:
+        put("profiling_consent", payload.profiling_consent)
+        user.profiling_consent_at = datetime.now(timezone.utc)
+        if not payload.profiling_consent:
+            await clear_profiling(db, user.id)
+    if changed:
+        # The values themselves only for taste fields; age, gender and consent are noted by name.
+        sensitive = {"birth_year", "gender", "profiling_consent"}
+        record_activity(db, "profile_updated", user_id=user.id, props={
+            "fields": sorted(changed),
+            "values": {k: v for k, v in changed.items() if k not in sensitive},
+        })
     await db.flush()
     return user
