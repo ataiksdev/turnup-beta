@@ -1,6 +1,10 @@
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 IS_SQLITE = settings.database_url.startswith("sqlite")
 
@@ -99,7 +103,9 @@ async def _legacy_column_patches(conn):
         ("users", "price_sensitivity", "VARCHAR(20)"),
         ("users", "event_format_pref", "VARCHAR(20)"),
         ("users", "goes_out_when", "VARCHAR(20)"),
-        ("ticket_orders", "ticket_code", "VARCHAR(36) UNIQUE"),
+        # No UNIQUE here: SQLite can't add a UNIQUE column (it raised, and the column was never
+        # added); uniqueness comes from the index created below, as in the baseline schema.
+        ("ticket_orders", "ticket_code", "VARCHAR(36)"),
         ("ticket_orders", "checked_in_at", "DATETIME"),
         ("events", "review_status", "VARCHAR(20) NOT NULL DEFAULT 'approved'"),
         ("events", "review_note", "TEXT"),
@@ -116,14 +122,27 @@ async def _legacy_column_patches(conn):
         ("organizer_profiles", "reviewed_by_id", "VARCHAR(36)"),
         ("organizer_profiles", "reviewed_at", "DATETIME"),
     ]
+    from sqlalchemy import text
     for table, column, definition in new_columns:
         try:
             async with conn.begin_nested():
-                await conn.execute(
-                    __import__("sqlalchemy").text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-                )
-        except Exception:
-            pass  # column already exists
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+        except Exception as exc:
+            # Expected when the column is already there. Anything else must not pass silently:
+            # the database would be stamped as up to date without the column.
+            if not _is_duplicate_column(exc):
+                logger.error("Upgrading the legacy database: couldn't add %s.%s: %s", table, column, exc)
+    try:
+        async with conn.begin_nested():
+            await conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_ticket_orders_ticket_code ON ticket_orders (ticket_code)"))
+    except Exception as exc:
+        logger.error("Upgrading the legacy database: couldn't index ticket_orders.ticket_code: %s", exc)
+
+
+def _is_duplicate_column(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "duplicate column" in msg or "already exists" in msg
 
 
 async def _ensure_scout_bot(session):

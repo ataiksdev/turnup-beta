@@ -173,3 +173,95 @@ def test_api_stores_prices_in_naira_whatever_is_sent():
     from app.schemas.organizer import TicketTierCreate
     assert TicketTierCreate(name="VIP", price=5000, currency="USD").currency == "NGN"
     assert EventCreate.model_fields["currency"].default == "NGN"
+
+
+_SEED_ORDERS = (
+    "import asyncio, uuid\n"
+    "from datetime import datetime, timedelta, timezone\n"
+    "import app.main  # noqa: F401  (registers every model)\n"
+    "from app.database import AsyncSessionLocal\n"
+    "from app.models.user import User\n"
+    "from app.models.event import Event\n"
+    "from app.models.organizer import TicketOrder, TicketTier\n"
+    "async def main():\n"
+    "    async with AsyncSessionLocal() as db:\n"
+    "        uid = str(uuid.uuid4()); now = datetime.now(timezone.utc)\n"
+    "        db.add(User(id=uid, username='code_host', email='code@example.com', full_name='Host'))\n"
+    "        await db.flush()\n"
+    "        db.add(Event(id='ev-code', slug='ev-code', title='Party', description='d'*30, venue_name='Hall',\n"
+    "                     address='1 Street', city='Lagos', country='NG', start_date=now, end_date=now + timedelta(hours=2),\n"
+    "                     host_id=uid, status='published'))\n"
+    "        await db.flush()\n"
+    "        db.add(TicketTier(id='tier-code', event_id='ev-code', name='Regular', price=0))\n"
+    "        await db.flush()\n"
+    "        for oid, status in (('order-confirmed', 'confirmed'), ('order-pending', 'pending')):\n"
+    "            db.add(TicketOrder(id=oid, user_id=uid, event_id='ev-code', tier_id='tier-code', quantity=1,\n"
+    "                               unit_price=0, total_price=0, status=status))\n"
+    "        await db.commit()\n"
+    "asyncio.run(main())\n"
+)
+
+_DROP_TICKET_CODE = (
+    "import asyncio, sqlalchemy as sa\n"
+    "from app.database import engine\n"
+    "async def main():\n"
+    "    async with engine.begin() as c:\n"
+    "        await c.execute(sa.text('DROP INDEX IF EXISTS ix_ticket_orders_ticket_code'))\n"
+    "        await c.execute(sa.text('ALTER TABLE ticket_orders DROP COLUMN ticket_code'))\n"
+    "asyncio.run(main())\n"
+)
+
+_READ_TICKET_CODES = (
+    "import asyncio, sqlalchemy as sa\n"
+    "from app.database import engine\n"
+    "async def main():\n"
+    "    async with engine.connect() as c:\n"
+    "        rows = dict((await c.execute(sa.text('SELECT id, ticket_code FROM ticket_orders'))).all())\n"
+    "        idx = await c.run_sync(lambda s: [i for i in sa.inspect(s).get_indexes('ticket_orders')\n"
+    "                                          if i['column_names'] == ['ticket_code']])\n"
+    "        print(repr({'confirmed': rows.get('order-confirmed'), 'pending': rows.get('order-pending'),\n"
+    "                    'unique_index': any(i['unique'] for i in idx)}))\n"
+    "asyncio.run(main())\n"
+)
+
+
+def test_missing_ticket_code_is_repaired(db_url):
+    """Migration 0007: a database stamped as up to date but missing ticket_orders.ticket_code (an
+    old SQLite database upgraded by the old code) gets the column, its unique index, and codes
+    for confirmed tickets. Listing tickets failed with 'no such column' before."""
+    assert _alembic("upgrade", "0006", url=db_url).returncode == 0
+    for script in (_SEED_ORDERS, _DROP_TICKET_CODE):
+        r = _run([sys.executable, "-c", script], db_url)
+        assert r.returncode == 0, r.stderr
+    up = _alembic("upgrade", "head", url=db_url)
+    assert up.returncode == 0, up.stderr
+    read = _run([sys.executable, "-c", _READ_TICKET_CODES], db_url)
+    assert read.returncode == 0, read.stderr
+    state = eval(read.stdout.strip().splitlines()[-1])
+    assert len(state["confirmed"] or "") == 36 and state["pending"] is None and state["unique_index"], state
+    # And the schema now matches the models again.
+    check = _alembic("check", url=db_url)
+    assert check.returncode == 0, check.stdout + check.stderr
+
+
+def test_legacy_sqlite_database_gets_ticket_code(tmp_path):
+    """The upgrade path for databases from before migrations: SQLite can't ADD a UNIQUE column, which
+    used to be swallowed so the column was never added. Now it's added with a separate unique index."""
+    url = f"sqlite+aiosqlite:///{tmp_path / 'legacy-codes.db'}"
+    assert _alembic("upgrade", "0001", url=url).returncode == 0
+    for script in (_DROP_TICKET_CODE, (
+        "import asyncio, sqlalchemy as sa\n"
+        "from app.database import engine\n"
+        "async def main():\n"
+        "    async with engine.begin() as c:\n"
+        "        await c.execute(sa.text('DROP TABLE alembic_version'))\n"
+        "asyncio.run(main())\n")):
+        r = _run([sys.executable, "-c", script], url)
+        assert r.returncode == 0, r.stderr
+    r = _run([sys.executable, "-c",
+              "import asyncio; from app.database import init_db; asyncio.run(init_db())"], url)
+    assert r.returncode == 0, r.stderr
+    read = _run([sys.executable, "-c", _READ_TICKET_CODES], url)
+    assert read.returncode == 0, read.stderr
+    assert eval(read.stdout.strip().splitlines()[-1])["unique_index"] is True
+    assert _alembic("check", url=url).returncode == 0
