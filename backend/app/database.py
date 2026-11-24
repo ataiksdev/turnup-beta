@@ -45,7 +45,7 @@ async def get_db():
 # this in step when a migration adds a column to a baseline table or adds a table.
 POST_BASELINE_COLUMNS = {
     "users": {"theme_preference", "plus_until", "show_plus_badge", "wrapped_opt_in",        # 0002, 0003
-              "birth_year", "gender", "personalized_recs", "profiling_consent",            # 0007
+              "birth_year", "gender", "personalized_recs", "profiling_consent",            # 0008
               "profiling_consent_at"},
     "events": {"host_venue_id", "venue_id", "members_only", "fast_lane_enabled",            # 0003
                "allow_ticket_transfers"},
@@ -63,7 +63,7 @@ POST_BASELINE_COLUMNS = {
 
 def _post_baseline_tables() -> set[str]:
     """Every table defined in app/models/venue.py (migration 0003) and app/models/activity.py
-    (migration 0007)."""
+    (migration 0008)."""
     from app.models import activity, venue
     return {m.__tablename__ for mod in (venue, activity) for m in vars(mod).values()
             if isinstance(m, type) and issubclass(m, Base) and m is not Base and hasattr(m, "__tablename__")}

@@ -1,7 +1,7 @@
 """activity tracking and recommendation features
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0008
+Revises: 0007
 Create Date: 2026-11-24 17:44:41
 
 The activity log (what people do in the app), the per-user and per-event numbers the
@@ -14,8 +14,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = '0007'
-down_revision: Union[str, None] = '0006'
+revision: str = '0008'
+down_revision: Union[str, None] = '0007'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -17,7 +17,7 @@ that changes).
 
 | Piece | File |
 |---|---|
-| Tables | `backend/app/models/activity.py`, migration `0007` |
+| Tables | `backend/app/models/activity.py`, migration `0008` |
 | Ingest, server events, linking, deletion, retention | `backend/app/services/activity.py`, `routers/track.py` |
 | Features | `backend/app/services/rec_features.py` |
 | Ranker | `backend/app/services/recommender.py` |
