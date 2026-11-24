@@ -10,6 +10,8 @@
 3. Score: a weighted sum of named parts (WEIGHTS). The biggest part becomes the reason
    shown on the card ("Because you like Music", "3 people you follow are going").
 4. Re-rank: no more than a couple of events from one category or organizer near the top.
+   Then discovery slots: a couple of fixed positions go to good new events few people have
+   seen yet, so new events get the impressions they need to earn a place on their own.
 5. Log: one `recs_served` row per response (ranker version, events in order), which is what
    the feed's click-through by position is measured from.
 """
@@ -54,6 +56,12 @@ BUDGETS = {"free": 0, "budget": 5000, "mid": 20000, "any": None}
 DIVERSITY_CATEGORY_PENALTY = 0.7
 DIVERSITY_HOST_PENALTY = 0.9
 
+# Discovery slots: positions (0-based) kept for new events with little exposure so far.
+DISCOVERY_SLOTS = (3, 9)
+DISCOVERY_MAX_IMPRESSIONS = 40      # distinct people shown it in the last 7 days
+DISCOVERY_MAX_AGE_DAYS = 14         # listed within this long
+DISCOVERY_MIN_ORGANIZER_QUALITY = 0.4
+
 
 def _utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
@@ -95,6 +103,7 @@ class RecResult:
     events: list[Event]
     reasons: dict[str, str]
     request_id: str
+    discovery_ids: list[str] = field(default_factory=list)
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────────
@@ -123,15 +132,17 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
     await _load_context(db, viewer, [e.id for e in candidates])
     scored = [score_event(viewer, e, feats.get(e.id)) for e in candidates]
     picked = rerank(scored, limit)
+    picked, discovery = add_discovery(picked, scored, feats, now, limit)
     result = RecResult(events=[s.event for s in picked],
                        reasons={s.event.id: s.reason for s in picked if s.reason},
-                       request_id=new_request_id())
+                       request_id=new_request_id(), discovery_ids=discovery)
     if log:
         record(db, "recs_served", user_id=user.id if user else None, surface=surface,
                anonymous_id=anonymous_id, rec_request_id=result.request_id, props={
                    "ranker": RANKER_VERSION,
                    "event_ids": [e.id for e in result.events],
                    "personal": viewer.personal, "has_location": lat is not None,
+                   "discovery_ids": discovery,
                })
     return result
 
@@ -447,3 +458,48 @@ def rerank(scored: list[Scored], limit: int) -> list[Scored]:
         cats[choice.event.category_id or "-"] += 1
         hosts[choice.event.host_id] += 1
     return picked
+
+
+# ── 5. Discovery slots ──────────────────────────────────────────────────────────
+
+
+def is_discovery_candidate(s: Scored, f: EventFeatures | None, now: datetime) -> bool:
+    """New, barely seen, worth showing: listed in the last DISCOVERY_MAX_AGE_DAYS, shown to
+    fewer than DISCOVERY_MAX_IMPRESSIONS people this week, not sold out, from an organizer
+    without a poor record, and not a bad fit for this person (score above zero)."""
+    e = s.event
+    if e.created_at is None or now - _utc(e.created_at) > timedelta(days=DISCOVERY_MAX_AGE_DAYS):
+        return False
+    if f is not None:
+        if f.impressions_7d >= DISCOVERY_MAX_IMPRESSIONS:
+            return False
+        if f.organizer_quality < DISCOVERY_MIN_ORGANIZER_QUALITY:
+            return False
+    return "sold_out" not in s.parts and s.score > 0
+
+
+def add_discovery(picked: list[Scored], scored: list[Scored], feats: dict[str, EventFeatures],
+                  now: datetime, limit: int) -> tuple[list[Scored], list[str]]:
+    """Put the best-scoring discovery candidate into each DISCOVERY_SLOTS position, unless the
+    event already there is one. Returns the new list and the ids that hold a discovery slot."""
+    eligible = {s.event.id for s in scored if is_discovery_candidate(s, feats.get(s.event.id), now)}
+    if not eligible:
+        return picked, []
+    out = list(picked)
+    taken = {s.event.id for s in out}
+    pool = sorted((s for s in scored if s.event.id in eligible and s.event.id not in taken),
+                  key=lambda s: -s.score)
+    slot_ids: list[str] = []
+    for slot in DISCOVERY_SLOTS:
+        if slot >= limit:
+            break
+        if slot < len(out) and out[slot].event.id in eligible:
+            slot_ids.append(out[slot].event.id)  # earned the place on its own
+            continue
+        if not pool:
+            break
+        choice = pool.pop(0)
+        choice.reason = "New on Turnup"
+        out.insert(min(slot, len(out)), choice)
+        slot_ids.append(choice.event.id)
+    return out[:limit], [i for i in slot_ids if i in {s.event.id for s in out[:limit]}]

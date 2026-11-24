@@ -175,7 +175,13 @@ Every function takes `as_of` and reads only data from before it.
    "Almost sold out", "3 km away", "In Lagos", "Popular right now".
 5. **Re-rank for variety:** each slot takes the best remaining event after −0.7 per event
    from the same category and −0.9 per event from the same organizer already above it.
-6. **Log:** a `recs_served` row with the order shown; the app sends the same
+6. **Discovery slots:** positions 4 and 10 (`DISCOVERY_SLOTS`) go to the best-scoring
+   event that is new (listed in the last 14 days), seen by fewer than 40 people this week,
+   not sold out, from an organizer with quality ≥ 0.4, and still a positive fit for this
+   person. An event that ranked into the slot on its own keeps it. Inserted cards say
+   "New on Turnup", and `recs_served.props.discovery_ids` records which events held the
+   slots, so their click-through can be compared with the slots' usual rate.
+7. **Log:** a `recs_served` row with the order shown; the app sends the same
    `rec_request_id` with impressions and clicks, so click-through by position and feed can
    be measured.
 
@@ -222,14 +228,14 @@ GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
 These use the data above but are features, not data collection:
 
 1. A/B testing: a fixed group per person, the group saved on `recs_served`.
-2. "Not interested" and "Hide this organizer" (kept outside `activity_log` so they outlive
-   retention), excluded in `_exclusions()`.
-3. Discovery slots for new events with few impressions (`event_features.impressions_7d`).
+2. ~~"Not interested" and "Hide this organizer"~~ (done: `hidden_items`, excluded in
+   `_exclusions()` and `_hidden_organizers()`).
+3. ~~Discovery slots for new events with few impressions~~ (done: section 4, step 6).
 4. Similar events / "people who went to X also went to Y".
 5. Ranker-driven weekend picks and "almost sold out" / price-drop alerts, with frequency caps.
 6. WhatsApp share links with a ref code (feeds a real `tastemaker_score`).
 7. Organizer insights: zero-result searches, best day and time, price benchmarks, booking curves.
-8. Better search (Postgres full-text, typo tolerance, "notify me").
+8. ~~Better search (Postgres full-text, typo tolerance, "notify me")~~ (done: `services/search.py`, `search_alerts`).
 9. Data rights: export, consent history, Privacy Policy and cookie notice.
 10. Admin data-health page.
 11. Lagos context: travel time, rain, payday, holidays.

@@ -289,3 +289,72 @@ async def test_offline_evaluation_scores_the_ranker_and_leaves_live_features_alo
     assert result["ranker"]["recall@10"] is not None
     db.expire_all()
     assert (await db.get(EventFeatures, liked)).demand_score == 0.123  # rolled back
+
+
+# ── Discovery slots ─────────────────────────────────────────────────────────────
+
+
+def _scored(score: float, *, age_days: float = 1, host: str | None = None, cat: str | None = None):
+    from app.services.recommender import Scored
+    e = Event(id=str(uuid.uuid4()), host_id=host or str(uuid.uuid4()), category_id=cat,
+              created_at=NOW() - timedelta(days=age_days))
+    return Scored(event=e, score=score, parts={})
+
+
+def _features(eid: str, impressions: int, quality: float = 0.5) -> EventFeatures:
+    return EventFeatures(event_id=eid, impressions_7d=impressions, organizer_quality=quality)
+
+
+def test_discovery_slots_go_to_new_events_few_people_have_seen():
+    from app.services.recommender import DISCOVERY_SLOTS, add_discovery
+    old = [_scored(10 - i * 0.1, age_days=60) for i in range(20)]          # established
+    seen = _scored(5, age_days=2)                                           # new but widely shown
+    fresh_a, fresh_b = _scored(3, age_days=1), _scored(2, age_days=3)       # new and unseen
+    stale = _scored(4, age_days=30)                                         # too old
+    poor = _scored(4.5, age_days=1)                                         # weak organizer
+    scored = old + [seen, fresh_a, fresh_b, stale, poor]
+    feats = {seen.event.id: _features(seen.event.id, 500), poor.event.id: _features(poor.event.id, 0, 0.2)}
+
+    picked, ids = add_discovery(old[:20], scored, feats, NOW(), 20)
+    assert len(picked) == 20
+    assert [picked[i].event.id for i in DISCOVERY_SLOTS] == [fresh_a.event.id, fresh_b.event.id]
+    assert ids == [fresh_a.event.id, fresh_b.event.id]
+    assert picked[DISCOVERY_SLOTS[0]].reason == "New on Turnup"
+    # Everything else keeps its order.
+    others = [s.event.id for i, s in enumerate(picked) if i not in DISCOVERY_SLOTS]
+    assert others == [s.event.id for s in old[:18]]
+
+
+def test_a_new_event_already_ranked_into_a_slot_keeps_it_and_bad_fits_are_skipped():
+    from app.services.recommender import DISCOVERY_SLOTS, add_discovery
+    ranked = [_scored(10 - i, age_days=60) for i in range(5)]
+    ranked[DISCOVERY_SLOTS[0]] = _scored(6.5, age_days=1)                  # earned slot 3 itself
+    disliked = _scored(-1, age_days=1)                                      # new, but a bad fit
+    picked, ids = add_discovery(ranked, ranked + [disliked], {}, NOW(), 10)
+    assert [s.event.id for s in picked] == [s.event.id for s in ranked]
+    assert ids == [ranked[DISCOVERY_SLOTS[0]].event.id]
+    assert disliked.event.id not in {s.event.id for s in picked}
+
+
+def test_short_feeds_and_no_candidates_are_left_alone():
+    from app.services.recommender import add_discovery
+    ranked = [_scored(5, age_days=60) for _ in range(3)]
+    assert add_discovery(ranked, ranked, {}, NOW(), 3) == (ranked, [])
+    fresh = _scored(1, age_days=1)
+    picked, ids = add_discovery(ranked, ranked + [fresh], {}, NOW(), 20)
+    assert [s.event.id for s in picked][-1] == fresh.event.id and ids == [fresh.event.id]
+
+
+async def test_for_you_logs_which_events_held_discovery_slots(client, db, host):
+    from app.services.recommender import DISCOVERY_SLOTS
+    h, uid = await make_user(db)
+    for _ in range(12):
+        await make_event(db, host[1])
+    r = await client.get("/api/events/for-you", headers=h, params={"limit": 20})
+    assert r.status_code == 200
+    served = [e["id"] for e in r.json()]
+    row = (await db.execute(select(Activity).where(Activity.user_id == uid, Activity.name == "recs_served")
+                            .order_by(Activity.id.desc()))).scalars().first()
+    ids = row.props["discovery_ids"]
+    assert ids and set(ids) <= set(served)
+    assert all(served.index(i) in DISCOVERY_SLOTS for i in ids)
