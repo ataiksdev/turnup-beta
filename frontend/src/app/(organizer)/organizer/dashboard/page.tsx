@@ -1,4 +1,5 @@
 "use client";
+import { UnmetSearchesCard } from "@/components/organizer/EventInsightsPanel";
 import { useQuery } from "@tanstack/react-query";
 import { organizerApi, usersApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
@@ -161,6 +162,11 @@ export default function OrganizerDashboardPage() {
           </div>
           <CalendarPlus size={28} className="text-primary shrink-0" />
         </Link>
+      </div>
+
+      {/* Demand nobody is meeting yet: zero-result searches in their city */}
+      <div className="px-4 mb-6">
+        <UnmetSearchesCard city={user?.city} />
       </div>
 
       {/* Recent events */}

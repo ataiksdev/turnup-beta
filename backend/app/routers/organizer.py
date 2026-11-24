@@ -191,6 +191,18 @@ async def organizer_dashboard(
 
 # ── My events (incl. drafts) ──────────────────────────────────────────────────
 
+@router.get("/insights/searches")
+async def unmet_search_insights(
+    city: str | None = Query(None, max_length=100),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_organizer),
+):
+    """What people searched for in the last 30 days and found nothing: demand nobody is
+    meeting yet. Only searches made by at least 3 different people."""
+    from app.services.insights import unmet_searches
+    return {"city": city, "searches": await unmet_searches(db, city=city, limit=15)}
+
+
 @router.get("/events")
 async def my_events(
     status: str | None = None,

@@ -1,0 +1,3 @@
+# Optional: the trained ranker (python -m app.cli recs-train, RANKER_MODEL_PATH).
+# The API and worker run without it; install it where you train and where you serve a model.
+lightgbm==4.6.0

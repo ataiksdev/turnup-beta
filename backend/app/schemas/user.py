@@ -92,6 +92,7 @@ class UserMe(BaseModel):
     personalized_recs: bool = True
     profiling_consent: bool = False
     profiling_consent_at: datetime | None = None
+    event_alerts: bool = True
     created_at: datetime
     organizer_profile: OrganizerProfileOut | None = None
     model_config = {"from_attributes": True}

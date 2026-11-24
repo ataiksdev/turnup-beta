@@ -15,6 +15,7 @@ import {
   Ticket, Building2, Tag, WifiOff,
 } from "lucide-react";
 import Link from "next/link";
+import { SimilarEvents } from "@/components/events/SimilarEvents";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
@@ -240,6 +241,11 @@ export default function TicketDetailPage() {
               size={16}
             />
           </div>
+        )}
+
+        {/* After buying: what people going to this also went to */}
+        {!usingCopy && displayTicket!.event_id && (
+          <SimilarEvents eventId={displayTicket!.event_id} title="People going to this also like" surface="ticket_similar" />
         )}
 
         {/* Back link */}

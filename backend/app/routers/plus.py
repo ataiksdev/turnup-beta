@@ -89,8 +89,11 @@ class PlusSettings(BaseModel):
 @router.patch("/api/plus/settings")
 async def plus_settings(payload: PlusSettings, db: AsyncSession = Depends(get_db),
                         user: User = Depends(get_current_user)):
-    for k, v in payload.model_dump(exclude_none=True).items():
+    from app.services.data_rights import log_consent
+    changed = {k: v for k, v in payload.model_dump(exclude_none=True).items() if getattr(user, k) != v}
+    for k, v in changed.items():
         setattr(user, k, v)
+    log_consent(db, user, changed)
     return {"show_plus_badge": user.show_plus_badge, "wrapped_opt_in": user.wrapped_opt_in}
 
 

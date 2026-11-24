@@ -951,6 +951,7 @@ class PreferencesUpdate(BaseModel):
     # Data choices (docs/recommendations-spec.md). birth_year and gender can be cleared with null.
     personalized_recs: bool | None = None
     profiling_consent: bool | None = None
+    event_alerts: bool | None = None
     birth_year: int | None = Field(None, ge=1900, le=datetime.now(timezone.utc).year - 13)
     gender: Literal["female", "male", "non_binary", "prefer_not_to_say"] | None = None
 
@@ -970,7 +971,8 @@ async def update_preferences(
 
     if payload.category_preferences is not None:
         put("category_preferences", ",".join(payload.category_preferences))
-    for field in ("city", "price_sensitivity", "event_format_pref", "goes_out_when", "personalized_recs"):
+    for field in ("city", "price_sensitivity", "event_format_pref", "goes_out_when", "personalized_recs",
+                  "event_alerts"):
         if getattr(payload, field) is not None:
             put(field, getattr(payload, field))
     for field in ("birth_year", "gender"):          # null clears these
@@ -982,6 +984,8 @@ async def update_preferences(
         if not payload.profiling_consent:
             await clear_profiling(db, user.id)
     if changed:
+        from app.services.data_rights import log_consent
+        log_consent(db, user, changed)  # kept for as long as the account exists
         # The values themselves only for taste fields; age, gender and consent are noted by name.
         sensitive = {"birth_year", "gender", "profiling_consent"}
         record_activity(db, "profile_updated", user_id=user.id, props={

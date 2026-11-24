@@ -163,6 +163,7 @@ export default function AdminDashboardPage() {
             { href: "/admin/scout/sources", label: "Manage AI Scout"    },
             { href: "/admin/categories",    label: "Edit Categories"    },
             { href: "/admin/orders",        label: "View All Orders"    },
+            { href: "/admin/data-health",   label: "Data Health"        },
           ].map(({ href, label }) => (
             <Link
               key={href}

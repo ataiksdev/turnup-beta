@@ -688,6 +688,9 @@ async def attend(
     record_activity(db, "rsvp_changed", user_id=user.id, event_id=event_id,
                     props={"status": payload.status, "from": old_status,
                            "days_until_event": _days_until(event)})
+    if becoming_going:
+        from app.services.sharing import credit
+        await credit(db, user.id, event_id, "going")  # a share link that brought them
 
     # Notify host when someone RSVPs going (skip if user is the host)
     if becoming_going and event.host_id != user.id:
@@ -768,10 +771,15 @@ async def toggle_save(
         event.saves_count = max(0, event.saves_count - 1)
         record_activity(db, "event_unsaved", user_id=user.id, event_id=event_id)
         return {"saved": False}
-    db.add(EventSave(id=str(uuid.uuid4()), user_id=user.id, event_id=event_id))
+    save = EventSave(id=str(uuid.uuid4()), user_id=user.id, event_id=event_id)
+    from app.services.nudges import record_price_on_save
+    await record_price_on_save(db, save, event)  # for "price dropped" alerts
+    db.add(save)
     event.saves_count += 1
     record_activity(db, "event_saved", user_id=user.id, event_id=event_id,
                     props={"days_until_event": _days_until(event)})
+    from app.services.sharing import credit
+    await credit(db, user.id, event_id, "save")
     return {"saved": True}
 
 
@@ -1556,6 +1564,43 @@ async def check_in_stats(
 
 
 # ── Reviews ───────────────────────────────────────────────────────────────────
+
+@router.get("/{event_id}/insights")
+async def event_insights(
+    event_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """For the event's team: best day and time, price vs comparable events, booking pace,
+    and searches in its city that found nothing (app/services/insights.py)."""
+    from app.services.insights import event_insights as build
+    event = await _require_event_access(event_id, user, db)
+    return await build(db, event)
+
+
+@router.get("/{event_id}/similar", response_model=list[EventOut])
+async def similar(
+    event_id: str,
+    limit: int = Query(6, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    """"You might also like": people who went to this also went to..., then similar events
+    (app/services/similar.py). The reason is in rec_reason."""
+    from app.services.similar import similar_events
+    source = (await db.execute(select(Event).where(
+        or_(Event.id == event_id, Event.slug == event_id)))).scalar_one_or_none()
+    if not source or source.status != "published":
+        raise HTTPException(404, "Event not found")
+    found = await similar_events(db, source, viewer=user, limit=limit)
+    states = await _user_states([s.event.id for s in found], user, db)
+    out = []
+    for s in found:
+        row = _serialize(s.event, *states.get(s.event.id, (False, None, False)))
+        row["rec_reason"] = s.reason
+        out.append(row)
+    return out
+
 
 @router.get("/{event_id}/reviews", response_model=list[ReviewOut])
 async def list_reviews(event_id: str, db: AsyncSession = Depends(get_db)):

@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
-import { formatPrice } from "@/lib/utils";
+import { formatMoney } from "@/lib/utils";
 import { BarChart2, Eye, Heart, Bookmark, Ticket, TrendingUp, Users, Clock, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { WaitlistPanel } from "@/components/organizer/WaitlistPanel";
+import { EventInsightsPanel } from "@/components/organizer/EventInsightsPanel";
 
 function StatCard({ icon, label, value, sub }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string;
@@ -124,7 +125,7 @@ export default function EventAnalyticsPage() {
           <StatCard
             icon={<TrendingUp size={14} />}
             label="Revenue"
-            value={`$${analytics.estimated_revenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            value={formatMoney(analytics.estimated_revenue)}
           />
           {analytics.waitlist_count > 0 && (
             <StatCard icon={<Clock size={14} />} label="Waitlisted" value={analytics.waitlist_count.toLocaleString()} />
@@ -175,6 +176,8 @@ export default function EventAnalyticsPage() {
         )}
 
         <WaitlistPanel eventId={id} />
+
+        <EventInsightsPanel eventId={id} />
 
         {/* Engagement summary */}
         <div className="bg-bg-card border-2 border-border rounded p-4 shadow-brutal-sm space-y-3">

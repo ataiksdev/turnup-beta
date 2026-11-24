@@ -283,6 +283,7 @@ export const authApi = {
     // Data choices (docs/recommendations-spec.md); null clears birth year / gender.
     personalized_recs?: boolean;
     profiling_consent?: boolean;
+    event_alerts?: boolean;
     birth_year?: number | null;
     gender?: User["gender"];
   }) =>
@@ -330,6 +331,8 @@ export const eventsApi = {
     request<Event[]>(`/events/featured?limit=${limit}`, {}, token),
 
   /** The device id lets a signed-out session's browsing shape its own feed. */
+  similar: (idOrSlug: string, limit = 6, token?: string) =>
+    request<Event[]>(`/events/${encodeURIComponent(idOrSlug)}/similar?limit=${limit}`, {}, token),
   forYou: (limit = 20, token?: string) =>
     request<Event[]>(`/events/for-you?limit=${limit}`, { headers: { "X-Anonymous-Id": getAnonymousId() } }, token),
 
@@ -1039,4 +1042,86 @@ export const discoveryApi = {
     request<SearchAlert>("/search-alerts", { method: "POST", body: JSON.stringify(data) }, token),
   deleteSearchAlert: (token: string, id: string) =>
     request<void>(`/search-alerts/${encodeURIComponent(id)}`, { method: "DELETE" }, token),
+};
+
+// ── Share links with a ref code ─────────────────────────────────────────────────
+
+export type ShareChannel = "whatsapp" | "native" | "copy_link";
+
+export interface MyShares {
+  people_brought: number;
+  opens: number;
+  events: { event_id: string; title: string; slug: string; start_date: string;
+            opens: number; saved: number; going: number; bought: number }[];
+}
+
+export const shareApi = {
+  link: (token: string, eventId: string, channel: ShareChannel) =>
+    request<{ code: string; url: string }>("/share", {
+      method: "POST", body: JSON.stringify({ event_id: eventId, channel }),
+    }, token),
+  open: (code: string, token?: string) =>
+    request<void>("/share/open", {
+      method: "POST", body: JSON.stringify({ code }), headers: { "X-Anonymous-Id": getAnonymousId() },
+    }, token),
+  mine: (token: string) => request<MyShares>("/share/mine", {}, token),
+};
+
+// ── Organizer insights ──────────────────────────────────────────────────────────
+
+export interface UnmetSearch { query: string; people: number; }
+
+export interface EventInsights {
+  category: string | null;
+  city: string | null;
+  best_times: null | {
+    scope: "city" | "everywhere";
+    best: { day: string; part: string; events: number; avg_turnout: number }[];
+    yours: { day: string; part: string; avg_turnout: number | null };
+  };
+  price: null | {
+    scope: "city" | "everywhere"; comparables: number; free_share: number | null; yours: number | null;
+    p25: number | null; median: number | null; p75: number | null; position: "low" | "typical" | "high" | null;
+  };
+  booking_curve: {
+    so_far: number; comparables: number; projected_total: number | null;
+    points: { days_before: number; yours: number | null; typical_share: number | null }[];
+  };
+  unmet_searches: UnmetSearch[];
+}
+
+export const insightsApi = {
+  event: (token: string, eventId: string) => request<EventInsights>(`/events/${encodeURIComponent(eventId)}/insights`, {}, token),
+  searches: (token: string, city?: string) =>
+    request<{ city: string | null; searches: UnmetSearch[] }>(
+      `/organizer/insights/searches${city ? `?city=${encodeURIComponent(city)}` : ""}`, {}, token),
+};
+
+// ── Your data ───────────────────────────────────────────────────────────────────
+
+export interface ConsentEntry { setting: string; value: boolean; source: string; changed_at: string; }
+
+export const meApi = {
+  consents: (token: string) => request<ConsentEntry[]>("/me/consents", {}, token),
+  exportData: (token: string) => request<Record<string, unknown>>("/me/export", {}, token),
+};
+
+// ── Admin: data health ──────────────────────────────────────────────────────────
+
+export interface PositionStat { position: number; impressions: number; clicks: number; ctr: number | null; }
+export interface DataHealth {
+  days: number; generated_at: string;
+  events_per_day: { date: string; client: number; server: number }[];
+  top_events_24h: { name: string; count: number }[];
+  ingestion: { sample: number; p50_seconds: number | null; p95_seconds: number | null; max_seconds: number | null;
+               last_received_at: string | null };
+  features: Record<"event_features" | "user_features", { rows: number; computed_at: string | null }>;
+  recs_served_7d: number;
+  clicks_by_position: Record<string, PositionStat[]>;
+  discovery_slots: Record<"discovery" | "other", { impressions: number; clicks: number; ctr: number | null }>;
+  zero_result_searches: { query: string; people: number }[];
+}
+
+export const dataHealthApi = {
+  get: (token: string, days = 14) => request<DataHealth>(`/admin/data-health?days=${days}`, {}, token),
 };

@@ -10,7 +10,8 @@ from app.models.organizer import (
 )
 
 from app.models import venue as _venue  # noqa: F401  (registers venue marketplace tables)
-from app.models.discovery import HiddenItem, SearchAlert
+from app.models.discovery import ConsentLog, EventEmbedding, HiddenItem, SearchAlert, WeatherForecast
+from app.models.sharing import ShareConversion, ShareLink
 from app.models import activity as _activity  # noqa: F401  (activity log + recommendation features)
 
 __all__ = [
@@ -20,5 +21,5 @@ __all__ = [
     "MagicLink", "TwoFactor", "OAuthAccount", "PhoneOTP",
     "OrganizerProfile", "TicketTier", "TicketOrder", "EventTemplate",
     "EventCoHost", "EventWaitlist", "EventView", "EventReview",
-    "HiddenItem", "SearchAlert",
+    "ConsentLog", "EventEmbedding", "HiddenItem", "SearchAlert", "WeatherForecast", "ShareLink", "ShareConversion",
 ]

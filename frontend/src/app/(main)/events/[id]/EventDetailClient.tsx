@@ -9,7 +9,6 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { ShareButton } from "@/components/ui/ShareButton";
 import { EventDetailSkeleton } from "@/components/ui/Skeleton";
 import { formatEventDate, formatMoney, formatPrice, parseTags, timeAgo, displayName, safeHref, randomId } from "@/lib/utils";
 import {
@@ -27,6 +26,8 @@ import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { EventMap } from "@/components/events/EventMap";
 import { HideControls } from "@/components/events/HideControls";
+import { SimilarEvents } from "@/components/events/SimilarEvents";
+import { EventShareMenu, useShareRef } from "@/components/events/EventShareMenu";
 import { useEventPageTracking } from "@/lib/useEventPageTracking";
 import { EventDeals, EventVenueCard, GuestVenueReview, MembersOnlyNotice, TierPlusBadges } from "@/components/events/EventMarketplace";
 
@@ -71,6 +72,7 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export function EventDetailClient() {
   // Path segment on the web build, ?id= in the Capacitor build (see lib/routes.ts).
   const id = useRouteParam("id");
+  useShareRef(); // opened from someone's share link: credit them if this person comes
   const { token, user, hasHydrated } = useAuthStore();
   const qc = useQueryClient();
 
@@ -429,9 +431,9 @@ export function EventDetailClient() {
           className="absolute top-0 inset-x-0"
           actions={
             <div className="flex items-center gap-1">
-              <ShareButton
+              <EventShareMenu
+                eventId={event.id}
                 title={event.title}
-                text={`Check out ${event.title} on Turnup!`}
                 url={shareUrl}
                 onShared={pageTracking.onShared}
                 className="bg-bg/60 backdrop-blur-sm hover:bg-bg/80"
@@ -938,6 +940,8 @@ export function EventDetailClient() {
             </div>
           </section>
         )}
+
+        <SimilarEvents eventId={event.id} />
 
         {/* Comments */}
         <section aria-labelledby="comments-heading">

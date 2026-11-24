@@ -46,6 +46,11 @@ x-backend: &backend
     OFFSITE_KEEP_DAYS: ${OFFSITE_KEEP_DAYS:-30}
     # Activity tracking (docs/recommendations-spec.md): days activity rows are kept.
     ACTIVITY_RETENTION_DAYS: ${ACTIVITY_RETENTION_DAYS:-180}
+    # Ranker context and learning: rain forecasts (api.open-meteo.com), event text embeddings
+    # (auto | openai | gemini | hashing | off), and an optional trained model file.
+    WEATHER_ENABLED: ${WEATHER_ENABLED:-true}
+    EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-auto}
+    RANKER_MODEL_PATH: ${RANKER_MODEL_PATH:-}
     PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
     PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
     GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

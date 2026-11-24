@@ -161,6 +161,9 @@ class EventSave(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), nullable=False, index=True)
+    # Cheapest ticket when saved (or when we last told them it dropped): price-drop alerts
+    # compare against this (app/services/nudges.py). Null: unknown, no alert.
+    price_seen: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="saves")

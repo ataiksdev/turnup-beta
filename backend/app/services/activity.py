@@ -31,7 +31,7 @@ SERVER_EVENTS = frozenset({
     "event_saved", "event_unsaved", "rsvp_changed",
     "checkout_started", "order_completed", "order_refunded", "ticket_transferred",
     "event_checked_in", "event_reviewed",
-    "recs_served",
+    "recs_served", "share_link_opened",
 })
 
 MAX_PROPS_BYTES = 2048          # from the app

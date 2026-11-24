@@ -6,7 +6,7 @@ brings back an event someone said they weren't interested in.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -49,3 +49,43 @@ class SearchAlert(Base):
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     notified_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ConsentLog(Base):
+    """Every change to a data choice (docs/recommendations-spec.md section 2), kept for as
+    long as the account exists: unlike activity_log it isn't pruned after 180 days, because it
+    is the record of what someone agreed to and when."""
+    __tablename__ = "consent_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    setting: Mapped[str] = mapped_column(String(40), nullable=False)  # personalized_recs, profiling_consent...
+    value: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="settings")  # settings | onboarding
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WeatherForecast(Base):
+    """Hourly rain chance per city for the next week (app/services/lagos_context.py), refreshed
+    hourly by the worker. The ranker nudges outdoor events down when rain is likely."""
+    __tablename__ = "weather_forecasts"
+    __table_args__ = (UniqueConstraint("city", "hour"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    city: Mapped[str] = mapped_column(String(40), nullable=False)
+    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)  # UTC
+    rain_chance: Mapped[float] = mapped_column(Float, nullable=False)                           # 0..1
+
+
+class EventEmbedding(Base):
+    """A vector for each event's text (title, category, tags, venue, description), from
+    app/services/embeddings.py. JSON, not pgvector: the ranker only compares a few hundred
+    candidates at a time, which is cheap in Python (see docs/recommendations-spec.md for when
+    pgvector would be worth it)."""
+    __tablename__ = "event_embeddings"
+
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), primary_key=True)
+    model: Mapped[str] = mapped_column(String(60), nullable=False)
+    vector: Mapped[list] = mapped_column(JSON, nullable=False)
+    text_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # re-embed when the text changes
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

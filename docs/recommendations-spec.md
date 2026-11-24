@@ -20,7 +20,8 @@ that changes).
 | Tables | `backend/app/models/activity.py`, migration `0008` |
 | Ingest, server events, linking, deletion, retention | `backend/app/services/activity.py`, `routers/track.py` |
 | Features | `backend/app/services/rec_features.py` |
-| Ranker | `backend/app/services/recommender.py` |
+| Ranker | `backend/app/services/recommender.py` (local context: `lagos_context.py`; embeddings: `embeddings.py`) |
+| Learned ranker | `backend/app/services/rec_training.py` (`recs-train`) |
 | Offline evaluation | `backend/app/services/rec_eval.py` |
 | Synthetic demo activity | `backend/app/demo_activity.py` |
 | App tracker | `frontend/src/lib/track.ts`, `useCardTracking.ts`, `useEventPageTracking.ts` |
@@ -72,7 +73,8 @@ location permission (the tracker never asks for it).
 | `ticket_transferred` | `POST /tickets/{id}/transfer` | `order_id`, `to_user_id` |
 | `event_checked_in` | `POST /events/{id}/checkin` | `order_id`, `admitted`, `minutes_from_start` |
 | `event_reviewed` | `POST /events/{id}/reviews` | `rating`, `has_text` |
-| `recs_served` | every `GET /events/for-you` | `ranker` version, `event_ids` in order, `personal`, `has_location` |
+| `recs_served` | every `GET /events/for-you` (and the weekend picks page) | `ranker` version, `event_ids` in order, `personal`, `has_location`, `discovery_ids` |
+| `share_link_opened` | `POST /share/open` (event page opened with `?ref=`) | `code`, `channel`, `sharer_id` |
 
 ### How the app sends it
 
@@ -106,13 +108,22 @@ shapes its feed too.
 |---|---|---|
 | `personalized_recs` | on | Off: the feed ignores their history and preferences (place, time and popularity only). Tracking continues. |
 | `profiling_consent` (+ `profiling_consent_at`) | **off** | On: coordinates are stored, and `peak_hours`, `co_attendee_ids`, `tastemaker_score` and `segments` are computed. Turning it off clears those at once and removes stored coordinates. |
+| `event_alerts` | on | "Almost sold out" and "price dropped" alerts for saved events. |
 | `birth_year`, `gender` | not given | Self-reported only; never inferred. Used only in `segments`, so only with consent. |
 
 - **Deleting an account** removes its activity rows (including what its devices did while
   signed out) and its `user_features` row immediately.
 - **Retention:** rows older than `ACTIVITY_RETENTION_DAYS` (180) are deleted daily (03:47 UTC).
-- **Still to do (other branch):** "download my data", a consent-history log, and the Privacy
-  Policy and cookie notice text (section 6).
+- **Consent history:** every change to `personalized_recs`, `profiling_consent`,
+  `event_alerts` and `wrapped_opt_in` is written to `consent_log` (setting, value, source,
+  time). Unlike `activity_log` it isn't pruned, because it is the record of what was agreed and
+  when. Shown in Settings → Your data (`GET /api/me/consents`).
+- **Download my data** (`GET /api/me/export`, 5 an hour): a JSON file of every row in any
+  table that points at the user, plus their `activity_log` and `user_features`
+  (`services/data_rights.py`). New tables are included automatically. Passwords, sign-in
+  tokens, 2FA secrets, one-time codes and staff audit logs are left out, and so are the
+  identities of people their share links brought in.
+- **Privacy Policy** at `/privacy`, and a one-time notice about device storage.
 
 ## 3. Features
 
@@ -149,10 +160,10 @@ Every function takes `as_of` and reads only data from before it.
 | `conversion_propensity` | 0–1, high for people browsing and saving but not buying |
 | **With consent only:** `peak_hours` | their 3 most common hours to open the app |
 | `co_attendee_ids` | opted-in people they've gone to 2+ events with (events under 300 people) |
-| `tastemaker_score` | how often their followers commit to an event within 7 days after they do (90 days, log scale 0–1) |
+| `tastemaker_score` | followers who commit to an event within 7 days after they do, plus 2× people who went or bought through their share links (90 days, log scale 0–1) |
 | `segments` | `weekend_warrior`, `planner`/`spontaneous`, `big_spender` (₦30k+), `free_event_hunter`, `vip_buyer`, `tastemaker`, `lapsing_cooling`/`lapsing_dormant`, `age_18-24`…`age_45+`, `gender_*`, and category labels (`nightlife_regular`, `live_music_fan`, `tech_professional`, `foodie`, `arts_and_culture`, `comedy_fan`, `wellness`, `sports_fan`) for categories at least half as strong as their top one |
 
-## 4. The For You ranker (`recommender.py`, version `v2.0`)
+## 4. The For You ranker (`recommender.py`, version `v2.1`)
 
 1. **Candidates** (up to 600): published events not yet ended, from the soonest 200, top
    150 by demand, 150 in their top categories, 150 in their city, events by organizers in
@@ -175,7 +186,13 @@ Every function takes `as_of` and reads only data from before it.
    "Almost sold out", "3 km away", "In Lagos", "Popular right now".
 5. **Re-rank for variety:** each slot takes the best remaining event after −0.7 per event
    from the same category and −0.9 per event from the same organizer already above it.
-6. **Log:** a `recs_served` row with the order shown; the app sends the same
+6. **Discovery slots:** positions 4 and 10 (`DISCOVERY_SLOTS`) go to the best-scoring
+   event that is new (listed in the last 14 days), seen by fewer than 40 people this week,
+   not sold out, from an organizer with quality ≥ 0.4, and still a positive fit for this
+   person. An event that ranked into the slot on its own keeps it. Inserted cards say
+   "New on Turnup", and `recs_served.props.discovery_ids` records which events held the
+   slots, so their click-through can be compared with the slots' usual rate.
+7. **Log:** a `recs_served` row with the order shown; the app sends the same
    `rec_request_id` with impressions and clicks, so click-through by position and feed can
    be measured.
 
@@ -196,9 +213,13 @@ according to tastes the ranker is designed to find, so this is a sanity check, n
 
 | | NDCG@10 | Recall@10 |
 |---|---|---|
+| Ranker v2.1 (hashing embeddings) | 0.53 | 0.84 |
 | Ranker v2.0 | 0.51 | 0.84 |
-| Most popular | 0.29 | 0.64 |
-| Random | 0.19 | 0.44 |
+| Most popular | 0.31 | 0.70 |
+| Random | 0.21 | 0.51 |
+
+(v2.1 measured on 24 Nov 2026 at a later cut-off than v2.0's figures; at the same cut-off, v2.1
+without its local context and embeddings scored 0.519.)
 
 Useful SQL once real traffic arrives:
 
@@ -222,18 +243,92 @@ GROUP BY 1 ORDER BY 2 DESC LIMIT 20;
 These use the data above but are features, not data collection:
 
 1. A/B testing: a fixed group per person, the group saved on `recs_served`.
-2. "Not interested" and "Hide this organizer" (kept outside `activity_log` so they outlive
-   retention), excluded in `_exclusions()`.
-3. Discovery slots for new events with few impressions (`event_features.impressions_7d`).
-4. Similar events / "people who went to X also went to Y".
-5. Ranker-driven weekend picks and "almost sold out" / price-drop alerts, with frequency caps.
-6. WhatsApp share links with a ref code (feeds a real `tastemaker_score`).
-7. Organizer insights: zero-result searches, best day and time, price benchmarks, booking curves.
-8. Better search (Postgres full-text, typo tolerance, "notify me").
-9. Data rights: export, consent history, Privacy Policy and cookie notice.
-10. Admin data-health page.
-11. Lagos context: travel time, rain, payday, holidays.
-12. Embeddings (pgvector) and a trained LightGBM ranker, once real data exists.
+2. ~~"Not interested" and "Hide this organizer"~~ (done: `hidden_items`, excluded in
+   `_exclusions()` and `_hidden_organizers()`).
+3. ~~Discovery slots for new events with few impressions~~ (done: section 4, step 6).
+4. ~~Similar events / "people who went to X also went to Y"~~ (done: `services/similar.py`,
+   `GET /events/{id}/similar`, shown on event and ticket pages). People who committed to X
+   (going, saved, bought) and to another upcoming event, scored by shared people ÷ √(its own
+   committed people), with at least 2 people in common so a suggestion never reveals one
+   person's plans; then same category, tags, city and price, weighted by demand. At most two
+   per organizer; never the viewer's own, committed or hidden events.
+5. ~~Ranker-driven weekend picks and "almost sold out" / price-drop alerts, with frequency
+   caps~~ (done). Weekend picks (`services/picks.py`) are `recommend(window=...)` over the
+   coming weekend, in the member's city or online, with events at followed venues first;
+   the page logs `recs_served` with surface `weekend_picks`. Saved-event alerts
+   (`services/nudges.py`, 10:07 and 18:07 Lagos): "Price dropped" when the cheapest ticket
+   on sale is 15%+ below the price when saved (`event_saves.price_seen`), "Almost sold out"
+   at 85%+ sold with tickets left. At most 1 a day and 3 a week per person, never the same
+   alert twice, not within 3 hours of the start, and off with `users.event_alerts`.
+6. ~~WhatsApp share links with a ref code~~ (done: `services/sharing.py`, `routers/share.py`).
+   Signed-in shares use `/events/<slug>?ref=<code>` (one code per sharer, event and channel:
+   `whatsapp`, `native`, `copy_link`). Opening one writes a `share_link_opened` server event
+   under the device id, claimed by the account on sign-in like any signed-out activity. A
+   save, "going" or ticket within 7 days credits the sharer (`share_conversions`, never
+   yourself). People brought ("going" or bought) count double in `tastemaker_score`, and
+   own profiles show "You've brought N people to events".
+7. ~~Organizer insights~~ (done: `services/insights.py`). `GET /events/{id}/insights` (the
+   event's team; shown on its analytics page): best Lagos day and part of day for the
+   category by average turnout (3+ events per slot; city, else all of Turnup), the
+   cheapest ticket against the 25th–75th percentile of comparable events (5+), and
+   bookings by days before the event against the median share similar past events had by
+   then, with a projected total. `GET /organizer/insights/searches` (dashboard): searches
+   that found nothing in 30 days, made by 3+ different people. Other organizers' events
+   are never shown individually.
+8. ~~Better search (Postgres full-text, typo tolerance, "notify me")~~ (done: `services/search.py`, `search_alerts`).
+9. ~~Data rights: export, consent history, Privacy Policy and cookie notice~~ (done: section 2).
+10. ~~Admin data-health page~~ (done: `/admin/data-health`, `GET /admin/data-health`,
+    `services/data_health.py`). Events recorded per day (app and server), the most common
+    in the last 24 h, how late app events arrive (median, 95th percentile, slowest), when
+    event and people features were last computed, click-through by feed position (one
+    count per feed load and event), discovery-slot click-through against the rest of For
+    You, and searches that found nothing.
+11. ~~Lagos context~~ (done: `services/lagos_context.py`, ranker `v2.1`).
+    - **Travel time:** when the person and the event are both in Greater Lagos, `place`
+      uses estimated minutes instead of kilometres: road distance (×1.4) at 15 km/h in
+      weekday rush hours (6–10, 16–21), 22 by day and 32 at night, plus 35/15/8 minutes to
+      cross the lagoon between the mainland and the island side. The card says "About 45
+      min away".
+    - **Holidays:** Nigerian public holidays (fixed dates, Easter, and expected Eid and
+      Mawlid dates, which need adding each year), moved to Monday when they fall on a
+      weekend. A holiday or its eve counts as weekend for `goes_out_when`, and events on
+      one get `holiday` (+0.5, "On Independence Day").
+    - **Payday:** from the 25th to the 3rd paid events get `payday` (+0.4), and from the
+      15th to the 24th free ones get +0.3. Only for people without a spending history:
+      applied to everyone it cost NDCG on the synthetic data.
+    - **Rain:** the worker fetches hourly rain chances for seven cities from Open-Meteo
+      (`weather_forecasts`, `WEATHER_ENABLED`). Outdoor events (beach, rooftop, park,
+      festival… in the title, tags or venue) get `rain` = −1.0 × chance when it's 50%+
+      around the start.
+    - Synthetic evaluation at the same cut-off: 0.5193 NDCG@10 without context, 0.5205
+      with it, recall unchanged.
+12. ~~Embeddings and a trained LightGBM ranker, once real data exists~~ (built, gated on data).
+    - **Embeddings** (`services/embeddings.py`, `event_embeddings`, worker every 30 min):
+      each event's title, category, tags, venue and description, for events from the
+      last 180 days onwards, re-embedded when the text changes. `EMBEDDINGS_PROVIDER=auto`
+      uses OpenAI `text-embedding-3-small` (512 dimensions) or Gemini `text-embedding-004`
+      when their key is set, else a local hashing model (256 dimensions, no key, no
+      network). A person's taste vector is the weighted mean of what they saved (1), went to
+      (2) or bought (3) in 180 days. Candidates get `semantic` = 1.2 × (cosine − 0.15) /
+      0.85 ("Like events you've been to"). On synthetic data the hashing model adds about
+      +0.007 NDCG@10; a trained model should do more on real descriptions.
+    - **Why not pgvector yet:** vectors are stored as JSON and compared in Python, because
+      the ranker only ever compares its ≤600 candidates. pgvector is worth it when searching
+      the whole catalogue by meaning (semantic search, "more like this" across thousands of
+      events). That needs the `pgvector/pgvector:pg16` image instead of `postgres:16-alpine`
+      in docker-compose, `CREATE EXTENSION vector`, and a `vector(512)` column with an HNSW
+      index.
+    - **Learned ranker** (`services/rec_training.py`, `python -m app.cli recs-train`,
+      `requirements-ml.txt`): at weekly cut-offs, every candidate the ranker scored for
+      someone who then acted, with its named parts as features and grades of 3 bought, 2
+      going, 1 saved, 0 nothing. LightGBM lambdarank is trained on all but the latest week
+      and checked on that week against the hand-set weights. It's saved only with 300+
+      people-weeks and 1,000+ actions, and only if it beats the hand-set weights by 0.005
+      NDCG@10 (`--force` skips both, for experiments). Serving it is a separate decision:
+      `RANKER_MODEL_PATH=<file>`. `recs_served.props.ranker` then says `lgbm-<date>`, so its
+      click-through can be compared on the data-health page. On synthetic data (forced: 142
+      people-weeks, 164 actions) it scored 0.599 against 0.541 for the hand-set weights on
+      the held-out week.
 
 ## Scaling
 

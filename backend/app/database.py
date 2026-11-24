@@ -46,7 +46,8 @@ async def get_db():
 POST_BASELINE_COLUMNS = {
     "users": {"theme_preference", "plus_until", "show_plus_badge", "wrapped_opt_in",        # 0002, 0003
               "birth_year", "gender", "personalized_recs", "profiling_consent",            # 0008
-              "profiling_consent_at"},
+              "profiling_consent_at", "event_alerts"},                                     # 0008, 0010
+    "event_saves": {"price_seen"},                                                          # 0010
     "events": {"host_venue_id", "venue_id", "members_only", "fast_lane_enabled",            # 0003
                "allow_ticket_transfers"},
     "ticket_tiers": {"members_only", "plus_presale_ends_at", "presale_then"},               # 0003
@@ -63,9 +64,11 @@ POST_BASELINE_COLUMNS = {
 
 def _post_baseline_tables() -> set[str]:
     """Every table defined in app/models/venue.py (migration 0003), app/models/activity.py
-    (migration 0008) and app/models/discovery.py (migration 0009)."""
-    from app.models import activity, discovery, venue
-    return {m.__tablename__ for mod in (venue, activity, discovery) for m in vars(mod).values()
+    (0008), app/models/discovery.py (0009; consent_log 0012; weather_forecasts 0013;
+    event_embeddings 0014) and
+    app/models/sharing.py (0011)."""
+    from app.models import activity, discovery, sharing, venue
+    return {m.__tablename__ for mod in (venue, activity, discovery, sharing) for m in vars(mod).values()
             if isinstance(m, type) and issubclass(m, Base) and m is not Base and hasattr(m, "__tablename__")}
 
 
