@@ -77,6 +77,11 @@ async def run_weekend_picks():
     await _run("Weekend picks", send_weekend_picks)
 
 
+async def run_search_alerts():
+    from app.services.search_alerts import send_search_alerts
+    await _run("Search alerts", send_search_alerts)
+
+
 async def run_rec_event_features():
     from app.services.rec_features import run_event_features
     await _run("Recommendation event features", run_event_features)
@@ -113,6 +118,9 @@ def build_scheduler() -> AsyncIOScheduler:
                       replace_existing=True, max_instances=1, coalesce=True)
     # Thursdays 16:00 Lagos (15:00 UTC).
     scheduler.add_job(run_weekend_picks, CronTrigger(day_of_week="thu", hour=15, minute=7), id="weekend_picks",
+                      replace_existing=True, max_instances=1, coalesce=True)
+    # "Notify me" searches: hourly, against events created since the last check.
+    scheduler.add_job(run_search_alerts, IntervalTrigger(hours=1), id="search_alerts",
                       replace_existing=True, max_instances=1, coalesce=True)
     # Recommendations (docs/recommendations-spec.md): event numbers every 15 minutes, people's
     # nightly (Lagos 04:00), then old activity past its retention period is deleted.

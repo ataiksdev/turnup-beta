@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.activity import Activity, EventFeatures, UserFeatures
+from app.models.discovery import HiddenItem
 from app.models.event import Category, Event, EventAttendee, EventSave
 from app.models.organizer import TicketOrder
 from app.models.social import Follow
@@ -115,6 +116,9 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
     if viewer.personal:
         await _load_profile(db, viewer, persist)
     candidates = await _candidates(db, viewer, excluded)
+    hidden_hosts = await _hidden_organizers(db, user, now)
+    if hidden_hosts:
+        candidates = [e for e in candidates if e.host_id not in hidden_hosts]
     feats = await _event_features(db, [e.id for e in candidates])
     await _load_context(db, viewer, [e.id for e in candidates])
     scored = [score_event(viewer, e, feats.get(e.id)) for e in candidates]
@@ -136,7 +140,8 @@ async def recommend(db: AsyncSession, *, user: User | None, anonymous_id: str | 
 
 
 async def _exclusions(db: AsyncSession, user: User | None, now: datetime) -> set[str]:
-    """Events they'd already committed to (going, saved, bought) by `now`."""
+    """Events they'd already committed to (going, saved, bought) or said "Not interested" to,
+    by `now`."""
     if not user:
         return set()
     excluded = set((await db.execute(select(EventAttendee.event_id).where(
@@ -147,7 +152,19 @@ async def _exclusions(db: AsyncSession, user: User | None, now: datetime) -> set
     excluded |= set((await db.execute(select(TicketOrder.event_id).where(
         TicketOrder.user_id == user.id, TicketOrder.status == "confirmed",
         TicketOrder.created_at <= now))).scalars().all())
+    excluded |= set((await db.execute(select(HiddenItem.target_id).where(
+        HiddenItem.user_id == user.id, HiddenItem.kind == "event",
+        HiddenItem.created_at <= now))).scalars().all())
     return excluded
+
+
+async def _hidden_organizers(db: AsyncSession, user: User | None, now: datetime) -> set[str]:
+    """Organizers they chose "Hide this organizer" for by `now` (app/services/hidden.py)."""
+    if not user:
+        return set()
+    return set((await db.execute(select(HiddenItem.target_id).where(
+        HiddenItem.user_id == user.id, HiddenItem.kind == "organizer",
+        HiddenItem.created_at <= now))).scalars().all())
 
 
 def _base(now: datetime):

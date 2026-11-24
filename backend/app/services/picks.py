@@ -9,6 +9,7 @@ from app.models.event import Event, EventAttendee
 from app.models.social import Follow
 from app.models.user import User
 from app.models.venue import VenueFollow
+from app.services.hidden import hidden_for
 from app.services.plus import is_plus
 from app.services.venue_access import notify
 
@@ -50,7 +51,9 @@ async def weekend_picks(db: AsyncSession, user: User, limit: int = 12) -> dict:
         s += min(e.attendees_count, 500) / 100 + min(e.saves_count, 200) / 100
         return s
 
-    ranked = sorted((e for e in events if e.id not in going), key=score, reverse=True)[:limit]
+    hidden = await hidden_for(db, user)
+    ranked = sorted((e for e in events if e.id not in going and not hidden.hides(e)),
+                    key=score, reverse=True)[:limit]
     return {"weekend_start": start, "weekend_end": end, "city": user.city,
             "events": [{"id": e.id, "slug": e.slug, "title": e.title, "cover_image": e.cover_image,
                         "start_date": e.start_date, "venue_name": e.venue_name, "city": e.city,

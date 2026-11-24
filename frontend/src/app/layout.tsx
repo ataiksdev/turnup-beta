@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { SkipNav } from "@/components/layout/SkipNav";
 import { PWASetup } from "@/components/layout/PWASetup";
+import { CookieNotice } from "@/components/layout/CookieNotice";
 import { themeBootScript } from "@/lib/themes";
 import { AppSplash } from "@/components/layout/AppSplash";
 
@@ -77,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           {children}
           <PWASetup />
+          <CookieNotice />
         </Providers>
       </body>
     </html>

@@ -1003,3 +1003,40 @@ export const communitiesApi = {
   regenerateInvite: (token: string, slug: string) =>
     request<Community>(`/communities/${slug}/regenerate-invite`, { method: "POST" }, token),
 };
+
+// ── Hidden events/organizers and search alerts ──────────────────────────────────
+
+export type HiddenKind = "event" | "organizer";
+
+export interface HiddenItem {
+  kind: HiddenKind;
+  target_id: string;
+  created_at: string;
+  label: string;          // event title or organizer name
+  detail: string | null;  // event date and city, or @username
+  link: string | null;    // event slug, or username
+}
+
+export interface SearchAlert {
+  id: string;
+  query: string;
+  city: string | null;
+  category: string | null;
+  created_at: string;
+  expires_at: string;
+  notified_count: number;
+}
+
+export const discoveryApi = {
+  hidden: (token: string) => request<HiddenItem[]>("/hidden", {}, token),
+  hide: (token: string, kind: HiddenKind, targetId: string) =>
+    request<HiddenItem>("/hidden", { method: "POST", body: JSON.stringify({ kind, target_id: targetId }) }, token),
+  unhide: (token: string, kind: HiddenKind, targetId: string) =>
+    request<void>(`/hidden/${kind}/${encodeURIComponent(targetId)}`, { method: "DELETE" }, token),
+
+  searchAlerts: (token: string) => request<SearchAlert[]>("/search-alerts", {}, token),
+  createSearchAlert: (token: string, data: { q: string; city?: string; category?: string }) =>
+    request<SearchAlert>("/search-alerts", { method: "POST", body: JSON.stringify(data) }, token),
+  deleteSearchAlert: (token: string, id: string) =>
+    request<void>(`/search-alerts/${encodeURIComponent(id)}`, { method: "DELETE" }, token),
+};

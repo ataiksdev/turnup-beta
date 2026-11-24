@@ -237,6 +237,10 @@ export default function SignupPage() {
           </button>
         </div>
 
+        <p className="text-center text-xs text-text-muted">
+          See how we use your data in our{" "}
+          <Link href="/privacy" className="text-primary font-medium hover:underline">Privacy Policy</Link>.
+        </p>
         <p className="text-center text-sm text-text-muted">
           Already have an account?{" "}
           <Link href="/login" className="text-primary font-medium hover:underline">Log in</Link>

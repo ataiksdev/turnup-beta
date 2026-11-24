@@ -1,6 +1,6 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
-import { eventsApi } from "@/lib/api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiErrorMessage, discoveryApi, eventsApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import {
   Search, X, Monitor, MapPin, Shuffle, Tag, Hash,
-  Calendar, ArrowUpDown, ChevronDown,
+  Calendar, ArrowUpDown, ChevronDown, BellRing, CheckCircle2,
 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useState, Suspense, useEffect, useRef } from "react";
@@ -34,6 +34,7 @@ const EVENT_TYPES: { label: string; value: string; icon?: LucideIcon }[] = [
 
 const SORT_OPTIONS: { label: string; value: string }[] = [
   { label: "Date",       value: "date" },
+  { label: "Best match", value: "relevance" },
   { label: "Popular",    value: "popular" },
   { label: "Price ↑",   value: "price_asc" },
   { label: "Price ↓",   value: "price_desc" },
@@ -81,6 +82,44 @@ function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void 
         <X size={10} />
       </button>
     </span>
+  );
+}
+
+// ── "Notify me" when a search finds nothing ──────────────────────────────────
+
+function NotifyMe({ q, city, category }: { q: string; city?: string; category?: string }) {
+  const { token } = useAuthStore();
+  const key = JSON.stringify({ q, city, category });
+  const [doneFor, setDoneFor] = useState("");
+  const create = useMutation({
+    mutationFn: () => discoveryApi.createSearchAlert(token!, { q, city, category }),
+    onSuccess: () => setDoneFor(key),
+  });
+
+  if (!token) {
+    const next = `/discover?${new URLSearchParams({ q, ...(city ? { city } : {}) })}`;
+    return (
+      <Link href={`/login?next=${encodeURIComponent(next)}`} className="text-xs font-bold text-primary hover:underline">
+        Log in to get notified when something matches
+      </Link>
+    );
+  }
+  if (doneFor === key) {
+    return (
+      <p role="status" className="flex items-center gap-1.5 text-xs font-bold text-success">
+        <CheckCircle2 size={13} aria-hidden /> We&apos;ll let you know when &quot;{q}&quot; turns up.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <Button size="sm" loading={create.isPending} onClick={() => create.mutate()}>
+        <BellRing size={14} aria-hidden /> Notify me when something matches
+      </Button>
+      {create.isError && (
+        <p className="text-xs text-error">{apiErrorMessage(create.error, "Couldn't save the alert. Try again.")}</p>
+      )}
+    </div>
   );
 }
 
@@ -477,6 +516,9 @@ function SearchContent() {
                 {isTagSearch ? `No events tagged #${tagValue}` : "No events found"}
               </p>
               <p className="text-xs text-text-muted">Try different keywords or filters</p>
+              {!isTagSearch && q.trim() && (
+                <NotifyMe q={q.trim()} city={city.trim() || undefined} category={activeCategory || undefined} />
+              )}
               {activeBadges.length > 0 && (
                 <Button variant="secondary" size="sm" onClick={clearAll}>Clear filters</Button>
               )}

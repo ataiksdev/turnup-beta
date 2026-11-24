@@ -26,6 +26,7 @@ import { format } from "date-fns";
 import { publicOrigin, routes } from "@/lib/routes";
 import { useRouteParam } from "@/lib/useRouteParam";
 import { EventMap } from "@/components/events/EventMap";
+import { HideControls } from "@/components/events/HideControls";
 import { useEventPageTracking } from "@/lib/useEventPageTracking";
 import { EventDeals, EventVenueCard, GuestVenueReview, MembersOnlyNotice, TierPlusBadges } from "@/components/events/EventMarketplace";
 
@@ -622,6 +623,8 @@ export function EventDetailClient() {
             <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">{event.host.bio}</p>
           )}
         </Link>
+
+        <HideControls eventId={event.id} hostId={event.host.id} hostName={displayName(event.host)} />
 
         {event.series_id && <SeriesSection seriesId={event.series_id} currentEventId={event.id} />}
 
