@@ -19,6 +19,8 @@ import { useRouteParam } from "@/lib/useRouteParam";
 import { ImageUploadButton } from "@/components/ui/ImageUploadButton";
 import { TierManager } from "@/components/organizer/TierManager";
 import { EventDealsManager } from "@/components/organizer/EventDealsManager";
+import { PromoCodeManager } from "@/components/organizer/PromoCodeManager";
+import { RegistrationQuestionsManager } from "@/components/organizer/RegistrationQuestionsManager";
 
 type EventType = "physical" | "virtual" | "hybrid";
 
@@ -477,6 +479,9 @@ export default function EditEventPage() {
       {/* Existing tiers — editable */}
       {/* Shown whenever tiers exist, including when every tier is paused */}
       <TierManager eventId={id} />
+
+      {!form.is_free && <PromoCodeManager eventId={id} />}
+      <RegistrationQuestionsManager eventId={id} eventTitle={form.title} />
 
       {/* New tiers */}
       {!form.is_free && (

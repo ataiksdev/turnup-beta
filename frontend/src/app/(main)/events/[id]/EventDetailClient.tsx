@@ -1,6 +1,9 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { eventsApi, socialApi, seriesApi, communitiesApi, apiErrorMessage, ApiError } from "@/lib/api";
+import {
+  eventsApi, socialApi, seriesApi, communitiesApi, organizerApi, apiErrorMessage, ApiError,
+  type PromoCheck, type RegistrationAnswers,
+} from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useOfflineCopy, useOfflineStore } from "@/store/tickets";
 import { useOffline } from "@/lib/network";
@@ -14,7 +17,7 @@ import { formatEventDate, formatMoney, formatPrice, parseTags, timeAgo, displayN
 import {
   Bookmark, BookmarkCheck, Calendar, ExternalLink,
   MapPin, Tag, Users, MessageCircle, CheckCircle2,
-  Star, Ticket, Minus, Plus, Flame, Monitor, AlertCircle,
+  Star, Ticket, Flame, Monitor, AlertCircle,
   Clock, Images, RefreshCw, Share2, X as XIcon, WifiOff,
 } from "lucide-react";
 import Image from "next/image";
@@ -30,6 +33,9 @@ import { SimilarEvents } from "@/components/events/SimilarEvents";
 import { EventShareMenu, useShareRef } from "@/components/events/EventShareMenu";
 import { useEventPageTracking } from "@/lib/useEventPageTracking";
 import { EventDeals, EventVenueCard, GuestVenueReview, MembersOnlyNotice, TierPlusBadges } from "@/components/events/EventMarketplace";
+import { ActionBarSpace, AddToCalendar, GoingAvatars, YourTicket } from "@/components/events/EventPageExtras";
+import { RegisterSheet } from "@/components/events/RegisterSheet";
+import { firstMissingAnswer } from "@/components/events/RegistrationFields";
 
 function SeriesSection({ seriesId, currentEventId }: { seriesId: string; currentEventId: string }) {
   const { data: series } = useQuery({
@@ -117,6 +123,22 @@ export function EventDetailClient() {
     enabled: !!eid,
   });
 
+  const activeTiers = (tiers ?? []).filter((t) => t.is_active);
+  const ticketed = activeTiers.length > 0;
+
+  const { data: questions } = useQuery({
+    queryKey: ["questions", eid],
+    queryFn: () => eventsApi.questions(eid),
+    enabled: !!eid,
+  });
+
+  const { data: myTickets } = useQuery({
+    queryKey: ["my-tickets", user?.id],
+    queryFn: () => organizerApi.myTickets(token!),
+    enabled: !!token && !!eid,
+  });
+  const myOrders = (myTickets ?? []).filter((o) => o.event_id === eid && o.status === "confirmed");
+
   const { data: reviews } = useQuery({
     queryKey: ["reviews", eid],
     queryFn: () => eventsApi.reviews(eid),
@@ -142,6 +164,16 @@ export function EventDetailClient() {
   const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
   const idempotencyKeyRef = useRef<string | null>(null);
+
+  // Registration sheet: tickets, promo code and the host's questions in one place.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [answers, setAnswers] = useState<RegistrationAnswers>({});
+  const [missingId, setMissingId] = useState<string | null>(null);
+  const [sheetError, setSheetError] = useState("");
+  const [promoInput, setPromoInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<PromoCheck | null>(null);
+  const [promoError, setPromoError] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
 
   // Waitlist state
   const [waitlisted, setWaitlisted] = useState(event?.is_waitlisted ?? false);
@@ -171,13 +203,22 @@ export function EventDetailClient() {
   }
 
   const attendMutation = useMutation({
-    mutationFn: (status: "going" | "interested") =>
-      token ? eventsApi.attend(token, eid, status) : Promise.reject(),
-    onSuccess: (_, status) => {
-      setAttend(status);
-      qc.invalidateQueries({ queryKey: ["event", id] });
+    mutationFn: (v: "going" | "interested" | { status: "going"; answers: RegistrationAnswers }) => {
+      if (!token) return Promise.reject();
+      return typeof v === "string"
+        ? eventsApi.attend(token, eid, v)
+        : eventsApi.attend(token, eid, v.status, v.answers);
     },
-    onError: (err) => flashError(apiErrorMessage(err, "Could not update RSVP. Please try again.")),
+    onSuccess: (_, v) => {
+      setAttend(typeof v === "string" ? v : v.status);
+      if (typeof v !== "string") { setSheetOpen(false); setAnswers({}); }
+      qc.invalidateQueries({ queryKey: ["event", id] });
+      qc.invalidateQueries({ queryKey: ["attendees", eid] });
+    },
+    onError: (err, v) => {
+      const msg = apiErrorMessage(err, "Could not update RSVP. Please try again.");
+      if (typeof v === "string") flashError(msg); else setSheetError(msg);
+    },
   });
 
   const removeAttendMutation = useMutation({
@@ -210,6 +251,9 @@ export function EventDetailClient() {
   function clearCart() {
     setCart({});
     idempotencyKeyRef.current = null;
+    setAppliedPromo(null);
+    setPromoInput("");
+    setAnswers({});
   }
 
   // Set below by useEventPageTracking (needs the cart, which is worked out after this).
@@ -252,10 +296,32 @@ export function EventDetailClient() {
   const cartItems = Object.entries(cart)
     .filter(([, qty]) => qty > 0)
     .map(([tier_id, quantity]) => ({ tier_id, quantity }));
-  const cartTotal = cartItems.reduce((sum, item) => {
+  const listTotal = cartItems.reduce((sum, item) => {
     const tier = tiers?.find((t) => t.id === item.tier_id);
     return sum + (tier ? tier.price * item.quantity : 0);
   }, 0);
+  const cartTotal = appliedPromo ? appliedPromo.total : listTotal;
+  const cartKey = cartItems.map((i) => `${i.tier_id}:${i.quantity}`).join(",");
+
+  async function applyPromo(code = promoInput) {
+    if (!token || !code.trim() || cartItems.length === 0) return;
+    setPromoBusy(true);
+    setPromoError("");
+    try {
+      setAppliedPromo(await eventsApi.promoCheck(token, eid, code.trim(), cartItems));
+    } catch (err) {
+      setAppliedPromo(null);
+      setPromoError(apiErrorMessage(err, "Couldn't check that code."));
+    } finally {
+      setPromoBusy(false);
+    }
+  }
+  // The discount depends on what's in the cart: work it out again when the cart changes.
+  const appliedCode = appliedPromo?.code;
+  useEffect(() => {
+    if (appliedCode) applyPromo(appliedCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartKey]);
 
   const pageTracking = useEventPageTracking(
     event, { value: cartTotal, count: cartItems.reduce((n, i) => n + i.quantity, 0) }, purchaseSuccess);
@@ -271,9 +337,13 @@ export function EventDetailClient() {
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = randomId();
       }
-      return eventsApi.checkout(token, eid, cartItems, idempotencyKeyRef.current);
+      return eventsApi.checkout(token, eid, cartItems, idempotencyKeyRef.current, {
+        ...(appliedPromo ? { promo_code: appliedPromo.code } : {}),
+        ...(questions?.length ? { answers } : {}),
+      });
     },
     onSuccess: (data) => {
+      setSheetOpen(false);
       if (data.is_free) {
         setPurchaseSuccess(true);
         clearCart();
@@ -299,8 +369,38 @@ export function EventDetailClient() {
         }
       }
     },
-    onError: (err) => flashError(apiErrorMessage(err, "Could not initiate payment. Please try again.")),
+    onError: (err) => {
+      // A retry after an error is a new attempt (the code or answers may have changed).
+      idempotencyKeyRef.current = null;
+      setSheetError(apiErrorMessage(err, "Could not initiate payment. Please try again."));
+    },
   });
+
+  function openRegister() {
+    setSheetError("");
+    setMissingId(null);
+    setSheetOpen(true);
+  }
+
+  /** "I'm going" on an event without tickets: straight through, or via the sheet for questions. */
+  function startGoing() {
+    if (questions?.length) openRegister();
+    else attendMutation.mutate("going");
+  }
+
+  function submitRegister() {
+    setSheetError("");
+    const missing = firstMissingAnswer(questions, answers);
+    setMissingId(missing?.id ?? null);
+    if (activeTiers.length > 0) {
+      if (cartItems.length === 0) { setSheetError("Choose at least one ticket."); return; }
+      if (missing) { setSheetError(`Please answer: ${missing.label}`); return; }
+      purchaseMutation.mutate();
+    } else {
+      if (missing) { setSheetError(`Please answer: ${missing.label}`); return; }
+      attendMutation.mutate({ status: "going", answers });
+    }
+  }
 
   const waitlistJoinMutation = useMutation({
     mutationFn: () => token ? eventsApi.waitlistJoin(token, eid) : Promise.reject(),
@@ -397,12 +497,18 @@ export function EventDetailClient() {
   const isInterested = attendance === "interested";
   // Past events still open (e.g. from an organizer's profile) but can't be bought or RSVP'd to.
   const hasEnded = new Date(event.end_date ?? event.start_date).getTime() <= Date.now();
+  const onSale = activeTiers.filter((t) => t.available === null || t.available > 0);
+  const ticketsAvailable = onSale.length > 0;
+  const cheapest = onSale.length ? Math.min(...onSale.map((t) => t.price)) : 0;
+  // The action bar that stays on screen (above the bottom navigation) while scrolling.
+  const showActionBar = !hasEnded && !showingKeptCopy && event.status === "published"
+    && (ticketed ? (ticketsAvailable || myOrders.length > 0) : true);
   const shareUrl = typeof window !== "undefined"
     ? `${publicOrigin()}/events/${id}`
     : `${SITE}/events/${id}`;
 
   return (
-    <article className="flex flex-col pb-8">
+    <article className={cn("flex flex-col", showActionBar ? "pb-28" : "pb-8")}>
       {showingKeptCopy && (
         <div role="status" className="flex items-center gap-2 px-4 py-2 bg-bg-elevated border-b border-border text-xs text-text-muted">
           <WifiOff size={12} aria-hidden />
@@ -484,6 +590,7 @@ export function EventDetailClient() {
               {event.timezone && (
                 <span className="block text-xs text-text-muted mt-0.5">{event.timezone}</span>
               )}
+              {!hasEnded && <span className="block mt-1"><AddToCalendar event={event} /></span>}
             </dd>
           </div>
           <div className="flex items-center gap-2.5 text-sm text-text-secondary">
@@ -501,11 +608,13 @@ export function EventDetailClient() {
             <Users size={16} className="text-primary shrink-0" aria-hidden />
             <dt className="sr-only">Attendance</dt>
             <dd>
-              <strong className="text-text">{event.attendees_count.toLocaleString()}</strong> going ·{" "}
-              <strong className="text-text">{event.interested_count.toLocaleString()}</strong> interested
+              <GoingAvatars eventId={eid} goingCount={event.attendees_count}
+                interestedCount={event.interested_count} />
             </dd>
           </div>
         </dl>
+
+        {user && <YourTicket eventId={eid} />}
 
         {/* Price */}
         <div className="p-4 rounded border-2 border-border bg-bg-card">
@@ -545,24 +654,28 @@ export function EventDetailClient() {
         {user && !hasEnded && (
           <div className="space-y-2">
             <div className="flex gap-2" role="group" aria-label="RSVP options">
-              <Button
-                fullWidth
-                variant={isGoing ? "primary" : "secondary"}
-                loading={attendMutation.isPending || removeAttendMutation.isPending}
-                aria-pressed={isGoing}
-                onClick={() => isGoing ? removeAttendMutation.mutate() : attendMutation.mutate("going")}
-              >
-                <CheckCircle2 size={16} aria-hidden />
-                {isGoing ? "Going ✓" : "I'm Going"}
-              </Button>
-              <Button
+              {/* Ticketed events: going means holding a ticket, so that's the Get tickets button. */}
+              {!ticketed && (
+                <Button
+                  fullWidth
+                  variant={isGoing ? "primary" : "secondary"}
+                  loading={attendMutation.isPending || removeAttendMutation.isPending}
+                  aria-pressed={isGoing}
+                  onClick={() => isGoing ? removeAttendMutation.mutate() : startGoing()}
+                >
+                  <CheckCircle2 size={16} aria-hidden />
+                  {isGoing ? "Going ✓" : "I'm Going"}
+                </Button>
+              )}
+              {!(ticketed && isGoing) && <Button
+                fullWidth={ticketed}
                 variant={isInterested ? "outline" : "secondary"}
                 loading={attendMutation.isPending || removeAttendMutation.isPending}
                 aria-pressed={isInterested}
                 onClick={() => isInterested ? removeAttendMutation.mutate() : attendMutation.mutate("interested")}
               >
                 {isInterested ? "Interested ✓" : "Interested"}
-              </Button>
+              </Button>}
             </div>
             {actionError && (
               <p className="text-xs text-error text-center">{actionError}</p>
@@ -691,17 +804,11 @@ export function EventDetailClient() {
             )}
 
             <div className="space-y-2">
-              {tiers.filter((t) => t.is_active).map((tier) => {
+              {activeTiers.map((tier) => {
                 const available = tier.available;
                 const soldOut = available !== null && available <= 0;
-                const qtyInCart = cart[tier.id] ?? 0;
-                const maxQty = Math.min(tier.max_per_order, available ?? 99);
                 return (
-                  <div key={tier.id} className={cn(
-                    "rounded border-2 p-3 transition-all",
-                    qtyInCart > 0 ? "border-primary" : "border-border",
-                    soldOut && "opacity-60",
-                  )}>
+                  <div key={tier.id} className={cn("rounded border-2 border-border p-3", soldOut && "opacity-60")}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-bold text-text text-sm">{tier.name}</p>
@@ -720,37 +827,6 @@ export function EventDetailClient() {
                         {tier.price === 0 ? "Free" : formatMoney(tier.price, tier.currency)}
                       </p>
                     </div>
-
-                    {user && !soldOut && (
-                      <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-border">
-                        <span className="text-sm text-text-muted">Quantity</span>
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => changeQty(tier, Math.max(0, qtyInCart - 1))}
-                            disabled={qtyInCart === 0}
-                            className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors disabled:opacity-40"
-                          >
-                            <Minus size={12} />
-                          </button>
-                          <span className="font-black text-text w-6 text-center">{qtyInCart}</span>
-                          <button
-                            onClick={() => changeQty(tier, Math.min(maxQty, qtyInCart + 1))}
-                            disabled={qtyInCart >= maxQty}
-                            className="w-7 h-7 rounded border-2 border-border flex items-center justify-center hover:border-primary transition-colors disabled:opacity-40"
-                          >
-                            <Plus size={12} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {!user && (
-                      <div className="mt-2.5 pt-2.5 border-t border-border">
-                        <Link href="/login">
-                          <Button fullWidth size="sm">Log in to get tickets</Button>
-                        </Link>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -760,31 +836,14 @@ export function EventDetailClient() {
               <p className="text-xs text-text-muted mt-3">{event.refund_policy}</p>
             )}
 
-            {cartItems.length > 0 && (
-              <div className="mt-3 p-3 rounded border-2 border-primary bg-primary/5 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-muted">
-                    {cartItems.reduce((n, i) => n + i.quantity, 0)} ticket(s)
-                  </span>
-                  <span className="font-black text-text">
-                    {cartTotal === 0 ? "Free" : `₦${cartTotal.toLocaleString()}`}
-                  </span>
-                </div>
-                <Button
-                  fullWidth
-                  loading={purchaseMutation.isPending || paymentPending}
-                  onClick={() => purchaseMutation.mutate()}
-                >
-                  {cartTotal === 0
-                    ? "Claim Free Ticket(s)"
-                    : paymentPending
-                      ? "Opening payment…"
-                      : `Pay ₦${cartTotal.toLocaleString()}`}
-                </Button>
-                {purchaseMutation.isError && (
-                  <p className="text-xs text-error text-center">
-                    {(purchaseMutation.error as any)?.message ?? "Purchase failed"}
-                  </p>
+            {ticketsAvailable && (
+              <div className="mt-3">
+                {user ? (
+                  <Button fullWidth onClick={openRegister} loading={paymentPending}>
+                    <Ticket size={16} aria-hidden /> {myOrders.length ? "Get more tickets" : "Get tickets"}
+                  </Button>
+                ) : (
+                  <Link href="/login"><Button fullWidth>Log in to get tickets</Button></Link>
                 )}
               </div>
             )}
@@ -998,6 +1057,82 @@ export function EventDetailClient() {
           </ol>
         </section>
       </div>
+
+      {showActionBar && <ActionBarSpace />}
+      {showActionBar && (
+        <div className="fixed inset-x-0 z-40 px-3 pointer-events-none"
+          style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom))" }}>
+          <div className="max-w-lg mx-auto pointer-events-auto flex items-center gap-3 p-2.5 pl-4 rounded-lg border-2 border-border bg-bg-surface shadow-brutal">
+            <div className="flex-1 min-w-0">
+              {ticketed && myOrders.length > 0 ? (
+                <>
+                  <p className="text-sm font-black text-success">You&apos;re going ✓</p>
+                  <p className="text-xs text-text-muted truncate">{myOrders.reduce((n, o) => n + o.quantity, 0)} ticket(s)</p>
+                </>
+              ) : ticketed ? (
+                <>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{onSale.length > 1 ? "From" : "Price"}</p>
+                  <p className={cn("text-base font-black", cheapest === 0 ? "text-success" : "text-text")}>
+                    {cheapest === 0 ? "Free" : formatMoney(cheapest, onSale[0]?.currency ?? "NGN")}
+                  </p>
+                </>
+              ) : isGoing ? (
+                <p className="text-sm font-black text-success">You&apos;re going ✓</p>
+              ) : (
+                <>
+                  <p className="text-sm font-black text-text truncate">{event.title}</p>
+                  <p className="text-xs text-text-muted">{event.is_free ? "Free" : formatPrice(event.is_free, event.price_min, event.price_max)}</p>
+                </>
+              )}
+            </div>
+            {!user ? (
+              <Link href="/login"><Button size="md">{ticketed ? "Get tickets" : "Log in to RSVP"}</Button></Link>
+            ) : ticketed && myOrders.length > 0 ? (
+              <Link href={routes.ticket(myOrders[0].id)}><Button size="md" variant="secondary"><Ticket size={15} aria-hidden /> View ticket</Button></Link>
+            ) : ticketed ? (
+              <Button size="md" onClick={openRegister} loading={paymentPending}>
+                <Ticket size={15} aria-hidden /> Get tickets
+              </Button>
+            ) : isGoing ? (
+              <Button size="md" variant="ghost" loading={removeAttendMutation.isPending}
+                onClick={() => removeAttendMutation.mutate()}>Can&apos;t go</Button>
+            ) : (
+              <Button size="md" onClick={startGoing} loading={attendMutation.isPending}>
+                <CheckCircle2 size={15} aria-hidden /> I&apos;m going
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <RegisterSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title={event.title}
+        tiers={activeTiers}
+        cart={cart}
+        onQty={changeQty}
+        promo={{
+          input: promoInput, setInput: (v) => { setPromoInput(v); setPromoError(""); },
+          applied: appliedPromo, apply: () => applyPromo(),
+          remove: () => { setAppliedPromo(null); setPromoInput(""); setPromoError(""); },
+          error: promoError, busy: promoBusy,
+        }}
+        questions={questions ?? []}
+        answers={answers}
+        onAnswers={(a) => { setAnswers(a); setMissingId(null); setSheetError(""); }}
+        missingId={missingId}
+        refundPolicy={event.refund_policy}
+        submitLabel={
+          !ticketed ? "Register"
+            : cartItems.length === 0 ? "Choose tickets"
+            : cartTotal === 0 ? "Get free ticket(s)"
+            : `Pay ${formatMoney(cartTotal, "NGN")}`
+        }
+        submitting={purchaseMutation.isPending || paymentPending || attendMutation.isPending}
+        onSubmit={submitRegister}
+        error={sheetError}
+      />
 
       {/* Share to Community bottom sheet */}
       {showShareModal && (

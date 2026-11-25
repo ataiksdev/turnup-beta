@@ -104,6 +104,129 @@ class CheckoutItem(BaseModel):
 class CheckoutRequest(BaseModel):
     items: list[CheckoutItem] = Field(min_length=1)
     idempotency_key: str | None = Field(None, max_length=64)
+    promo_code: str | None = Field(None, max_length=40)
+    # question_id -> answer (text, a list for multi-choice, a bool for a checkbox)
+    answers: dict[str, str | bool | list[str] | None] | None = None
+
+
+class PromoCheckRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=40)
+    items: list[CheckoutItem] = Field(min_length=1)
+
+
+class PromoCheckOut(BaseModel):
+    code: str
+    discount_type: str
+    discount_value: float
+    subtotal: float
+    discount: float
+    total: float
+
+
+_CODE_PATTERN = r"^[A-Za-z0-9_-]{3,40}$"
+
+
+class PromoCodeCreate(BaseModel):
+    code: str = Field(pattern=_CODE_PATTERN)
+    discount_type: str = Field("percent", pattern=r"^(percent|amount)$")
+    discount_value: float = Field(gt=0)
+    max_uses: int | None = Field(None, ge=1)
+    tier_ids: list[str] | None = None
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    is_active: bool = True
+
+    @field_validator("discount_value")
+    @classmethod
+    def _sane(cls, v: float, info) -> float:
+        if info.data.get("discount_type", "percent") == "percent" and v > 100:
+            raise ValueError("A percentage discount can't be more than 100")
+        return v
+
+
+class PromoCodeUpdate(BaseModel):
+    max_uses: int | None = Field(None, ge=1)
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
+    is_active: bool | None = None
+
+
+class PromoCodeOut(BaseModel):
+    id: str
+    code: str
+    discount_type: str
+    discount_value: float
+    max_uses: int | None
+    times_used: int
+    tier_ids: list[str] | None
+    valid_from: datetime | None
+    valid_until: datetime | None
+    is_active: bool
+    discount_given: float = 0.0   # naira off across paid, unrefunded orders
+    created_at: datetime
+
+
+_KIND_PATTERN = r"^(text|long_text|single_choice|multi_choice|checkbox)$"
+
+
+class QuestionCreate(BaseModel):
+    label: str = Field(min_length=1, max_length=200)
+    help_text: str | None = Field(None, max_length=300)
+    kind: str = Field("text", pattern=_KIND_PATTERN)
+    options: list[str] | None = None
+    required: bool = False
+    position: int | None = None
+
+    @field_validator("options")
+    @classmethod
+    def _clean_options(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        out = []
+        for o in v:
+            o = o.strip()[:100]
+            if o and o not in out:
+                out.append(o)
+        return out[:30]
+
+
+class QuestionUpdate(BaseModel):
+    label: str | None = Field(None, min_length=1, max_length=200)
+    help_text: str | None = Field(None, max_length=300)
+    options: list[str] | None = None
+    required: bool | None = None
+    position: int | None = None
+
+    @field_validator("options")
+    @classmethod
+    def _clean_options(cls, v: list[str] | None) -> list[str] | None:
+        return QuestionCreate._clean_options(v)
+
+
+class QuestionOut(BaseModel):
+    id: str
+    label: str
+    help_text: str | None
+    kind: str
+    options: list[str] | None
+    required: bool
+    position: int
+    model_config = {"from_attributes": True}
+
+
+class RegistrationRow(BaseModel):
+    user_id: str
+    name: str
+    username: str | None
+    email: str | None
+    status: str                    # "ticket" or "going"
+    answers: dict[str, str]        # question_id -> answer as text
+    answered_at: datetime | None
+
+
+class RegistrationsOut(BaseModel):
+    questions: list[QuestionOut]
+    rows: list[RegistrationRow]
 
 
 class CheckoutInitOut(BaseModel):
@@ -128,6 +251,7 @@ class TicketOrderOut(BaseModel):
     ticket_code: str | None = None
     checked_in_at: datetime | None = None
     admitted_count: int = 0
+    discount_amount: float | None = None
     # enriched fields returned by my-tickets endpoint
     event_title: str | None = None
     event_slug: str | None = None

@@ -19,6 +19,7 @@ export interface TicketOrder {
   quantity: number; unit_price: number; total_price: number;
   status: string; payment_reference?: string; created_at: string;
   ticket_code?: string; checked_in_at?: string; admitted_count?: number;
+  discount_amount?: number | null;
   event_title?: string; event_slug?: string; event_cover?: string;
   event_date?: string; event_city?: string; event_address?: string; event_venue?: string;
 }
@@ -26,6 +27,41 @@ export interface TicketOrder {
 export interface CheckoutItem {
   tier_id: string;
   quantity: number;
+}
+
+/** Registration answers by question id: text, a list (multi-choice) or a bool (checkbox). */
+export type RegistrationAnswers = Record<string, string | string[] | boolean | null>;
+
+export type QuestionKind = "text" | "long_text" | "single_choice" | "multi_choice" | "checkbox";
+
+export interface RegistrationQuestion {
+  id: string; label: string; help_text: string | null; kind: QuestionKind;
+  options: string[] | null; required: boolean; position: number;
+}
+
+export interface PromoCode {
+  id: string; code: string; discount_type: "percent" | "amount"; discount_value: number;
+  max_uses: number | null; times_used: number; tier_ids: string[] | null;
+  valid_from: string | null; valid_until: string | null; is_active: boolean;
+  discount_given: number; created_at: string;
+}
+
+export interface PromoCheck {
+  code: string; discount_type: "percent" | "amount"; discount_value: number;
+  subtotal: number; discount: number; total: number;
+}
+
+export interface Registrations {
+  questions: RegistrationQuestion[];
+  rows: {
+    user_id: string; name: string; username: string | null; email: string | null;
+    status: "ticket" | "going"; answers: Record<string, string>; answered_at: string | null;
+  }[];
+}
+
+export interface Attendee {
+  user: { id: string; username: string; full_name: string | null; display_name?: string | null; avatar_url: string | null };
+  status: string; created_at: string;
 }
 
 export interface CheckoutInit {
@@ -376,10 +412,10 @@ export const eventsApi = {
       method: "POST", body: JSON.stringify(data),
     }, token),
 
-  attend: (token: string, eventId: string, status: "going" | "interested") =>
+  attend: (token: string, eventId: string, status: "going" | "interested", answers?: RegistrationAnswers) =>
     request<{ status: string; attendees_count: number }>(
       `/events/${eventId}/attend`,
-      { method: "POST", body: JSON.stringify({ status }) },
+      { method: "POST", body: JSON.stringify({ status, ...(answers ? { answers } : {}) }) },
       token,
     ),
 
@@ -390,11 +426,12 @@ export const eventsApi = {
     request<{ saved: boolean }>(`/events/${eventId}/save`, { method: "POST" }, token)
       .then((r) => { requestOfflineSync(); return r; }),
 
-  attendees: (eventId: string, status?: string) => {
-    const q = status ? `?status=${status}` : "";
-    return request<{ user_id: string; status: string; created_at: string }[]>(
-      `/events/${eventId}/attendees${q}`,
-    );
+  attendees: (eventId: string, status?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (limit) params.set("limit", String(limit));
+    const q = params.toString() ? `?${params}` : "";
+    return request<Attendee[]>(`/events/${eventId}/attendees${q}`);
   },
 
   categories: () => request<Category[]>("/events/categories"),
@@ -402,10 +439,57 @@ export const eventsApi = {
   analytics: (token: string, eventId: string) =>
     request<EventAnalytics>(`/events/${eventId}/analytics`, {}, token),
 
-  checkout: (token: string, eventId: string, items: CheckoutItem[], idempotencyKey?: string) =>
+  checkout: (token: string, eventId: string, items: CheckoutItem[], idempotencyKey?: string,
+    extra?: { promo_code?: string; answers?: RegistrationAnswers }) =>
     request<CheckoutInit>(`/events/${eventId}/tickets/checkout`, {
-      method: "POST", body: JSON.stringify({ items, idempotency_key: idempotencyKey }),
+      method: "POST", body: JSON.stringify({ items, idempotency_key: idempotencyKey, ...extra }),
     }, token).then((r) => { if (r.is_free) requestOfflineSync(); return r; }),
+
+  promoCheck: (token: string, eventId: string, code: string, items: CheckoutItem[]) =>
+    request<PromoCheck>(`/events/${eventId}/tickets/promo-check`, {
+      method: "POST", body: JSON.stringify({ code, items }),
+    }, token),
+
+  questions: (eventId: string) =>
+    request<RegistrationQuestion[]>(`/events/${eventId}/questions`),
+
+  createQuestion: (token: string, eventId: string, data: Partial<RegistrationQuestion>) =>
+    request<RegistrationQuestion>(`/events/${eventId}/questions`, {
+      method: "POST", body: JSON.stringify(data),
+    }, token),
+
+  updateQuestion: (token: string, eventId: string, questionId: string, data: Partial<RegistrationQuestion>) =>
+    request<RegistrationQuestion>(`/events/${eventId}/questions/${questionId}`, {
+      method: "PATCH", body: JSON.stringify(data),
+    }, token),
+
+  deleteQuestion: (token: string, eventId: string, questionId: string) =>
+    request<void>(`/events/${eventId}/questions/${questionId}`, { method: "DELETE" }, token),
+
+  registrations: (token: string, eventId: string) =>
+    request<Registrations>(`/events/${eventId}/registrations`, {}, token),
+
+  promoCodes: (token: string, eventId: string) =>
+    request<PromoCode[]>(`/events/${eventId}/promo-codes`, {}, token),
+
+  createPromoCode: (token: string, eventId: string, data: {
+    code: string; discount_type: "percent" | "amount"; discount_value: number;
+    max_uses?: number | null; tier_ids?: string[] | null;
+    valid_from?: string | null; valid_until?: string | null;
+  }) =>
+    request<PromoCode>(`/events/${eventId}/promo-codes`, {
+      method: "POST", body: JSON.stringify(data),
+    }, token),
+
+  updatePromoCode: (token: string, eventId: string, promoId: string, data: {
+    is_active?: boolean; max_uses?: number | null; valid_until?: string | null;
+  }) =>
+    request<PromoCode>(`/events/${eventId}/promo-codes/${promoId}`, {
+      method: "PATCH", body: JSON.stringify(data),
+    }, token),
+
+  deletePromoCode: (token: string, eventId: string, promoId: string) =>
+    request<void>(`/events/${eventId}/promo-codes/${promoId}`, { method: "DELETE" }, token),
 
   recordView: (eventId: string, token?: string) =>
     request<void>(`/events/${eventId}/views`, { method: "POST" }, token),

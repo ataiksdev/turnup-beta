@@ -28,7 +28,10 @@ export function CookieNotice() {
 
   return (
     <div role="region" aria-label="Storage notice"
-      className="fixed inset-x-0 bottom-20 z-40 px-4 pointer-events-none">
+      // --action-bar-height: a page's fixed action bar (the event page) sits above the
+      // bottom navigation; stack this notice above it rather than covering its button.
+      style={{ bottom: "calc(5rem + var(--action-bar-height, 0px))" }}
+      className="fixed inset-x-0 z-40 px-4 pointer-events-none">
       <div className="pointer-events-auto max-w-2xl mx-auto flex items-start gap-3 p-3 rounded border-2 border-border bg-bg-card shadow-brutal-sm text-xs text-text-secondary">
         <p className="flex-1">
           Turnup keeps your sign-in, theme and offline tickets on this device so the app works. No ads, no

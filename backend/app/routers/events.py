@@ -640,6 +640,10 @@ async def attend(
         raise HTTPException(400, "This event has ended.")
 
     becoming_going = payload.status == "going"
+    clean_answers = []
+    if becoming_going and event.host_id != user.id:
+        from app.services.registration import check_answers
+        clean_answers = await check_answers(db, event_id, user.id, payload.answers)
     if becoming_going:
         # Ticketed events: "going" means holding a ticket. Otherwise anyone could RSVP to a
         # paid event for free (and then review it, take a capacity spot, etc.).
@@ -689,7 +693,9 @@ async def attend(
                     props={"status": payload.status, "from": old_status,
                            "days_until_event": _days_until(event)})
     if becoming_going:
+        from app.services.registration import save_answers
         from app.services.sharing import credit
+        await save_answers(db, event_id, user.id, clean_answers)
         await credit(db, user.id, event_id, "going")  # a share link that brought them
 
     # Notify host when someone RSVPs going (skip if user is the host)
@@ -1025,10 +1031,17 @@ async def checkout_tickets(
     if event.members_only and not member:
         raise HTTPException(402, "This event is for Turnup+ members.")
 
+    from app.services.registration import (
+        check_answers, find_valid_promo, line_discounts, save_answers, take_use,
+    )
+    clean_answers = await check_answers(db, event_id, user.id, payload.answers)
+    promo = await find_valid_promo(db, event_id, payload.promo_code) if payload.promo_code else None
+
     now = datetime.now(timezone.utc)
     reference = f"turnup-{uuid.uuid4().hex[:16]}"
     orders: list[TicketOrder] = []
     tiers_by_order: dict[str, TicketTier] = {}
+    lines: list[tuple[TicketTier, int]] = []
 
     for item in payload.items:
         t = await _get_tier(item.tier_id, event_id, db)
@@ -1064,12 +1077,27 @@ async def checkout_tickets(
         db.add(order)
         orders.append(order)
         tiers_by_order[order.id] = t
+        lines.append((t, item.quantity))
 
+    if promo:
+        off = line_discounts(promo, lines)
+        if sum(off) <= 0:
+            raise HTTPException(400, "That promo code doesn't apply to the tickets you've chosen.")
+        for order, discount in zip(orders, off):
+            if discount > 0:
+                order.discount_amount = discount
+                order.total_price = round(order.total_price - discount, 2)
+            order.promo_code_id = promo.id
+        await take_use(db, promo, user.id, reference, round(sum(off), 2))
+
+    await save_answers(db, event_id, user.id, clean_answers)
     await db.flush()
-    total = sum(o.total_price for o in orders)
+    total = round(sum(o.total_price for o in orders), 2)
     record_activity(db, "checkout_started", user_id=user.id, event_id=event_id, props={
         "cart_value": total, "ticket_count": sum(o.quantity for o in orders),
         "tiers": [{"tier_id": o.tier_id, "unit_price": o.unit_price, "quantity": o.quantity} for o in orders],
+        **({"promo_code": promo.code, "discount": round(sum(o.discount_amount or 0 for o in orders), 2)}
+           if promo else {}),
     })
 
     if total == 0:
@@ -1132,7 +1160,7 @@ def _order_out(order: TicketOrder, tier_name: str) -> TicketOrderOut:
         quantity=order.quantity, unit_price=order.unit_price, total_price=order.total_price,
         status=order.status, payment_reference=order.payment_reference,
         ticket_code=order.ticket_code, checked_in_at=order.checked_in_at,
-        created_at=order.created_at,
+        discount_amount=order.discount_amount, created_at=order.created_at,
     )
 
 

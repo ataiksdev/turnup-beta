@@ -152,6 +152,8 @@ class EventDetail(EventOut):
 
 class AttendRequest(BaseModel):
     status: str = Field(pattern=r"^(going|interested)$")
+    # Registration questions (only used when going): question_id -> answer
+    answers: dict[str, str | bool | list[str] | None] | None = None
 
 
 class VenueEventCreate(EventCreate):

@@ -7,6 +7,7 @@ from app.models.auth_tokens import (
 from app.models.organizer import (
     OrganizerProfile, TicketTier, TicketOrder, EventTemplate,
     EventCoHost, EventWaitlist, EventView, EventReview,
+    PromoCode, PromoRedemption, EventQuestion, RegistrationAnswer,
 )
 
 from app.models import venue as _venue  # noqa: F401  (registers venue marketplace tables)
@@ -21,5 +22,6 @@ __all__ = [
     "MagicLink", "TwoFactor", "OAuthAccount", "PhoneOTP",
     "OrganizerProfile", "TicketTier", "TicketOrder", "EventTemplate",
     "EventCoHost", "EventWaitlist", "EventView", "EventReview",
+    "PromoCode", "PromoRedemption", "EventQuestion", "RegistrationAnswer",
     "ConsentLog", "EventEmbedding", "HiddenItem", "SearchAlert", "WeatherForecast", "ShareLink", "ShareConversion",
 ]
