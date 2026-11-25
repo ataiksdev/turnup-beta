@@ -1,8 +1,13 @@
-# Competitive analysis: Turnup vs Hi.Events vs Luma
+# Competitive analysis: Turnup vs Hi.Events vs Luma vs PartyVerse
 
-_November 2026. Turnup is described from this repository's code. Hi.Events and Luma are
-described from their public sites, docs and third-party reviews; their pricing changes often,
-so check the sources at the end before quoting numbers._
+_November 2026. Turnup is described from this repository's code. Hi.Events, Luma and PartyVerse
+are described from their public sites, app-store listings, press and third-party reviews; their
+pricing changes often, so check the sources at the end before quoting numbers. PartyVerse is
+covered in [section 6](#6-partyverse-pvrsvp)._
+
+_Update: since the first version, Turnup has shipped promo codes, custom registration
+questions, Add to calendar, "who's going" avatars, the viewer's ticket on the event page, and a
+Get tickets / I'm going bar that stays on screen and opens a registration sheet._
 
 ## 1. One-line positioning
 
@@ -27,8 +32,8 @@ neither competes with Turnup's **venue marketplace**.
 | **Event sourcing / supply bootstrapping** | ✅ AI scout pulls public feeds into pending events | ❌ | ❌ (hosts create) |
 | **Local payments (Nigeria)** | ✅ Paystack (cards, transfer, USSD channels), NGN, split payouts | ❌ Stripe-centric | ❌ Stripe-centric |
 | **Paid / free / tiered tickets** | ✅ | ✅ (+ donation / pay-what-you-want) | ✅ |
-| **Promo / discount codes** | ❌ not found in code | ✅ | ✅ |
-| **Custom registration questions** | ❌ not found | ✅ | ✅ |
+| **Promo / discount codes** | ✅ (added) | ✅ | ✅ |
+| **Custom registration questions** | ✅ (added, with CSV export) | ✅ | ✅ |
 | **Approval-required RSVPs** | ? | ◐ | ✅ (incl. paid + approval) |
 | **Waitlist** | ✅ | ◐ | ✅ |
 | **Members' presale / gated tiers** | ✅ Turnup+ presale and members-only tiers | ❌ | ◐ (token/invite gating) |
@@ -84,8 +89,8 @@ neither competes with Turnup's **venue marketplace**.
 - **Single-host assumptions** (uploads volume, one scheduler process) will need work at scale.
 
 **Gaps to close (prioritised)**
-1. Promo codes + early-bird / time-boxed pricing (quick win, high organizer value).
-2. Custom registration questions and approval-required RSVPs (needed for tech/community events — Luma's core).
+1. ~~Promo codes~~ (done). Early-bird / time-boxed pricing already works through tier sale dates.
+2. ~~Custom registration questions~~ (done). Approval-required RSVPs still to do.
 3. iOS build of the Capacitor app; Apple/Google Wallet passes for tickets.
 4. Audience messaging: let organizers email/SMS/WhatsApp followers and past attendees (with send limits as a paid upsell, like Luma).
 5. Organizer payouts transparency (statements, payout schedule) and buyer-pays vs absorb-fee toggle.
@@ -190,3 +195,105 @@ if it gains local payments it becomes the strongest competitor in that segment.
 - Hi.Events: [GitHub](https://github.com/HiEventsDev/Hi.Events), [free ticketing page](https://hi.events/free-event-ticketing), [cheapest ticketing (pricing)](https://blog.hi.events/what-is-the-cheapest-site-to-sell-tickets/), [Gappsy review](https://gappsy.com/tools/hi/), [G2](https://www.g2.com/products/hi-events-event-management-ticket-selling-platform/pricing), [Product Hunt](https://www.producthunt.com/p/hi-events/hi-events)
 - Luma: [pricing](https://luma.com/pricing), [Luma Plus overview](https://help.luma.com/p/luma-plus), [guest list management](https://help.luma.com/p/managing-your-guest-list), [check-in](https://help.luma.com/p/check-in), [iOS app](https://help.luma.com/p/luma-ios-app), [App Store](https://apps.apple.com/app/id1546150895)
 - Turnup: this repository (`README.md`, `docs/venues-spec.md`, `docs/recommendations-spec.md`, `backend/app/`).
+
+
+## 6. PartyVerse (pv.rsvp)
+
+_The pv.rsvp site itself couldn't be opened from the environment this was written in (network
+policy), so this profile is built from search results: app-store listings, the company's
+pages, launch press (some of it sponsored) and one hands-on review. Treat feature claims as
+the company's own unless noted._
+
+### What it is
+
+- **PiggyVest's events app.** Launched in **September 2025 as "PartyVest"**, "backed by
+  PiggyVest and Zrosk". It has since been **renamed PartyVerse ("Events & Giftings")**: the same
+  App Store id (6748926356) and Android package (`com.planaparty.app`) now carry the new name.
+  The developer is listed as Piggytech Global (© PlanAParty Global Limited). `pv.rsvp` is the
+  domain its event and ticket links use.
+- **Positioning:** "Plan, Gift & Celebrate". It is an all-in-one app for *throwing* a party
+  (birthdays, BBQs, owambe, weddings) that also sells tickets to public events.
+- **Platforms:** iOS and Android. "Free to use, no hidden fees" per the App Store; the Play
+  listing mentions in-app purchases. No public fee schedule for tickets or gift links was found.
+
+### Features (as described)
+
+| Area | PartyVerse |
+|---|---|
+| Planning | Create an event, set guest count and budget, a **planner board**, budget tracker, co-planners |
+| Money | Each event gets its **own account number** ("Party Bank"): fund it, receive payments and donations, split costs with friends, and **earn daily interest on money sitting there**, on PiggyVest's infrastructure |
+| Vendors | Food, drink and rental vendors, which the team says it vets ("verified vendors") |
+| Gifting | **Wishlists and gift links** for cash, flowers and hampers. A TechCabal hands-on in Nov 2025 found gifting "isn't live on the app yet" |
+| Guests | Invites, RSVP tracking, guest lists, updates to guests, shared memories gallery |
+| Discovery and tickets | Explore page of public events, buy tickets, **group tickets**, RSVP to free events, save events |
+| Big events | Sold **Wizkid "Golden Circle"** tickets for his Lagos show on 28 Dec 2025 (₦100,000 per Zikoko, ₦150,000 per NotJustOK; promoted through sponsored posts) |
+| Virtual events | Listed |
+
+Not found anywhere: promo codes, custom registration questions, approval RSVPs, door check-in
+tools, organizer analytics, personalised recommendations, reviews, communities.
+
+### Turnup vs PartyVerse
+
+| | Turnup | PartyVerse |
+|---|---|---|
+| Core job | Find and buy public events; run them as an organizer; book venues | Plan and pay for *your own* celebration; also sells event tickets |
+| Backer and distribution | Independent | **PiggyVest** (a large existing base of Nigerian savers, strong brand trust, press reach) |
+| Money | Paystack checkout and split payouts | **Event wallets with interest**, account number per event, cost splitting, contributions |
+| Gifting / contributions | ❌ | ✅ (wishlists, gift links; rollout unclear) |
+| Discovery | ✅ personalised For You feed with Lagos context, AI-scouted supply, search, follows | ◐ explore page |
+| Organizer ticketing tools | ✅ tiers, presales, promo codes, questions, waitlist, check-in, co-hosts, analytics, transfers | ◐ tickets, group tickets; deeper tools not evident |
+| Venues and vendors | ✅ **KYC-verified venues**: agent visits, quotes, protected deposits, refund enforcement, disputes | ◐ vetted vendor list (food, drinks, rentals); no venue booking protection described |
+| Private party planning (budget, planner board) | ❌ | ✅ |
+| Social layer | ✅ communities, comments, reviews, Wrapped | ◐ memories gallery |
+| Native apps | ◐ Android only | ✅ iOS + Android |
+
+### SWOT for PartyVerse (from Turnup's point of view)
+
+**Strengths:** PiggyVest's trust and user base, and a ready fintech stack (wallets, interest,
+account numbers) that Turnup can't build quickly. It owns the culturally huge *contributions and
+gifting* moment (birthday cash, owambe spraying, wedding gifts). It plans private events, a
+category Turnup doesn't serve. It has marketing reach: sponsored coverage and big-artist ticketing
+(Wizkid).
+
+**Weaknesses:** It is young (Sept 2025), and the marketing ran ahead of the product (gifting
+wasn't live at the Nov 2025 review). It went through a rename within months of launch. Public
+discovery is shallow, with no evidence of personalisation or local-context ranking. Organizer
+tools for public ticketed events look thin. It has vendors but no verified-venue marketplace
+with protected deposits.
+
+**Gaps (things it lacks that Turnup has):** organizer-grade ticketing (promo codes, questions,
+waitlist, check-in, analytics); a personalised discovery feed; a verified venue marketplace;
+communities and reviews.
+
+**Threats to Turnup:**
+- **The most direct local threat** of the four products here. It targets the same Lagos
+  attendees, and PiggyVest can **cross-sell to its savers** and subsidise fees.
+- **Money gravity.** If hosts already keep the event budget in a PartyVerse wallet that earns
+  interest, selling tickets there too is the default.
+- **Detty December.** It is already selling headline concert tickets, Turnup's highest-value season.
+- **Vendors creeping into venues.** Its vendor list could grow to include venues and erode
+  Turnup's marketplace moat.
+
+### What Turnup should do about it
+
+1. **Don't fight on fintech.** Compete on what PartyVerse is weak at: the best feed of *what's on in
+   Lagos* (personalised, local context, weekly picks) and the best tools for organizers selling
+   tickets to the public.
+2. **Add a light contributions layer through Paystack:** "chip in / gift the host" links on
+   events, and **group tickets with split pay** (one person reserves, friends each pay their share
+   before the hold expires). This covers the social-money moment without a wallet.
+3. **Make verified venues the headline.** Protected deposits, agent-checked venues and enforced
+   refunds are a trust story a vendor list doesn't match. Market it for weddings and owambe venues.
+4. **Ship iOS.** PartyVerse is on both stores; Turnup's Android-only app is a visible gap.
+5. **Win Detty December early.** Lock in promoters with promo codes, presales, Turnup+ fast-lane
+   and check-in. These are features PartyVerse doesn't show for organizers.
+6. **Watch these signals:** a PartyVerse fee schedule, organizer tools (check-in or promo codes
+   appearing), any "venues" category, and PiggyVest in-app cross-promotion.
+
+### PartyVerse sources
+
+- [PartyVerse on Google Play](https://play.google.com/store/apps/details?id=com.planaparty.app&hl=en), [PartyVerse on the App Store](https://apps.apple.com/us/app/partyverse-events-giftings/id6748926356), [same listing as PartyVest](https://apps.apple.com/us/app/partyvest-events-giftings/id6748926356)
+- [partyverse.com](https://www.partyverse.com/), [planning](https://www.partyverse.com/planning), [guests](https://www.partyverse.com/guests), [gifting](https://www.partyverse.com/gifting), [about](https://www.partyverse.com/about-us), [pv.rsvp](https://www.pv.rsvp/), [@partyverseapp on X](https://x.com/partyverseapp?lang=en-GB)
+- Launch coverage: [BusinessDay](https://businessday.ng/news/article/partyvest-launches-to-simplify-how-nigerians-plan-and-celebrate-events/), [Techpoint (brand press)](https://techpoint.africa/brandpress/meet-partyvest-the-new-app-helping-nigerians-find-events-celebrate-and-make-memories/), [ThisDay](https://www.thisdaylive.com/2025/11/10/partyvest-new-app-helping-nigerians-find-events-celebrate-and-make-memories/), [BellaNaija](https://www.bellanaija.com/2025/11/partyvest-event-app/), [TechPolyp](https://techpolyp.com/partyvest-the-ultimate-party-app-helping-nigerians-organize-and-discover-parties-and-connect-with-others/)
+- Hands-on: [TechCabal: "I tried planning a BBQ on PiggyVest-backed PartyVest"](https://techcabal.com/2025/11/18/how-piggyvest-backed-partyvest-works/), [TechCabal: Detty December apps](https://techcabal.com/2025/12/01/top-apps-for-detty-december/)
+- Wizkid ticketing: [BellaNaija (sponsored)](https://www.bellanaija.com/2025/12/wizkid-live-lagos-partyverse-golden-circle/), [Zikoko](https://www.zikoko.com/?p=367251), [NotJustOK](https://notjustok.com/news/how-much-are-wizkids-g-o-a-t-2025-lagos-concert-tickets/)
