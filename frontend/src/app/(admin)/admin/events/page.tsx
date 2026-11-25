@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Search, Users, Eye, Sparkles, CalendarPlus } from "lucide-react";
+import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +48,8 @@ function formatDate(dateStr: string) {
 }
 
 function EventRow({ ev }: { ev: AdminEventOut }) {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
+  const isOwn = !!user && ev.host_id === user.id;
   const qc = useQueryClient();
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
@@ -164,6 +165,14 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
       )}
 
       <div className="flex flex-wrap gap-2 items-center">
+        {isOwn && (
+          <Link
+            href={`/admin/events/edit?id=${encodeURIComponent(ev.id)}`}
+            className="flex items-center gap-1 h-8 px-3 text-sm font-bold rounded bg-bg-card text-text border-2 border-border shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-transform"
+          >
+            <Pencil size={13} aria-hidden /> Edit
+          </Link>
+        )}
         <Button
           size="sm"
           variant="secondary"

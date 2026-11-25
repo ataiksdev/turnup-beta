@@ -157,3 +157,38 @@ async def test_editing_rejected_event_resubmits_for_review(client, role_auth):
     data = patch_resp.json()
     assert data["review_status"] == "pending"
     assert data["review_note"] is None
+
+
+@pytest.mark.asyncio
+async def test_admin_edits_own_event_category_and_country_stays_approved(client, role_auth, db):
+    from app.models.event import Category
+    cat_id = str(uuid.uuid4())
+    db.add(Category(id=cat_id, name="Edit Test Cat", slug=f"edit-test-{cat_id[:6]}"))
+    await db.commit()
+    admin = await role_auth("admin")
+    ev = (await client.post("/api/events", json=_event_payload(title="Admin Own Event"),
+                            headers=admin["headers"])).json()
+
+    resp = await client.patch(f"/api/events/{ev['id']}", headers=admin["headers"], json={
+        "title": "Admin Own Event (edited)", "category_id": cat_id, "country": "Ghana"})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["title"] == "Admin Own Event (edited)"
+    assert data["category"]["id"] == cat_id
+    assert data["country"] == "Ghana"
+    assert data["review_status"] == "approved" and data["status"] == "published"
+
+    bad = await client.patch(f"/api/events/{ev['id']}", headers=admin["headers"],
+                             json={"category_id": "no-such-category"})
+    assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_edit_someone_elses_event_content(client, role_auth):
+    organizer = await role_auth("organizer")
+    admin = await role_auth("admin")
+    ev = (await client.post("/api/events", json=_event_payload(title="Organizer Own Event"),
+                            headers=organizer["headers"])).json()
+    resp = await client.patch(f"/api/events/{ev['id']}", headers=admin["headers"],
+                              json={"title": "Hijacked title"})
+    assert resp.status_code in (403, 404)

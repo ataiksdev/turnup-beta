@@ -543,6 +543,10 @@ async def update_event(
             event.review_status = "pending"
             event.review_note = "Edited after approval"
 
+    if changes.get("category_id") and not (await db.execute(
+            select(Category.id).where(Category.id == changes["category_id"]))).first():
+        raise HTTPException(400, "That category doesn't exist")
+
     new_start = changes.get("start_date", event.start_date)
     new_end = changes.get("end_date", event.end_date)
     if new_start and new_end and _as_utc(new_end) < _as_utc(new_start):
