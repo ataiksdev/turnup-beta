@@ -151,6 +151,9 @@ async def cancel_order(db: AsyncSession, order: TicketOrder, reason: str) -> boo
     if result.rowcount == 0:
         return False
     await release_inventory(db, order.tier_id, order.quantity)
+    if order.promo_code_id:
+        from app.services.registration import release_use
+        await release_use(db, order.payment_reference)
     return True
 
 
@@ -257,6 +260,9 @@ async def _revive_expired_order(db: AsyncSession, order: TicketOrder) -> bool:
     if result.rowcount == 0:  # someone else resolved it first; give the units back
         await release_inventory(db, order.tier_id, order.quantity)
         return False
+    if order.promo_code_id:
+        from app.services.registration import retake_use
+        await retake_use(db, order.payment_reference)
     return True
 
 

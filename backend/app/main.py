@@ -19,6 +19,7 @@ from app.routers import uploads
 from app.routers import discovery, me, share
 from app.routers import admin_venues, agents, plus, venue_bookings, venue_portal, venues
 from app.routers import track
+from app.routers import registration
 
 os.makedirs("data", exist_ok=True)
 logger = logging.getLogger("turnup")
@@ -67,6 +68,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(events.router)
+app.include_router(registration.router)
 app.include_router(users.router)
 app.include_router(social.router)
 app.include_router(organizer.router)

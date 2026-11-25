@@ -51,7 +51,8 @@ POST_BASELINE_COLUMNS = {
     "events": {"host_venue_id", "venue_id", "members_only", "fast_lane_enabled",            # 0003
                "allow_ticket_transfers"},
     "ticket_tiers": {"members_only", "plus_presale_ends_at", "presale_then"},               # 0003
-    "ticket_orders": {"venue_id", "recovery_kobo", "admitted_count"},                       # 0003, 0004
+    "ticket_orders": {"venue_id", "recovery_kobo", "admitted_count",                        # 0003, 0004
+                      "promo_code_id", "discount_amount"},                                  # 0015
     "platform_settings": {"venue_commission_percent", "featured_state_week_kobo",           # 0003
                           "featured_area_week_kobo", "featured_max_per_state", "featured_max_per_area",
                           "max_recovery_percent", "refund_funding_hours", "refund_suspend_days",
@@ -66,10 +67,11 @@ def _post_baseline_tables() -> set[str]:
     """Every table defined in app/models/venue.py (migration 0003), app/models/activity.py
     (0008), app/models/discovery.py (0009; consent_log 0012; weather_forecasts 0013;
     event_embeddings 0014) and
-    app/models/sharing.py (0011)."""
+    app/models/sharing.py (0011), plus the promo code and registration question tables (0015)."""
     from app.models import activity, discovery, sharing, venue
     return {m.__tablename__ for mod in (venue, activity, discovery, sharing) for m in vars(mod).values()
-            if isinstance(m, type) and issubclass(m, Base) and m is not Base and hasattr(m, "__tablename__")}
+            if isinstance(m, type) and issubclass(m, Base) and m is not Base and hasattr(m, "__tablename__")} \
+        | {"promo_codes", "promo_redemptions", "event_questions", "registration_answers"}
 
 
 def baseline_metadata():

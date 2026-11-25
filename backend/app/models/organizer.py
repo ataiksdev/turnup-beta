@@ -7,10 +7,12 @@ Organizer-specific models:
   EventCoHost      — co-organizer invitations per event
   EventWaitlist    — waitlist entries when event is at capacity
   EventView        — per-request view tracking for analytics
+  PromoCode        — discount codes per event; PromoRedemption = one checkout's use of a code
+  EventQuestion    — custom registration questions; RegistrationAnswer = a person's answer
 """
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -101,6 +103,10 @@ class TicketOrder(Base):
     # of this payment Turnup kept towards the venue's balance (spec 4.5).
     venue_id: Mapped[str | None] = mapped_column(String(36), index=True)
     recovery_kobo: Mapped[int | None] = mapped_column(Integer)
+    # Promo code used at checkout. unit_price stays the list price; total_price is what the
+    # buyer actually paid (after discount_amount), so payment checks and refunds use it as-is.
+    promo_code_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    discount_amount: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     user = relationship("User", back_populates="ticket_orders")
@@ -191,3 +197,78 @@ class EventReview(Base):
 
     event = relationship("Event", back_populates="reviews")
     user = relationship("User", back_populates="reviews")
+
+
+class PromoCode(Base):
+    """A discount code for one event. The organizer absorbs the discount (the platform fee is
+    taken on what the buyer actually paid)."""
+    __tablename__ = "promo_codes"
+    __table_args__ = (UniqueConstraint("event_id", "code"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"),
+                                          nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(40), nullable=False)       # stored upper-case
+    # percent: discount_value is 1-100 (% off each eligible ticket)
+    # amount:  discount_value is naira off the whole order (capped at the eligible subtotal)
+    discount_type: Mapped[str] = mapped_column(String(10), nullable=False, default="percent")
+    discount_value: Mapped[float] = mapped_column(Float, nullable=False)
+    max_uses: Mapped[int | None] = mapped_column(Integer)               # checkouts; null = unlimited
+    times_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    tier_ids: Mapped[list | None] = mapped_column(JSON)                 # null = every tier
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PromoRedemption(Base):
+    """One checkout's use of a code. It holds a use from checkout until the cart expires
+    unpaid (released) -- the same lifecycle as the reserved tickets."""
+    __tablename__ = "promo_redemptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    promo_code_id: Mapped[str] = mapped_column(ForeignKey("promo_codes.id", ondelete="CASCADE"),
+                                               nullable=False, index=True)
+    event_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    payment_reference: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    discount_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    status: Mapped[str] = mapped_column(String(10), default="active")  # active | released
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class EventQuestion(Base):
+    """A question the organizer asks everyone who registers (buys a ticket or RSVPs going)."""
+    __tablename__ = "event_questions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"),
+                                          nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    help_text: Mapped[str | None] = mapped_column(String(300))
+    # text | long_text | single_choice | multi_choice | checkbox
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="text")
+    options: Mapped[list | None] = mapped_column(JSON)                  # choices for *_choice
+    required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # A question with answers is hidden rather than deleted, so the answers aren't lost.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RegistrationAnswer(Base):
+    __tablename__ = "registration_answers"
+    __table_args__ = (UniqueConstraint("question_id", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"),
+                                          nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey("event_questions.id", ondelete="CASCADE"),
+                                             nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"),
+                                         nullable=False, index=True)
+    # Plain text; multi_choice answers are stored as a JSON list string, checkbox as "yes"/"no".
+    answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
