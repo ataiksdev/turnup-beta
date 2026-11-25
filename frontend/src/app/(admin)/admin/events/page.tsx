@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil } from "lucide-react";
+import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil, BarChart2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -173,6 +173,12 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
             <Pencil size={13} aria-hidden /> Edit
           </Link>
         )}
+        <Link
+          href={`/admin/events/analytics?id=${encodeURIComponent(ev.id)}`}
+          className="flex items-center gap-1 h-8 px-3 text-sm font-bold rounded bg-bg-card text-text border-2 border-border shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-transform"
+        >
+          <BarChart2 size={13} aria-hidden /> Analytics
+        </Link>
         <Button
           size="sm"
           variant="secondary"

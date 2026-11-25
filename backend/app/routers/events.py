@@ -153,6 +153,16 @@ async def _require_event_access(event_id: str, user: User, db: AsyncSession) -> 
     return event
 
 
+async def _require_event_read_access(event_id: str, user: User, db: AsyncSession) -> Event:
+    """Read-only reports (analytics, insights): the event's team, or any admin."""
+    if user.role == "admin":
+        event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+        if not event:
+            raise HTTPException(404, "Event not found")
+        return event
+    return await _require_event_access(event_id, user, db)
+
+
 # ── Categories ──────────────────────────────────────────────────────────────────
 
 @router.get("/categories", response_model=list[CategoryOut])
@@ -851,7 +861,7 @@ async def get_analytics(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    event = await _require_event_access(event_id, user, db)
+    event = await _require_event_read_access(event_id, user, db)
 
     # Daily views — last 14 days
     since = datetime.now(timezone.utc) - timedelta(days=14)
@@ -1578,7 +1588,7 @@ async def event_insights(
     """For the event's team: best day and time, price vs comparable events, booking pace,
     and searches in its city that found nothing (app/services/insights.py)."""
     from app.services.insights import event_insights as build
-    event = await _require_event_access(event_id, user, db)
+    event = await _require_event_read_access(event_id, user, db)
     return await build(db, event)
 
 

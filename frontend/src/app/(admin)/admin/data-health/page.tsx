@@ -7,6 +7,7 @@ import { dataHealthApi, type DataHealth } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { cn } from "@/lib/utils";
+import { UnmetSearchesCard } from "@/components/organizer/EventInsightsPanel";
 
 function Panel({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
@@ -132,6 +133,25 @@ function Positions({ d }: { d: DataHealth }) {
   );
 }
 
+/** The organizer dashboard's "searched for, not found" card (30 days, 3+ people), by city. */
+function UnmetByCity() {
+  const [input, setInput] = useState("");
+  const [city, setCity] = useState("");
+  return (
+    <div className="space-y-2">
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setCity(input.trim()); }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="City (blank = all of Turnup)"
+          aria-label="City" maxLength={100}
+          className="flex-1 rounded border-2 border-border bg-bg px-2 py-1 text-xs text-text placeholder:text-text-muted" />
+        <button type="submit" className="px-3 py-1 rounded border-2 border-border text-xs font-bold text-text-secondary">
+          Show
+        </button>
+      </form>
+      <UnmetSearchesCard city={city || null} />
+    </div>
+  );
+}
+
 export default function DataHealthPage() {
   const { token } = useAuthStore();
   const [days, setDays] = useState(14);
@@ -177,6 +197,7 @@ export default function DataHealthPage() {
                 </ul>
               )}
             </Panel>
+            <UnmetByCity />
             <p className="flex items-center gap-1.5 text-[10px] text-text-muted">
               <Sparkles size={11} aria-hidden /> {d.recs_served_7d.toLocaleString()} For You feeds served in 7 days ·
               <Database size={11} aria-hidden /> updated {ago(d.generated_at)}

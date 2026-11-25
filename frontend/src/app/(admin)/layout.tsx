@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield, Radar, Building2, Scale } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield, Radar, Building2, Scale, Activity } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -20,14 +20,18 @@ const adminNavItems = [
   { href: "/admin/orders",       icon: ShoppingBag,     label: "Orders"     },
   { href: "/admin/venues",       icon: Building2,       label: "Venues"     },
   { href: "/admin/marketplace",  icon: Scale,           label: "Marketplace" },
+  // Sidebar only: the phone tab bar is already full; phones reach it from Overview's quick actions.
+  { href: "/admin/data-health",  icon: Activity,        label: "Data Health", desktopOnly: true },
 ];
 
-const moderatorNavItems = [
+const moderatorNavItems: NavItem[] = [
   { href: "/admin/events/new",    icon: CalendarPlus, label: "Create"  },
   { href: "/admin/events/ai-new", icon: Sparkles,      label: "AI Draft" },
 ];
 
-function useNavItems(role: string) {
+type NavItem = { href: string; icon: typeof Users; label: string; desktopOnly?: boolean };
+
+function useNavItems(role: string): NavItem[] {
   return role === "admin" ? adminNavItems : moderatorNavItems;
 }
 
@@ -35,7 +39,7 @@ function useNavItems(role: string) {
 
 function AdminBottomNav({ role }: { role: string }) {
   const pathname = usePathname();
-  const navItems = useNavItems(role);
+  const navItems = useNavItems(role).filter((i) => !i.desktopOnly);
   return (
     <nav aria-label="Admin navigation" className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-bg-surface border-t-2 border-border safe-bottom">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">

@@ -192,3 +192,26 @@ async def test_admin_cannot_edit_someone_elses_event_content(client, role_auth):
     resp = await client.patch(f"/api/events/{ev['id']}", headers=admin["headers"],
                               json={"title": "Hijacked title"})
     assert resp.status_code in (403, 404)
+
+
+@pytest.mark.asyncio
+async def test_admin_can_read_any_events_analytics_and_insights(client, role_auth):
+    organizer = await role_auth("organizer")
+    admin = await role_auth("admin")
+    moderator = await role_auth("moderator")
+    ev = (await client.post("/api/events", json=_event_payload(title="Someone Else's Event"),
+                            headers=organizer["headers"])).json()
+    for path in (f"/api/events/{ev['id']}/analytics", f"/api/events/{ev['id']}/insights"):
+        assert (await client.get(path, headers=admin["headers"])).status_code == 200, path
+        assert (await client.get(path, headers=moderator["headers"])).status_code == 403, path
+    # Read access only: an admin still can't manage another host's waitlist or tiers.
+    assert (await client.get(f"/api/events/{ev['id']}/waitlist",
+                             headers=admin["headers"])).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_unmet_searches_open_to_admins_not_attendees(client, role_auth):
+    admin = await role_auth("admin")
+    attendee = await role_auth("attendee")
+    assert (await client.get("/api/organizer/insights/searches", headers=admin["headers"])).status_code == 200
+    assert (await client.get("/api/organizer/insights/searches", headers=attendee["headers"])).status_code == 403

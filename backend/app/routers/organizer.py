@@ -195,10 +195,12 @@ async def organizer_dashboard(
 async def unmet_search_insights(
     city: str | None = Query(None, max_length=100),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_organizer),
+    user: User = Depends(get_current_user),
 ):
     """What people searched for in the last 30 days and found nothing: demand nobody is
-    meeting yet. Only searches made by at least 3 different people."""
+    meeting yet. Only searches made by at least 3 different people. Organizers and admins."""
+    if user.role not in ("organizer", "admin"):
+        raise HTTPException(403, "Organizer account required. Use POST /api/organizer/become to upgrade.")
     from app.services.insights import unmet_searches
     return {"city": city, "searches": await unmet_searches(db, city=city, limit=15)}
 

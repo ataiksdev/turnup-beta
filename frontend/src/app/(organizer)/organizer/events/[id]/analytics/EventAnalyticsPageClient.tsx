@@ -26,13 +26,19 @@ function StatCard({ icon, label, value, sub }: {
   );
 }
 
-export default function EventAnalyticsPage() {
+/**
+ * `admin`: opened from the admin portal for any host's event. Read-only — hides the edit,
+ * check-in and waitlist controls, which need the event's own team.
+ */
+export default function EventAnalyticsPage({ admin = false }: { admin?: boolean } = {}) {
   const id = useRouteParam("id");
   const { token } = useAuthStore();
+  const backHref = admin ? "/admin/events" : routes.organizerEvent(id, "edit");
+  const backLabel = admin ? "← Back to events" : "← Back to event";
 
   const { data: event } = useQuery({
     queryKey: ["event", id],
-    queryFn: () => eventsApi.get(id),
+    queryFn: () => eventsApi.get(id, token ?? undefined),
     enabled: !!id,
   });
 
@@ -62,8 +68,8 @@ export default function EventAnalyticsPage() {
           Could not load analytics
         </p>
         <p className="text-xs text-text-muted">Check your connection and try again</p>
-        <Link href={routes.organizerEvent(id, "edit")} className="text-primary text-sm font-medium hover:underline">
-          ← Back to event
+        <Link href={backHref} className="text-primary text-sm font-medium hover:underline">
+          {backLabel}
         </Link>
       </div>
     );
@@ -77,8 +83,8 @@ export default function EventAnalyticsPage() {
           No analytics yet
         </p>
         <p className="text-xs text-text-muted">Data will appear once your event has views</p>
-        <Link href={routes.organizerEvent(id, "edit")} className="text-primary text-sm font-medium hover:underline">
-          ← Back to event
+        <Link href={backHref} className="text-primary text-sm font-medium hover:underline">
+          {backLabel}
         </Link>
       </div>
     );
@@ -95,24 +101,24 @@ export default function EventAnalyticsPage() {
       <div className="px-4 py-4 space-y-5">
         {/* Quick actions */}
         <div className="flex gap-2">
-          <Link
+          {!admin && <Link
             href={routes.organizerEvent(id, "edit")}
             className="flex-1 py-2.5 text-center text-[10px] font-black uppercase tracking-widest rounded border-2 border-border bg-bg-card hover:border-primary transition-colors shadow-brutal-sm"
           >
             Edit Event
-          </Link>
+          </Link>}
           <Link
             href={routes.event(id)}
             className="flex-1 py-2.5 text-center text-[10px] font-black uppercase tracking-widest rounded border-2 border-border bg-bg-card hover:border-primary transition-colors shadow-brutal-sm"
           >
             View Page
           </Link>
-          <Link
+          {!admin && <Link
             href={routes.organizerEvent(id, "checkin")}
             className="flex items-center gap-1 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest rounded border-2 border-primary bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-colors shadow-brutal-sm"
           >
             <ScanLine size={12} /> Scan
-          </Link>
+          </Link>}
         </div>
 
         {/* Stats grid */}
@@ -175,7 +181,7 @@ export default function EventAnalyticsPage() {
           </div>
         )}
 
-        <WaitlistPanel eventId={id} />
+        {!admin && <WaitlistPanel eventId={id} />}
 
         <EventInsightsPanel eventId={id} />
 
