@@ -47,6 +47,7 @@ class AdminEventOut(BaseModel):
     created_via: str
     reviewed_by_username: str | None = None
     reviewed_at: datetime | None = None
+    agent_source: str | None = None  # name of the agent connection that submitted it
     model_config = {"from_attributes": True}
 
 

@@ -67,11 +67,13 @@ def _post_baseline_tables() -> set[str]:
     """Every table defined in app/models/venue.py (migration 0003), app/models/activity.py
     (0008), app/models/discovery.py (0009; consent_log 0012; weather_forecasts 0013;
     event_embeddings 0014) and
-    app/models/sharing.py (0011), plus the promo code and registration question tables (0015)."""
+    app/models/sharing.py (0011), plus the promo code and registration question tables (0015)
+    and agent connections (0016)."""
     from app.models import activity, discovery, sharing, venue
     return {m.__tablename__ for mod in (venue, activity, discovery, sharing) for m in vars(mod).values()
             if isinstance(m, type) and issubclass(m, Base) and m is not Base and hasattr(m, "__tablename__")} \
-        | {"promo_codes", "promo_redemptions", "event_questions", "registration_answers"}
+        | {"promo_codes", "promo_redemptions", "event_questions", "registration_answers",
+           "agent_connections", "agent_submissions"}
 
 
 def baseline_metadata():
@@ -211,7 +213,7 @@ async def migrate_db():
     from sqlalchemy import inspect
 
     from app.models import (  # noqa: F401
-        user, event, social, auth_tokens, organizer, community, scout, venue, activity,
+        user, event, social, auth_tokens, organizer, community, scout, venue, activity, agent,
     )
     from app.models import settings as settings_model  # noqa: F401
 

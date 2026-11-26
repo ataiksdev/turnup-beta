@@ -46,7 +46,7 @@ interface FormState {
   start_date: string; end_date: string;
   is_free: boolean; price_min: string; price_max: string; currency: string;
   capacity: string; category_id: string; tags: string;
-  created_via: "manual" | "ai_agent";
+  created_via: "manual" | "ai_agent" | "agent_api";
 }
 
 const EMPTY_FORM: FormState = {

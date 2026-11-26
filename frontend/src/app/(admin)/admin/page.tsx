@@ -161,6 +161,7 @@ export default function AdminDashboardPage() {
             { href: "/admin/events/new",    label: "Create Event"       },
             { href: "/admin/events/ai-new", label: "AI Draft Event"     },
             { href: "/admin/scout/sources", label: "Manage AI Scout"    },
+            { href: "/admin/integrations",  label: "Bot Connections"    },
             { href: "/admin/categories",    label: "Edit Categories"    },
             { href: "/admin/orders",        label: "View All Orders"    },
             { href: "/admin/data-health",   label: "Data Health"        },

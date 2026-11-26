@@ -11,6 +11,7 @@ from app.middleware.auth import get_current_admin, get_current_moderator
 from app.middleware.rate_limit import limiter
 from app.models.event import Category, Event
 from app.models.organizer import OrganizerProfile, TicketOrder, TicketTier
+from app.models.agent import AgentConnection, AgentSubmission
 from app.models.scout import ScoutedItem, ScoutSource
 from app.models.social import Notification
 from app.models.user import User
@@ -279,6 +280,33 @@ def _admin_event_out(ev: Event) -> AdminEventOut:
     )
 
 
+async def _with_agent_sources(db: AsyncSession, events) -> list[AdminEventOut]:
+    """AdminEventOut for each event, naming the agent connection that submitted it, if any."""
+    ids = [ev.id for ev in events]
+    names: dict[str, str] = {}
+    if ids:
+        rows = (await db.execute(
+            select(AgentSubmission.event_id, AgentConnection.name)
+            .join(AgentConnection, AgentConnection.id == AgentSubmission.connection_id)
+            .where(AgentSubmission.event_id.in_(ids), AgentSubmission.status == "created")
+        )).all()
+        names = {eid: name for eid, name in rows}
+    out = []
+    for ev in events:
+        item = _admin_event_out(ev)
+        item.agent_source = names.get(ev.id)
+        out.append(item)
+    return out
+
+
+async def _queue_agent_notice(db: AsyncSession, ev: Event, background_tasks: BackgroundTasks) -> None:
+    """Tell the agent connection that submitted an event (its callback URL) how the review went."""
+    from app.services.agent_intake import review_callback, send_review_callback
+    cb = await review_callback(db, ev)
+    if cb:
+        background_tasks.add_task(send_review_callback, cb)
+
+
 @router.get("/events", response_model=list[AdminEventOut])
 async def list_all_events(
     q: str | None = Query(None),
@@ -300,7 +328,7 @@ async def list_all_events(
     stmt = stmt.order_by(Event.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     events = result.scalars().all()
-    return [_admin_event_out(ev) for ev in events]
+    return await _with_agent_sources(db, events)
 
 
 @router.patch("/events/{event_id}", response_model=AdminEventOut)
@@ -332,6 +360,7 @@ async def update_event(
 @router.post("/events/{event_id}/approve", response_model=AdminEventOut)
 async def approve_event(
     event_id: str,
+    background_tasks: BackgroundTasks,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -370,13 +399,15 @@ async def approve_event(
             events_hosted=User.events_hosted + 1))
         from app.services.alerts import announce_event
         await announce_event(db, ev)
-    return _admin_event_out(ev)
+    await _queue_agent_notice(db, ev, background_tasks)
+    return (await _with_agent_sources(db, [ev]))[0]
 
 
 @router.post("/events/{event_id}/reject", response_model=AdminEventOut)
 async def reject_event(
     event_id: str,
     body: AdminEventReject,
+    background_tasks: BackgroundTasks,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -410,7 +441,8 @@ async def reject_event(
     ))
     await db.flush()
     await db.refresh(ev)
-    return _admin_event_out(ev)
+    await _queue_agent_notice(db, ev, background_tasks)
+    return (await _with_agent_sources(db, [ev]))[0]
 
 
 @router.get("/categories", response_model=list[AdminCategoryOut])

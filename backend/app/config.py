@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     scout_max_items_per_run: int = 20  # cap on Anthropic calls per run, across all sources
     scout_max_links_per_source: int = 25  # cap on candidate links pulled from one source per poll
 
+    # Agent connections (docs/agent-connections.md): outside bots and agents (a WhatsApp or
+    # Telegram bot, an LLM agent, n8n...) that submit events for approval with an API key.
+    agent_default_daily_limit: int = 50
+    rate_limit_agent_api: str = "30/minute"
+
     # Rate limiting
     rate_limit_login: str = "5/minute"
     rate_limit_register: str = "3/minute"

@@ -111,7 +111,7 @@ export interface Event {
   review_count?: number;
   review_status?: "pending" | "approved" | "rejected";
   review_note?: string | null;
-  created_via?: "manual" | "ai_agent";
+  created_via?: "manual" | "ai_agent" | "agent_api";
   refund_policy?: string | null;
   /** Venue marketplace: the venue hosting it, and the listed venue it takes place at. */
   host_venue_id?: string | null;

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.config import settings
 from app.database import Base
 from app.models import (  # noqa: F401  (register every table on Base.metadata)
-    auth_tokens, community, event, organizer, scout, social, user,
+    agent, auth_tokens, community, event, organizer, scout, social, user,
 )
 from app.models import settings as settings_model  # noqa: F401
 

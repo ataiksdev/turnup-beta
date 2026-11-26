@@ -73,6 +73,13 @@ Spec and decisions: [`docs/venues-spec.md`](docs/venues-spec.md). In short:
 
 `scripts/e2e/marketplace.js` drives the main journeys in a browser (instructions in the file).
 
+## Bot connections
+
+Outside bots and agents (a WhatsApp or Telegram bot, an AI agent, n8n) can submit events with an
+API key: either fields they extracted, or a poster / link / text for Turnup's AI to read. Every
+event waits in the admin approval queue, and the outcome is POSTed back to the bot, signed.
+Admins create keys at `/admin/integrations`. Guide and API: [`docs/agent-connections.md`](docs/agent-connections.md).
+
 ## Recommendations and activity data
 
 Spec: [`docs/recommendations-spec.md`](docs/recommendations-spec.md). The app logs what people

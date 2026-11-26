@@ -14,6 +14,7 @@ from app.models import venue as _venue  # noqa: F401  (registers venue marketpla
 from app.models.discovery import ConsentLog, EventEmbedding, HiddenItem, SearchAlert, WeatherForecast
 from app.models.sharing import ShareConversion, ShareLink
 from app.models import activity as _activity  # noqa: F401  (activity log + recommendation features)
+from app.models import agent as _agent  # noqa: F401  (agent connections: bots and APIs that submit events)
 
 __all__ = [
     "User", "Category", "Event", "EventAttendee", "EventSave",

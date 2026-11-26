@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil, BarChart2 } from "lucide-react";
+import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil, BarChart2, Bot } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +89,11 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
         {ev.created_via === "ai_agent" && (
           <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded border-2 border-purple-400 text-purple-700 bg-purple-50">
             <Sparkles size={11} /> AI-drafted
+          </span>
+        )}
+        {ev.created_via === "agent_api" && (
+          <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded border-2 border-sky-400 text-sky-700 bg-sky-50">
+            <Bot size={11} /> {ev.agent_source ? `via ${ev.agent_source}` : "via bot"}
           </span>
         )}
         {ev.is_featured && (

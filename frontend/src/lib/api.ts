@@ -764,9 +764,11 @@ export interface AdminEventOut {
   host_username: string; host_id: string; created_at: string;
   review_status: "pending" | "approved" | "rejected";
   review_note: string | null;
-  created_via: "manual" | "ai_agent";
+  created_via: "manual" | "ai_agent" | "agent_api";
   reviewed_by_username: string | null;
   reviewed_at: string | null;
+  /** Name of the bot connection that submitted it, if any. */
+  agent_source: string | null;
 }
 
 export interface ScoutSourceOut {
@@ -783,6 +785,25 @@ export interface ScoutedItemOut {
 export interface ScoutRunResult {
   sources_polled: number; items_seen: number; events_created: number;
   skipped_duplicate: number; skipped_no_event: number; failed: number;
+}
+
+export interface AgentConnectionOut {
+  id: string; name: string; is_active: boolean; api_key_prefix: string;
+  host_username: string | null; daily_limit: number; used_today: number; events_created: number;
+  callback_url: string | null; last_used_at: string | null; created_at: string;
+}
+
+/** Returned on create and rotate only: the key and secret are never shown again. */
+export interface AgentConnectionCreated extends AgentConnectionOut {
+  api_key: string | null; callback_secret: string | null;
+}
+
+export interface AgentSubmissionOut {
+  id: string; connection_id: string; connection_name: string;
+  status: "created" | "skipped_duplicate" | "skipped_no_event" | "failed" | "over_limit";
+  submitted_by: string | null; input_text: string | null; error_note: string | null;
+  event_id: string | null; event_title: string | null;
+  event_review_status: "pending" | "approved" | "rejected" | null; created_at: string;
 }
 
 export interface AIEventDraft {
@@ -942,6 +963,29 @@ export const adminApi = {
 
   runScoutSourceNow: (token: string, sourceId: string) =>
     request<ScoutRunResult>(`/admin/scout/sources/${sourceId}/run`, { method: "POST" }, token),
+
+  // ── Bot connections (outside bots/agents submitting events by API key) ──
+  agentConnections: (token: string) =>
+    request<AgentConnectionOut[]>("/admin/integrations", {}, token),
+
+  createAgentConnection: (token: string, body: { name: string; host_username?: string; daily_limit?: number; callback_url?: string }) =>
+    request<AgentConnectionCreated>("/admin/integrations", { method: "POST", body: JSON.stringify(body) }, token),
+
+  updateAgentConnection: (token: string, id: string, body: Partial<{ name: string; is_active: boolean; host_username: string; daily_limit: number; callback_url: string }>) =>
+    request<AgentConnectionOut>(`/admin/integrations/${id}`, { method: "PATCH", body: JSON.stringify(body) }, token),
+
+  rotateAgentKey: (token: string, id: string) =>
+    request<AgentConnectionCreated>(`/admin/integrations/${id}/rotate-key`, { method: "POST" }, token),
+
+  deleteAgentConnection: (token: string, id: string) =>
+    request<void>(`/admin/integrations/${id}`, { method: "DELETE" }, token),
+
+  agentSubmissions: (token: string, params?: { connection_id?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.connection_id) qs.set("connection_id", params.connection_id);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    return request<AgentSubmissionOut[]>(`/admin/integrations/submissions?${qs}`, {}, token);
+  },
 };
 
 // ── Community types ───────────────────────────────────────────────────────────

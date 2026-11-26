@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield, Radar, Building2, Scale, Activity } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, Tag, ShoppingBag, ArrowLeftRight, CalendarPlus, Sparkles, Shield, Radar, Building2, Scale, Activity, Bot } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
@@ -16,6 +16,8 @@ const adminNavItems = [
   { href: "/admin/users",        icon: Users,           label: "Users"      },
   { href: "/admin/events",       icon: CalendarDays,    label: "Events"     },
   { href: "/admin/scout/sources", icon: Radar,          label: "AI Scout"   },
+  // Sidebar only, like Data Health: the phone tab bar is full.
+  { href: "/admin/integrations", icon: Bot,             label: "Bot Connections", desktopOnly: true },
   { href: "/admin/categories",   icon: Tag,             label: "Categories" },
   { href: "/admin/orders",       icon: ShoppingBag,     label: "Orders"     },
   { href: "/admin/venues",       icon: Building2,       label: "Venues"     },
