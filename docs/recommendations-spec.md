@@ -306,7 +306,7 @@ These use the data above but are features, not data collection:
     - **Embeddings** (`services/embeddings.py`, `event_embeddings`, worker every 30 min):
       each event's title, category, tags, venue and description, for events from the
       last 180 days onwards, re-embedded when the text changes. `EMBEDDINGS_PROVIDER=auto`
-      uses OpenAI `text-embedding-3-small` (512 dimensions) or Gemini `text-embedding-004`
+      uses OpenAI `text-embedding-3-small` (512 dimensions) or Gemini `gemini-embedding-001` (768 dimensions)
       when their key is set, else a local hashing model (256 dimensions, no key, no
       network). A person's taste vector is the weighted mean of what they saved (1), went to
       (2) or bought (3) in 180 days. Candidates get `semantic` = 1.2 × (cosine − 0.15) /
