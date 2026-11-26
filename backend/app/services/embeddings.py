@@ -6,7 +6,7 @@
   (weighted 1, 2, 3); the ranker scores each candidate by its cosine similarity to that.
 
 Providers (EMBEDDINGS_PROVIDER): OpenAI text-embedding-3-small (512 dimensions) or Gemini
-text-embedding-004 using the AI keys already configured, or "hashing": a local model that
+gemini-embedding-001 (768 dimensions) using the AI keys already configured, or "hashing": a local model that
 hashes words and word pairs into 256 dimensions. It needs no key or network and catches
 shared words ("afrobeats", "rooftop"), though not meaning the way a trained model does.
 Vectors from different models are never compared: each row records its model.
@@ -28,6 +28,8 @@ from app.models.organizer import TicketOrder
 
 logger = logging.getLogger("turnup.embeddings")
 HASH_DIM = 256
+GEMINI_MODEL = "gemini-embedding-001"  # text-embedding-004 was retired by Google (404s)
+GEMINI_DIM = 768
 BATCH = 64
 _WORD = re.compile(r"[a-z0-9]+")
 
@@ -43,7 +45,7 @@ def provider() -> str | None:
 
 def model_name(p: str | None = None) -> str | None:
     p = p or provider()
-    return {"openai": "openai/text-embedding-3-small-512", "gemini": "gemini/text-embedding-004",
+    return {"openai": "openai/text-embedding-3-small-512", "gemini": f"gemini/{GEMINI_MODEL}-{GEMINI_DIM}",
             "hashing": f"hashing-{HASH_DIM}"}.get(p or "")
 
 
@@ -77,9 +79,11 @@ async def embed_texts(texts: list[str], p: str, client: httpx.AsyncClient) -> li
         return [_normalise(d["embedding"]) for d in sorted(r.json()["data"], key=lambda d: d["index"])]
     if p == "gemini":
         r = await client.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents",
-            params={"key": settings.gemini_api_key},
-            json={"requests": [{"model": "models/text-embedding-004", "content": {"parts": [{"text": t}]}}
+            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:batchEmbedContents",
+            # Key in a header, not the URL, so it never shows up in error messages or logs.
+            headers={"x-goog-api-key": settings.gemini_api_key},
+            json={"requests": [{"model": f"models/{GEMINI_MODEL}", "content": {"parts": [{"text": t}]},
+                                "taskType": "SEMANTIC_SIMILARITY", "outputDimensionality": GEMINI_DIM}
                                for t in texts]})
         r.raise_for_status()
         return [_normalise(e["values"]) for e in r.json()["embeddings"]]
