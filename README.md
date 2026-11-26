@@ -75,10 +75,10 @@ Spec and decisions: [`docs/venues-spec.md`](docs/venues-spec.md). In short:
 
 ## Bot connections
 
-Outside bots and agents (a WhatsApp or Telegram bot, an AI agent, n8n) can submit events with an
-API key: either fields they extracted, or a poster / link / text for Turnup's AI to read. Every
-event waits in the admin approval queue, and the outcome is POSTed back to the bot, signed.
-Admins create keys at `/admin/integrations`. Guide and API: [`docs/agent-connections.md`](docs/agent-connections.md).
+Send events in from outside the app: DM Turnup's own **Telegram bot** a poster, a link or the
+details (allowlisted senders only), or give an outside program an **API key**. The AI reads each
+one, it waits in the admin approval queue, and the sender hears back when it's approved or
+rejected. Set up at `/admin/integrations`; guide: [`docs/agent-connections.md`](docs/agent-connections.md).
 
 ## Recommendations and activity data
 

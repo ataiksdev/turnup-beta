@@ -1,31 +1,90 @@
-# Bot connections: sending events to Turnup from outside bots
+# Bot connections: sending events to Turnup from outside the app
 
-Outside bots and agents (your own WhatsApp or Telegram bot, an AI agent, n8n or Zapier, a
-partner's system) can submit events to Turnup with an API key. **Nothing they send goes live on
-its own**: every event lands in the admin Events queue as *pending*, the same as a scouted or
-moderator-submitted event, and is published only when an admin approves it.
+Two ways in, both under Admin → **Bot Connections** (`/admin/integrations`):
+
+- **Telegram bot (run by Turnup).** You DM Turnup's bot a poster, a link or the event details;
+  the AI reads it and the event waits in the approval queue. The bot replies in the chat, and
+  again when you approve or reject it. Only Telegram users on the allowlist can submit;
+  everyone else is told the bot isn't open yet.
+- **API key**: for an outside program (an AI agent, n8n, a partner's own bot) that calls
+  Turnup's API.
+
+**Nothing they send goes live on its own**: every event lands in the Events queue as *pending*,
+hosted by the scout bot account (like scouted events), and is published only when an admin
+approves it. Admins can edit these bot-hosted events before approving (Edit in the queue).
+
+## Telegram bot
 
 ```
- person ──poster/text──▶ your bot ──API──▶ Turnup ──▶ admin approval queue
+ you ──poster/link/text──▶ @YourBot ──webhook──▶ Turnup: AI drafts ──▶ approval queue
+  ▲                                                  │ "Got it! …"        │ approve / reject
+  └─────────────────────── bot messages ◀────────────┴────────────────────┘
+```
+
+### Setting it up
+
+1. **Make the bot.** In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`,
+   choose a name and a username ending in `bot`. Copy the token it gives you.
+2. **Add it to Turnup.** Bot Connections → *Connect a bot* → **Telegram bot** → name it, paste
+   the token, create.
+3. **Connect.** Press **Connect** on the new card. Turnup checks the token and tells Telegram to
+   send the bot's messages to `https://<PUBLIC_BASE_URL>/api/integrations/telegram/<id>`, with a
+   secret only Telegram and Turnup know. The card then shows the bot's @username.
+4. **Allow yourself.** Message your bot `/whoami`. It answers with your Telegram user id (a
+   number). Edit the connection and put that id in *Allowed Telegram user ids* (comma-separate
+   several).
+5. **Use it.** Send the bot a poster photo (add details as the caption), a link, or the details
+   as text. Then approve it under Events.
+
+Commands: `/start` or `/help` (how to use it), `/whoami` (your Telegram id; answered for anyone,
+since it's how you get onto the allowlist).
+
+### Requirements
+
+- Turnup must be reachable at a public **https** address (Telegram sends nowhere else), and
+  `PUBLIC_BASE_URL` set to it. So it can't run against `localhost` without a tunnel.
+- The server must be able to reach `api.telegram.org`.
+- An AI provider key (`ANTHROPIC_API_KEY` or one of the others in `app/services/ai_agent.py`),
+  the same one the admin AI Draft screen uses.
+
+### Good to know
+
+- **Reconnect** if you change `PUBLIC_BASE_URL` or the bot token (a new token clears the
+  connection). Reconnecting also renews the webhook secret.
+- **Pause** makes Turnup ignore the bot's messages; **Delete** also disconnects the webhook.
+- Telegram retries a message if Turnup doesn't answer; the retry is recognised and ignored.
+- Messages from people not on the allowlist are logged ("not on allowlist" under Recent
+  submissions) but never drafted, and don't count toward the daily limit.
+- Submitted events have `created_via = "telegram"` and show "via <connection name>" in the queue.
+- Publishing a bot-hosted event goes through **Approve** (not Save & Publish in the edit form), so
+  it's counted, announced, and the sender gets the "it's live" message.
+
+## API connections
+
+An outside program authenticates with an API key and can get review outcomes at a callback URL.
+
+```
+ person ──poster/text──▶ their bot ──API──▶ Turnup ──▶ admin approval queue
                             ▲                              │ approve / reject
                             └──── signed callback ◀────────┘
 ```
 
-## Setting up a connection (admins)
+### Setting up a connection (admins)
 
-Admin → **Bot Connections** (`/admin/integrations`) → *Connect a bot*:
+Bot Connections → *Connect a bot* → **API key**:
 
 | Field | What it does |
 |---|---|
-| Name | Shown on its events in the queue ("via Lagos Events bot") |
-| Host account | Optional username whose profile hosts the events (e.g. a partner organizer's bot posting their own events). Empty: the scout bot account hosts them |
+| Name | Shown on its events in the queue ("via Partner agent") |
+| Host account | Optional username whose profile hosts the events (e.g. a partner organizer posting their own events). Empty: the scout bot account hosts them |
 | Daily limit | Submissions accepted per rolling 24 hours (default 50). A poster or text submission costs one AI call |
 | Callback URL | Optional `https://` URL Turnup POSTs review outcomes to |
 
 You get an **API key** (`tuk_…`) and a **callback signing secret** (`whsec_…`) once. Give
-them to whoever runs the bot. *Rotate key* issues new ones and the old key stops working at
+them to whoever runs the program. *Rotate key* issues new ones and the old key stops working at
 once; *Pause* refuses the key without deleting anything; *Delete* removes the connection and its
-log but keeps the events it created.
+log but keeps the events it created. A ready-made example that bridges a Telegram bot through
+this API (for running a bot outside Turnup) is in `examples/telegram-bot/`.
 
 ## The API (bot developers)
 
@@ -148,10 +207,13 @@ message. An approval that comes later needs a WhatsApp message template on your 
 
 ## Notes for operators
 
-- The API key is stored only as a SHA-256 hash. The callback secret is encrypted with a key
-  derived from `SECRET_KEY`: changing `SECRET_KEY` stops callbacks until the key is rotated.
-- Submitted events have `created_via = "agent_api"`. The connection that sent each is in
-  `agent_submissions` (Admin → Bot Connections → Recent submissions).
-- Settings: `AGENT_DEFAULT_DAILY_LIMIT` (50), `RATE_LIMIT_AGENT_API` ("30/minute").
-- Code: `app/routers/integrations.py` (the API), `app/routers/admin_integrations.py`,
+- API keys are stored only as a SHA-256 hash. The bot token and the webhook and callback secrets
+  are encrypted with a key derived from `SECRET_KEY`: after changing `SECRET_KEY`, re-enter the
+  bot token (Edit) and Reconnect, and rotate API keys.
+- Submitted events have `created_via = "telegram"` or `"agent_api"`. The connection that sent
+  each is in `agent_submissions` (Admin → Bot Connections → Recent submissions).
+- Settings: `PUBLIC_BASE_URL` (Telegram's webhook address), `AGENT_DEFAULT_DAILY_LIMIT` (50),
+  `RATE_LIMIT_AGENT_API` ("30/minute"), `TELEGRAM_API_BASE` (only for testing).
+- Code: `app/routers/telegram_bot.py` (the webhook), `app/services/telegram.py`,
+  `app/routers/integrations.py` (the API), `app/routers/admin_integrations.py`,
   `app/services/agent_intake.py`; drafting reuses `app/services/ai_agent.py`.

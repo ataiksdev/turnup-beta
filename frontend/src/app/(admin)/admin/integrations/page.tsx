@@ -6,8 +6,10 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Bot, Copy, Check, KeyRound, Pencil, X as XIcon, ScrollText } from "lucide-react";
+import { Bot, Copy, Check, KeyRound, Pencil, X as XIcon, ScrollText, Send, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type Kind = "telegram" | "api";
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return "never";
@@ -41,7 +43,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Shown right after creating or rotating: the only time the key and secret are visible. */
+/** API connections, right after creating or rotating: the only time the key and secret show. */
 function NewCredentials({ conn, onDone }: { conn: AgentConnectionCreated; onDone: () => void }) {
   const curl = `curl -X POST ${apiBase()}/drafts \\
   -H "Authorization: Bearer ${conn.api_key}" \\
@@ -52,7 +54,7 @@ function NewCredentials({ conn, onDone }: { conn: AgentConnectionCreated; onDone
       <div>
         <p className="font-black text-text-primary">Credentials for {conn.name}</p>
         <p className="text-xs text-text-secondary">
-          Copy these into the bot now. They won&apos;t be shown again (you can rotate them for new ones).
+          Copy these into the program now. They won&apos;t be shown again (rotate the key for new ones).
         </p>
       </div>
       {conn.api_key && <CopyField label="API key" value={conn.api_key} />}
@@ -64,15 +66,25 @@ function NewCredentials({ conn, onDone }: { conn: AgentConnectionCreated; onDone
   );
 }
 
+function StatusPill({ conn }: { conn: AgentConnectionOut }) {
+  const [label, cls] = !conn.is_active
+    ? ["paused", "border-border text-text-muted bg-bg-elevated"]
+    : conn.kind === "telegram" && !conn.telegram_connected
+      ? ["not connected", "border-yellow-400 text-yellow-700 bg-yellow-50"]
+      : ["active", "border-green-400 text-green-700 bg-green-50"];
+  return <span className={cn("shrink-0 text-xs font-bold px-2 py-0.5 rounded border-2", cls)}>{label}</span>;
+}
+
 function ConnectionRow({ conn, onCredentials }: { conn: AgentConnectionOut; onCredentials: (c: AgentConnectionCreated) => void }) {
   const { token } = useAuthStore();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["admin-agent-connections"] });
+  const isTelegram = conn.kind === "telegram";
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState<"delete" | "rotate" | null>(null);
   const [form, setForm] = useState({
-    name: conn.name, host_username: conn.host_username ?? "",
-    daily_limit: String(conn.daily_limit), callback_url: conn.callback_url ?? "",
+    name: conn.name, host_username: conn.host_username ?? "", daily_limit: String(conn.daily_limit),
+    callback_url: conn.callback_url ?? "", allowed_senders: conn.allowed_senders ?? "", telegram_bot_token: "",
   });
 
   const toggle = useMutation({
@@ -82,9 +94,16 @@ function ConnectionRow({ conn, onCredentials }: { conn: AgentConnectionOut; onCr
   const save = useMutation({
     mutationFn: () => adminApi.updateAgentConnection(token!, conn.id, {
       name: form.name.trim(), host_username: form.host_username.trim(),
-      daily_limit: Number(form.daily_limit) || conn.daily_limit, callback_url: form.callback_url.trim(),
+      daily_limit: Number(form.daily_limit) || conn.daily_limit,
+      ...(isTelegram
+        ? { allowed_senders: form.allowed_senders, ...(form.telegram_bot_token.trim() ? { telegram_bot_token: form.telegram_bot_token.trim() } : {}) }
+        : { callback_url: form.callback_url.trim() }),
     }),
-    onSuccess: () => { refresh(); setEditing(false); },
+    onSuccess: () => { refresh(); setEditing(false); setForm((f) => ({ ...f, telegram_bot_token: "" })); },
+  });
+  const connect = useMutation({
+    mutationFn: () => adminApi.connectTelegram(token!, conn.id),
+    onSuccess: refresh,
   });
   const rotate = useMutation({
     mutationFn: () => adminApi.rotateAgentKey(token!, conn.id),
@@ -94,17 +113,28 @@ function ConnectionRow({ conn, onCredentials }: { conn: AgentConnectionOut; onCr
     mutationFn: () => adminApi.deleteAgentConnection(token!, conn.id),
     onSuccess: refresh,
   });
+  const anyError = (save.error || connect.error || rotate.error || remove.error || toggle.error) as Error | null;
 
   if (editing) {
     return (
       <div className="border-2 border-primary bg-bg-surface shadow-brutal-sm rounded p-4 space-y-2">
         <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        {isTelegram ? (
+          <>
+            <Input label="Allowed Telegram user ids" value={form.allowed_senders} placeholder="e.g. 111222333, 444555666"
+              onChange={(e) => setForm({ ...form, allowed_senders: e.target.value })} />
+            <Input label="New bot token (optional)" type="password" value={form.telegram_bot_token}
+              placeholder="Leave empty to keep the current bot"
+              onChange={(e) => setForm({ ...form, telegram_bot_token: e.target.value })} />
+          </>
+        ) : (
+          <Input label="Callback URL (optional)" value={form.callback_url} placeholder="https://your-bot.example.com/turnup"
+            onChange={(e) => setForm({ ...form, callback_url: e.target.value })} />
+        )}
         <Input label="Host account (username, optional)" value={form.host_username} placeholder="Scout bot hosts if empty"
           onChange={(e) => setForm({ ...form, host_username: e.target.value })} />
         <Input label="Daily limit" type="number" min={1} max={1000} value={form.daily_limit}
           onChange={(e) => setForm({ ...form, daily_limit: e.target.value })} />
-        <Input label="Callback URL (optional)" value={form.callback_url} placeholder="https://your-bot.example.com/turnup"
-          onChange={(e) => setForm({ ...form, callback_url: e.target.value })} />
         {save.error && <p className="text-red-500 text-sm">{(save.error as Error).message}</p>}
         <div className="flex gap-2">
           <Button size="sm" loading={save.isPending} disabled={form.name.trim().length < 2} onClick={() => save.mutate()}>
@@ -120,25 +150,46 @@ function ConnectionRow({ conn, onCredentials }: { conn: AgentConnectionOut; onCr
     <div className="border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-black text-text-primary truncate">{conn.name}</p>
-          <p className="text-xs text-text-muted font-mono">{conn.api_key_prefix}…</p>
+          <p className="font-black text-text-primary truncate flex items-center gap-1.5">
+            {isTelegram ? <Send size={14} aria-hidden /> : <KeyRound size={14} aria-hidden />} {conn.name}
+          </p>
+          <p className="text-xs text-text-muted font-mono">
+            {isTelegram
+              ? (conn.telegram_bot_username ? `@${conn.telegram_bot_username}` : "Telegram bot")
+              : `${conn.api_key_prefix}…`}
+          </p>
         </div>
-        <span className={cn("shrink-0 text-xs font-bold px-2 py-0.5 rounded border-2",
-          conn.is_active ? "border-green-400 text-green-700 bg-green-50" : "border-border text-text-muted bg-bg-elevated")}>
-          {conn.is_active ? "active" : "paused"}
-        </span>
+        <StatusPill conn={conn} />
       </div>
+
+      {isTelegram && !conn.telegram_connected && (
+        <p className="text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded px-2 py-1.5">
+          Press Connect so Telegram sends the bot&apos;s messages to Turnup.
+        </p>
+      )}
+      {isTelegram && !conn.allowed_senders && (
+        <p className="text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded px-2 py-1.5">
+          Nobody is allowed to submit yet. Message the bot <span className="font-mono">/whoami</span>, then add that id with Edit.
+        </p>
+      )}
+
       <p className="text-xs text-text-muted">
         {conn.used_today}/{conn.daily_limit} today · {conn.events_created} event(s) submitted · last used {timeAgo(conn.last_used_at)}
       </p>
       <p className="text-xs text-text-muted">
         Hosted by {conn.host_username ? `@${conn.host_username}` : "the scout bot"} ·{" "}
-        {conn.callback_url ? <span className="font-mono break-all">{conn.callback_url}</span> : "no callback URL (the bot polls)"}
+        {isTelegram
+          ? <>allowed: {conn.allowed_senders ? <span className="font-mono">{conn.allowed_senders}</span> : "nobody"}</>
+          : conn.callback_url ? <span className="font-mono break-all">{conn.callback_url}</span> : "no callback URL (it polls)"}
       </p>
-      {(rotate.error || remove.error || toggle.error) && (
-        <p className="text-red-500 text-sm">{((rotate.error || remove.error || toggle.error) as Error).message}</p>
-      )}
+      {anyError && <p className="text-red-500 text-sm">{anyError.message}</p>}
+
       <div className="flex flex-wrap gap-2">
+        {isTelegram && (
+          <Button size="sm" variant={conn.telegram_connected ? "secondary" : "primary"} loading={connect.isPending} onClick={() => connect.mutate()}>
+            <Plug size={14} /> {conn.telegram_connected ? "Reconnect" : "Connect"}
+          </Button>
+        )}
         <Button size="sm" variant="secondary" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>
         <Button size="sm" variant="secondary" loading={toggle.isPending} onClick={() => toggle.mutate()}>
           {conn.is_active ? "Pause" : "Resume"}
@@ -155,7 +206,9 @@ function ConnectionRow({ conn, onCredentials }: { conn: AgentConnectionOut; onCr
           </>
         ) : (
           <>
-            <Button size="sm" variant="secondary" onClick={() => setConfirm("rotate")}><KeyRound size={14} /> Rotate key</Button>
+            {!isTelegram && (
+              <Button size="sm" variant="secondary" onClick={() => setConfirm("rotate")}><KeyRound size={14} /> Rotate key</Button>
+            )}
             <Button size="sm" variant="secondary" className="border-red-300 text-red-600 hover:bg-red-50" onClick={() => setConfirm("delete")}>
               Delete
             </Button>
@@ -166,39 +219,72 @@ function ConnectionRow({ conn, onCredentials }: { conn: AgentConnectionOut; onCr
   );
 }
 
+const EMPTY = { name: "", host_username: "", daily_limit: "", callback_url: "", telegram_bot_token: "", allowed_senders: "" };
+
 function AddConnectionForm({ onCreated }: { onCreated: (c: AgentConnectionCreated) => void }) {
   const { token } = useAuthStore();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: "", host_username: "", daily_limit: "", callback_url: "" });
+  const [kind, setKind] = useState<Kind>("telegram");
+  const [form, setForm] = useState(EMPTY);
   const create = useMutation({
     mutationFn: () => adminApi.createAgentConnection(token!, {
-      name: form.name.trim(),
+      name: form.name.trim(), kind,
       host_username: form.host_username.trim() || undefined,
       daily_limit: Number(form.daily_limit) || undefined,
-      callback_url: form.callback_url.trim() || undefined,
+      ...(kind === "telegram"
+        ? { telegram_bot_token: form.telegram_bot_token.trim(), allowed_senders: form.allowed_senders }
+        : { callback_url: form.callback_url.trim() || undefined }),
     }),
     onSuccess: (c) => {
       qc.invalidateQueries({ queryKey: ["admin-agent-connections"] });
-      setForm({ name: "", host_username: "", daily_limit: "", callback_url: "" });
-      onCreated(c);
+      setForm(EMPTY);
+      if (c.api_key) onCreated(c);
     },
   });
+  const ready = form.name.trim().length >= 2 && (kind === "api" || !!form.telegram_bot_token.trim());
+
   return (
     <div className="lg:max-w-xl border-2 border-border bg-bg-surface shadow-brutal-sm rounded p-4 space-y-3">
       <h3 className="text-xs font-black text-text-primary uppercase tracking-widest">Connect a bot</h3>
-      <Input label="Name" value={form.name} placeholder="e.g. Lagos Events WhatsApp bot"
-        onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      <Input label="Host account (username, optional)" value={form.host_username} placeholder="Leave empty: the scout bot hosts"
-        onChange={(e) => setForm({ ...form, host_username: e.target.value })} />
+      <div className="flex gap-2" role="radiogroup" aria-label="Connection type">
+        {([["telegram", "Telegram bot", Send], ["api", "API key", KeyRound]] as const).map(([k, label, Icon]) => (
+          <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}
+            className={cn("flex-1 flex items-center justify-center gap-1.5 h-9 rounded border-2 text-sm font-bold",
+              kind === k ? "border-primary bg-primary text-on-primary" : "border-border text-text-secondary hover:bg-bg-elevated")}>
+            <Icon size={14} aria-hidden /> {label}
+          </button>
+        ))}
+      </div>
+
+      {kind === "telegram" ? (
+        <>
+          <p className="text-xs text-text-muted">
+            Turnup runs the bot. Make one with <span className="font-mono">@BotFather</span> on Telegram
+            (<span className="font-mono">/newbot</span>) and paste the token it gives you. People on the
+            allowlist DM it a poster, a link or the details; everyone else is told it isn&apos;t open yet.
+          </p>
+          <Input label="Name" value={form.name} placeholder="e.g. Turnup events bot"
+            onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input label="Bot token" type="password" value={form.telegram_bot_token} placeholder="123456789:AA..."
+            onChange={(e) => setForm({ ...form, telegram_bot_token: e.target.value })} />
+          <Input label="Allowed Telegram user ids (optional now)" value={form.allowed_senders} placeholder="Message the bot /whoami to get yours"
+            onChange={(e) => setForm({ ...form, allowed_senders: e.target.value })} />
+        </>
+      ) : (
+        <>
+          <p className="text-xs text-text-muted">
+            For an outside program (an AI agent, n8n, a partner&apos;s bot) that calls Turnup&apos;s API.
+            You&apos;ll get a key to give it.
+          </p>
+          <Input label="Name" value={form.name} placeholder="e.g. Partner agent"
+            onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input label="Callback URL (optional)" value={form.callback_url} placeholder="https://your-bot.example.com/turnup"
+            onChange={(e) => setForm({ ...form, callback_url: e.target.value })} />
+        </>
+      )}
       <Input label="Daily limit (optional)" type="number" min={1} max={1000} value={form.daily_limit} placeholder="50"
         onChange={(e) => setForm({ ...form, daily_limit: e.target.value })} />
-      <Input label="Callback URL (optional)" value={form.callback_url} placeholder="https://your-bot.example.com/turnup"
-        onChange={(e) => setForm({ ...form, callback_url: e.target.value })} />
-      <p className="text-xs text-text-muted">
-        When you approve or reject one of its events, Turnup POSTs the outcome here, signed with the callback secret,
-        so the bot can tell whoever sent it. Without one, the bot can poll the submission instead.
-      </p>
-      <Button size="sm" loading={create.isPending} disabled={form.name.trim().length < 2} onClick={() => create.mutate()}>
+      <Button size="sm" loading={create.isPending} disabled={!ready} onClick={() => create.mutate()}>
         Create connection
       </Button>
       {create.error && <p className="text-red-500 text-sm">{(create.error as Error).message}</p>}
@@ -208,7 +294,7 @@ function AddConnectionForm({ onCreated }: { onCreated: (c: AgentConnectionCreate
 
 const STATUS_LABEL: Record<AgentSubmissionOut["status"], string> = {
   created: "sent for review", skipped_duplicate: "already on Turnup", skipped_no_event: "no event found",
-  failed: "failed", over_limit: "over daily limit",
+  failed: "failed", over_limit: "over daily limit", sender_not_allowed: "not on allowlist",
 };
 
 function SubmissionLog() {
@@ -269,10 +355,10 @@ export default function IntegrationsPage() {
       <TopBar title="Bot Connections" back />
       <div className="px-4 py-4 space-y-4 lg:max-w-4xl">
         <p className="text-xs text-text-muted">
-          Let outside bots and agents (your WhatsApp or Telegram bot, an AI agent, an automation tool) send events to
-          Turnup with an API key. A bot can send the details it extracted itself, or forward a poster, a link or
-          pasted text and let Turnup&apos;s AI read it. Every event waits in the Events queue for your approval.
-          API reference: <a className="underline" href="/api/docs#/agent%20API" target="_blank" rel="noreferrer">/api/docs</a>.
+          Send events to Turnup from outside the app: DM a poster, a link or the details to Turnup&apos;s
+          Telegram bot, or let an outside program use an API key. The AI reads each one and it waits in the
+          Events queue for your approval; the sender hears back when you approve or reject it.
+          Guide: <span className="font-mono">docs/agent-connections.md</span>.
         </p>
 
         {credentials && <NewCredentials conn={credentials} onDone={() => setCredentials(null)} />}
@@ -291,7 +377,7 @@ export default function IntegrationsPage() {
               {conns.map((c) => <ConnectionRow key={c.id} conn={c} onCredentials={setCredentials} />)}
             </div>
           ) : (
-            <p className="text-center text-text-muted text-sm py-8">No bots connected yet. Create one below.</p>
+            <p className="text-center text-text-muted text-sm py-8">Nothing connected yet. Create one below.</p>
           )}
         </div>
 

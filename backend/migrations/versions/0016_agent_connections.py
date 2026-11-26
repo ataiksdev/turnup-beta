@@ -2,7 +2,7 @@
 
 Revision ID: 0016
 Revises: 0015
-Create Date: 2026-11-26 20:27:28.529383
+Create Date: 2026-11-26 21:57:23.956396
 """
 from typing import Sequence, Union
 
@@ -21,11 +21,14 @@ def upgrade() -> None:
     op.create_table('agent_connections',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('name', sa.String(length=120), nullable=False),
+    sa.Column('kind', sa.String(length=20), server_default='api', nullable=False),
     sa.Column('is_active', sa.Boolean(), server_default='1', nullable=False),
-    sa.Column('api_key_hash', sa.String(length=64), nullable=False),
-    sa.Column('api_key_prefix', sa.String(length=16), nullable=False),
+    sa.Column('api_key_hash', sa.String(length=64), nullable=True),
+    sa.Column('api_key_prefix', sa.String(length=16), nullable=True),
     sa.Column('callback_url', sa.String(length=500), nullable=True),
-    sa.Column('callback_secret_encrypted', sa.Text(), nullable=True),
+    sa.Column('secrets_encrypted', sa.Text(), nullable=True),
+    sa.Column('telegram_bot_username', sa.String(length=64), nullable=True),
+    sa.Column('allowed_senders', sa.Text(), nullable=True),
     sa.Column('host_user_id', sa.String(length=36), nullable=True),
     sa.Column('daily_limit', sa.Integer(), server_default='50', nullable=False),
     sa.Column('created_by_id', sa.String(length=36), nullable=True),
@@ -44,6 +47,7 @@ def upgrade() -> None:
     sa.Column('status', sa.String(length=24), nullable=False),
     sa.Column('event_id', sa.String(length=36), nullable=True),
     sa.Column('submitted_by', sa.String(length=200), nullable=True),
+    sa.Column('reply_chat_id', sa.String(length=40), nullable=True),
     sa.Column('external_id', sa.String(length=200), nullable=True),
     sa.Column('input_text', sa.Text(), nullable=True),
     sa.Column('error_note', sa.Text(), nullable=True),

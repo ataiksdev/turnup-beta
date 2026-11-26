@@ -102,7 +102,7 @@ async def test_create_shows_key_once_and_stores_only_its_hash(client, admin, db)
 
     stored = await db.get(AgentConnection, conn["id"])
     assert stored.api_key_hash == hashlib.sha256(conn["api_key"].encode()).hexdigest()
-    assert conn["callback_secret"] not in (stored.callback_secret_encrypted or "")
+    assert stored.secrets_encrypted and conn["callback_secret"] not in stored.secrets_encrypted
 
 
 async def test_admin_only(client, db):

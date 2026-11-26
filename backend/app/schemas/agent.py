@@ -8,9 +8,12 @@ from pydantic import BaseModel, Field, field_validator
 
 class AgentConnectionCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
+    kind: Literal["api", "telegram"] = "api"
     host_username: str | None = None
     daily_limit: int | None = Field(None, ge=1, le=1000)
-    callback_url: str | None = Field(None, max_length=500)
+    callback_url: str | None = Field(None, max_length=500)  # api
+    telegram_bot_token: str | None = Field(None, max_length=200)  # telegram
+    allowed_senders: str | None = Field(None, max_length=2000)  # telegram user ids
 
 
 class AgentConnectionUpdate(BaseModel):
@@ -19,18 +22,26 @@ class AgentConnectionUpdate(BaseModel):
     host_username: str | None = None  # "" clears it (the scout bot hosts)
     daily_limit: int | None = Field(None, ge=1, le=1000)
     callback_url: str | None = Field(None, max_length=500)  # "" removes it
+    telegram_bot_token: str | None = Field(None, max_length=200)  # a new token: reconnect after
+    allowed_senders: str | None = Field(None, max_length=2000)
 
 
 class AgentConnectionOut(BaseModel):
     id: str
     name: str
+    kind: str
     is_active: bool
-    api_key_prefix: str
+    api_key_prefix: str | None
     host_username: str | None
     daily_limit: int
     used_today: int
     events_created: int
     callback_url: str | None
+    telegram_bot_username: str | None = None
+    telegram_connected: bool = False
+    has_bot_token: bool = False
+    allowed_senders: str | None = None
+    webhook_url: str | None = None
     last_used_at: datetime | None
     created_at: datetime
 
@@ -45,6 +56,7 @@ class AgentSubmissionOut(BaseModel):
     id: str
     connection_id: str
     connection_name: str
+    kind: str
     status: str
     submitted_by: str | None
     input_text: str | None

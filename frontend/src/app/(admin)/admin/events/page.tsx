@@ -6,7 +6,7 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil, BarChart2, Bot } from "lucide-react";
+import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil, BarChart2, Bot, Send } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -91,9 +91,10 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
             <Sparkles size={11} /> AI-drafted
           </span>
         )}
-        {ev.created_via === "agent_api" && (
+        {(ev.created_via === "agent_api" || ev.created_via === "telegram") && (
           <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded border-2 border-sky-400 text-sky-700 bg-sky-50">
-            <Bot size={11} /> {ev.agent_source ? `via ${ev.agent_source}` : "via bot"}
+            {ev.created_via === "telegram" ? <Send size={11} /> : <Bot size={11} />}{" "}
+            {ev.agent_source ? `via ${ev.agent_source}` : ev.created_via === "telegram" ? "via Telegram" : "via bot"}
           </span>
         )}
         {ev.is_featured && (
@@ -170,7 +171,7 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
       )}
 
       <div className="flex flex-wrap gap-2 items-center">
-        {isOwn && (
+        {(isOwn || ev.admin_can_edit) && (
           <Link
             href={`/admin/events/edit?id=${encodeURIComponent(ev.id)}`}
             className="flex items-center gap-1 h-8 px-3 text-sm font-bold rounded bg-bg-card text-text border-2 border-border shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-transform"

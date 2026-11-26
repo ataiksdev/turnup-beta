@@ -277,6 +277,8 @@ def _admin_event_out(ev: Event) -> AdminEventOut:
         created_via=ev.created_via,
         reviewed_by_username=ev.reviewed_by.username if ev.reviewed_by else None,
         reviewed_at=ev.reviewed_at,
+        # Hosted by the scout bot (scouted, or sent in by an agent connection): admins edit it.
+        admin_can_edit=ev.host.username == settings.scout_bot_username,
     )
 
 
@@ -300,11 +302,12 @@ async def _with_agent_sources(db: AsyncSession, events) -> list[AdminEventOut]:
 
 
 async def _queue_agent_notice(db: AsyncSession, ev: Event, background_tasks: BackgroundTasks) -> None:
-    """Tell the agent connection that submitted an event (its callback URL) how the review went."""
-    from app.services.agent_intake import review_callback, send_review_callback
-    cb = await review_callback(db, ev)
-    if cb:
-        background_tasks.add_task(send_review_callback, cb)
+    """Tell whoever submitted an event through an agent connection how the review went: the
+    Telegram chat it came from, or an API connection's callback URL."""
+    from app.services.agent_intake import review_notice, send_review_notice
+    notice = await review_notice(db, ev)
+    if notice:
+        background_tasks.add_task(send_review_notice, notice)
 
 
 @router.get("/events", response_model=list[AdminEventOut])

@@ -153,6 +153,15 @@ async def _require_event_access(event_id: str, user: User, db: AsyncSession) -> 
     return event
 
 
+async def _admin_manages_bot_event(event: Event, user: User | None, db: AsyncSession) -> bool:
+    """Admins look after events the scout bot account hosts (scouted, or sent in through an
+    agent connection such as the Telegram bot): no person is their host."""
+    if not user or user.role != "admin":
+        return False
+    host_username = (await db.execute(select(User.username).where(User.id == event.host_id))).scalar_one_or_none()
+    return host_username == settings.scout_bot_username
+
+
 async def _require_event_read_access(event_id: str, user: User, db: AsyncSession) -> Event:
     """Read-only reports (analytics, insights): the event's team, or any admin."""
     if user.role == "admin":
@@ -416,9 +425,10 @@ async def get_event(
     event = (await db.execute(stmt)).scalar_one_or_none()
     if not event:
         raise HTTPException(404, "Event not found")
-    # Only show drafts to their host
+    can_admin_edit = await _admin_manages_bot_event(event, user, db)
+    # Only show drafts to their host (and bot-hosted drafts to admins, who edit them)
     if event.status == "draft":
-        if not user or event.host_id != user.id:
+        if not user or (event.host_id != user.id and not can_admin_edit):
             raise HTTPException(404, "Event not found")
     saved, att, waitlisted = await _user_state(event.id, user, db)
 
@@ -444,6 +454,7 @@ async def get_event(
     )).scalar() or 0
 
     data = _serialize(event, saved, att, waitlisted)
+    data["can_admin_edit"] = can_admin_edit
     data["avg_rating"] = event_avg_rating
     data["review_count"] = event_review_count
     h = event.host
@@ -529,12 +540,23 @@ async def update_event(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    event = await _require_event_access(event_id, user, db)
+    event = (await db.execute(select(Event).where(Event.id == event_id))).scalar_one_or_none()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    admin_on_bot_event = await _admin_manages_bot_event(event, user, db)
+    if not admin_on_bot_event and not await _has_event_access(event, user, db):
+        raise HTTPException(403, "Not authorized for this event")
     was_draft = event.status == "draft"
     old_status = event.status
     old_start = event.start_date
 
     changes = payload.model_dump(exclude_none=True)
+
+    # A bot-hosted submission goes live through Approve in the Events queue, which also counts
+    # it, announces it and tells the sender (e.g. the Telegram chat it came from).
+    if (admin_on_bot_event and changes.get("status") == "published"
+            and event.review_status != "approved"):
+        raise HTTPException(409, "Save your changes, then approve it from the Events queue to publish it.")
 
     if user.role != "admin":
         if changes.get("status") == "published" and event.review_status != "approved":

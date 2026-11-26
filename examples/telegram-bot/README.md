@@ -1,4 +1,8 @@
-# Example: a Telegram bot that sends events to Turnup
+# Example: a Telegram bot that sends events to Turnup through the API
+
+> **Most people want the built-in bot instead**: Turnup can run your Telegram bot itself
+> (Admin → Bot Connections → Telegram bot), with nothing extra to host. This script is for
+> developers who run their own bot elsewhere and connect it through Turnup's agent API.
 
 People send the bot a poster, a link or the event details. It forwards them to Turnup's agent
 API (`docs/agent-connections.md`), whose AI reads the event and puts it in the admin approval

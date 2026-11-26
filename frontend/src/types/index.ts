@@ -111,7 +111,9 @@ export interface Event {
   review_count?: number;
   review_status?: "pending" | "approved" | "rejected";
   review_note?: string | null;
-  created_via?: "manual" | "ai_agent" | "agent_api";
+  created_via?: "manual" | "ai_agent" | "agent_api" | "telegram";
+  /** Admin viewer, and the scout bot account hosts it (scouted or sent in by a bot): editable. */
+  can_admin_edit?: boolean;
   refund_policy?: string | null;
   /** Venue marketplace: the venue hosting it, and the listed venue it takes place at. */
   host_venue_id?: string | null;
