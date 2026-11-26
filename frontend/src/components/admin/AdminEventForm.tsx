@@ -46,7 +46,7 @@ interface FormState {
   start_date: string; end_date: string;
   is_free: boolean; price_min: string; price_max: string; currency: string;
   capacity: string; category_id: string; tags: string;
-  created_via: "manual" | "ai_agent";
+  created_via: "manual" | "ai_agent" | "agent_api" | "telegram";
 }
 
 const EMPTY_FORM: FormState = {
@@ -115,6 +115,10 @@ export function AdminEventForm({ eventId }: { eventId?: string }) {
   });
   const ev = existing.data;
   const isOwner = !!ev && !!user && ev.host?.id === user.id;
+  // Bot-hosted (scouted, or sent in by a bot connection): admins edit it, but publish it with
+  // Approve in the Events queue so it's counted, announced and the sender is told.
+  const isBotEvent = !isOwner && !!ev?.can_admin_edit;
+  const canEdit = isOwner || isBotEvent;
 
   // Fill the form once per loaded event (not on every refetch, which would wipe edits).
   useEffect(() => {
@@ -220,7 +224,7 @@ export function AdminEventForm({ eventId }: { eventId?: string }) {
     );
   }
 
-  if (isEdit && (existing.error || !ev || !isOwner)) {
+  if (isEdit && (existing.error || !ev || !canEdit)) {
     return (
       <div className="flex flex-col pb-24">
         <TopBar title="Edit Event" back />
@@ -411,13 +415,20 @@ export function AdminEventForm({ eventId }: { eventId?: string }) {
             <Button variant={ev?.status === "draft" ? "secondary" : "primary"} fullWidth loading={submitting} onClick={() => submit()}>
               Save Changes
             </Button>
-            {ev?.status === "draft" && isAdmin && (
+            {ev?.status === "draft" && isAdmin && !isBotEvent && (
               <Button fullWidth loading={submitting} onClick={() => submit("published")}>
                 Save &amp; Publish
               </Button>
             )}
           </div>
-        ) : (
+        ) : null}
+        {isEdit && isBotEvent && ev?.review_status !== "approved" && (
+          <p className="text-xs text-text-muted">
+            Sent in by a bot. Save your fixes, then approve it from the Events queue to publish it
+            (that also tells whoever sent it).
+          </p>
+        )}
+        {isEdit ? null : (
           <div className="flex gap-2 pt-2">
             <Button variant="secondary" fullWidth loading={submitting} onClick={() => submit("draft")}>
               Save as Draft

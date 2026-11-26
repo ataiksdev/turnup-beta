@@ -1,22 +1,21 @@
 import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.event import Category, Event
+from app.models.event import Category
 from app.models.scout import ScoutedItem, ScoutSource
 from app.models.user import User
-from app.routers.events import _slugify
 from app.schemas.admin import AIEventDraft
 from app.services.ai_agent import AIAgentError, draft_event
+from app.services.event_drafts import create_pending_event
 from app.services.url_safety import fetch_safely
-from app.schemas.types import safe_web_url_or_none
 
 _FEED_FETCH_TIMEOUT = 15
 _ATOM_NS = "{http://www.w3.org/2005/Atom}"
@@ -131,33 +130,6 @@ async def _fetch_candidate_links(url: str) -> list[str]:
     return _parse_listing_links(resp.text, str(resp.url), settings.scout_max_links_per_source)
 
 
-def _parse_iso(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-async def _find_duplicate_event(db: AsyncSession, draft: AIEventDraft, start: datetime) -> Event | None:
-    # Same venue on the same calendar day, as a datetime range rather than DATE(col) = 'text':
-    # that comparison only works on SQLite (Postgres has no date = varchar operator).
-    day_start = datetime.combine(start.date(), datetime.min.time(), tzinfo=start.tzinfo)
-    day_end = day_start + timedelta(days=1)
-    stmt = select(Event).where(
-        or_(
-            func.lower(Event.title) == draft.title.strip().lower(),
-            and_(
-                Event.venue_name == draft.venue_name,
-                Event.start_date >= day_start,
-                Event.start_date < day_end,
-            ),
-        )
-    )
-    return (await db.execute(stmt)).scalars().first()
-
-
 async def _process_item(
     db: AsyncSession,
     source: ScoutSource,
@@ -177,49 +149,15 @@ async def _process_item(
         db.add(ScoutedItem(id=str(uuid.uuid4()), source_id=source.id, url=url, status="failed", error_note=str(e)))
         return "failed"
 
-    draft = AIEventDraft(**raw)
-    start = _parse_iso(draft.start_date)
-    if not draft.title.strip() or not draft.description.strip() or not start:
-        db.add(ScoutedItem(id=str(uuid.uuid4()), source_id=source.id, url=url, status="skipped_no_event"))
-        return "skipped_no_event"
-
-    dup = await _find_duplicate_event(db, draft, start)
-    if dup:
-        db.add(ScoutedItem(id=str(uuid.uuid4()), source_id=source.id, url=url, status="skipped_duplicate", event_id=dup.id))
-        return "skipped_duplicate"
-
-    end = _parse_iso(draft.end_date) or (start + timedelta(hours=3))
-    category_id = categories_by_name.get(draft.category_guess.strip().lower())
-
-    eid = str(uuid.uuid4())
-    event = Event(
-        id=eid,
-        slug=_slugify(draft.title, eid),
-        title=draft.title.strip(),
-        description=draft.description.strip(),
-        cover_image=safe_web_url_or_none(draft.cover_image),
-        venue_name=draft.venue_name.strip() or "Venue TBA",
-        address=draft.address.strip() or "Address TBA",
-        city=draft.city.strip() or "Unknown",
-        country=draft.country.strip() or "Nigeria",
-        start_date=start,
-        end_date=end,
-        is_free=draft.is_free,
-        price_min=draft.price_min,
-        price_max=draft.price_max,
-        currency=draft.currency or "NGN",
-        event_type=draft.event_type,
-        category_id=category_id,
-        tags=draft.tags or None,
-        status="draft",
-        review_status="pending",
-        created_via="ai_agent",
-        host_id=bot.id,
+    status, event = await create_pending_event(
+        db, AIEventDraft(**raw), host_id=bot.id, created_via="ai_agent",
+        categories_by_name=categories_by_name,
     )
-    db.add(event)
-    await db.flush()
-    db.add(ScoutedItem(id=str(uuid.uuid4()), source_id=source.id, url=url, status="created", event_id=eid))
-    return "created"
+    db.add(ScoutedItem(
+        id=str(uuid.uuid4()), source_id=source.id, url=url, status=status,
+        event_id=event.id if event else None,
+    ))
+    return status
 
 
 async def run_daily_scout(db: AsyncSession, source_id: str | None = None) -> ScoutRunSummary:

@@ -1,7 +1,8 @@
-"""SSRF guard for the two places this app fetches attacker-influenceable URLs
-server-side: AI event drafting from a pasted URL, and the daily scout agent's
-RSS/listing-page polling. Both are moderator/admin-gated today, but neither
-should be trusted to only ever point at the public internet.
+"""SSRF guard for the places this app requests attacker-influenceable URLs
+server-side: AI event drafting from a pasted URL (by moderators, or by agent
+connections), the daily scout agent's RSS/listing-page polling, and review
+callbacks to agent connections. None should be trusted to only ever point at
+the public internet.
 
 Blocks the initial URL and every redirect hop (httpx's automatic redirect
 following bypasses a check on the initial URL alone) from resolving to a
@@ -53,6 +54,19 @@ async def _validate_url(url: str) -> None:
             raise UnsafeURLError(
                 f"Refusing to fetch {parsed.hostname!r} -- resolves to a private/internal address"
             )
+
+
+async def validate_public_url(url: str) -> None:
+    """Raise UnsafeURLError unless the URL is http(s) and resolves to a public address."""
+    await _validate_url(url)
+
+
+async def post_json_safely(url: str, body: bytes, *, timeout: float, headers: dict) -> httpx.Response:
+    """POST JSON to a URL after checking it resolves to a public address. Redirects are not
+    followed (a webhook receiver has no business redirecting a signed POST)."""
+    await _validate_url(url)
+    async with httpx.AsyncClient(follow_redirects=False, timeout=timeout) as client:
+        return await client.post(url, content=body, headers={**headers, "Content-Type": "application/json"})
 
 
 async def fetch_safely(url: str, *, timeout: float, user_agent: str) -> httpx.Response:

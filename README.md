@@ -73,6 +73,13 @@ Spec and decisions: [`docs/venues-spec.md`](docs/venues-spec.md). In short:
 
 `scripts/e2e/marketplace.js` drives the main journeys in a browser (instructions in the file).
 
+## Bot connections
+
+Send events in from outside the app: DM Turnup's own **Telegram bot** a poster, a link or the
+details (allowlisted senders only), or give an outside program an **API key**. The AI reads each
+one, it waits in the admin approval queue, and the sender hears back when it's approved or
+rejected. Set up at `/admin/integrations`; guide: [`docs/agent-connections.md`](docs/agent-connections.md).
+
 ## Recommendations and activity data
 
 Spec: [`docs/recommendations-spec.md`](docs/recommendations-spec.md). The app logs what people

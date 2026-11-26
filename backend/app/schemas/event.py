@@ -150,6 +150,9 @@ class EventDetail(EventOut):
     template_id: str | None
     avg_rating: float | None = None
     review_count: int = 0
+    # The viewer is an admin and the event is hosted by the scout bot account (scouted or sent
+    # in by an agent connection), so they can edit it from the admin portal.
+    can_admin_edit: bool = False
 
 
 class AttendRequest(BaseModel):

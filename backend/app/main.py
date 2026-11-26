@@ -20,6 +20,7 @@ from app.routers import discovery, me, share
 from app.routers import admin_venues, agents, plus, venue_bookings, venue_portal, venues
 from app.routers import track
 from app.routers import registration
+from app.routers import admin_integrations, integrations, telegram_bot
 
 os.makedirs("data", exist_ok=True)
 logger = logging.getLogger("turnup")
@@ -86,6 +87,9 @@ app.include_router(discovery.router)
 app.include_router(share.router)
 app.include_router(me.router)
 app.include_router(track.router)
+app.include_router(integrations.router)
+app.include_router(telegram_bot.router)
+app.include_router(admin_integrations.router)
 
 
 @app.get("/api/health")
