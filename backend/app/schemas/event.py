@@ -69,6 +69,8 @@ class EventUpdate(BaseModel):
     venue_name: str | None = None
     address: str | None = None
     city: str | None = None
+    country: str | None = Field(None, min_length=2, max_length=100)
+    category_id: str | None = None
     start_date: datetime | None = None
     end_date: datetime | None = None
     is_free: bool | None = None

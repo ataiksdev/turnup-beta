@@ -6,7 +6,8 @@ import { useAuthStore } from "@/store/auth";
 import { TopBar } from "@/components/layout/TopBar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Search, Users, Eye, Sparkles } from "lucide-react";
+import { Search, Users, Eye, Sparkles, CalendarPlus, Pencil, BarChart2 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 function StatusBadge({ status }: { status: string }) {
@@ -47,7 +48,8 @@ function formatDate(dateStr: string) {
 }
 
 function EventRow({ ev }: { ev: AdminEventOut }) {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
+  const isOwn = !!user && ev.host_id === user.id;
   const qc = useQueryClient();
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
@@ -163,6 +165,20 @@ function EventRow({ ev }: { ev: AdminEventOut }) {
       )}
 
       <div className="flex flex-wrap gap-2 items-center">
+        {isOwn && (
+          <Link
+            href={`/admin/events/edit?id=${encodeURIComponent(ev.id)}`}
+            className="flex items-center gap-1 h-8 px-3 text-sm font-bold rounded bg-bg-card text-text border-2 border-border shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-transform"
+          >
+            <Pencil size={13} aria-hidden /> Edit
+          </Link>
+        )}
+        <Link
+          href={`/admin/events/analytics?id=${encodeURIComponent(ev.id)}`}
+          className="flex items-center gap-1 h-8 px-3 text-sm font-bold rounded bg-bg-card text-text border-2 border-border shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal transition-transform"
+        >
+          <BarChart2 size={13} aria-hidden /> Analytics
+        </Link>
         <Button
           size="sm"
           variant="secondary"
@@ -226,6 +242,21 @@ export default function AdminEventsPage() {
       <TopBar title="Event Moderation" back />
 
       <div className="px-4 py-4 space-y-3">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+          <Link
+            href="/admin/events/new"
+            className="flex items-center justify-center gap-1.5 h-10 px-4 text-sm font-bold rounded bg-primary text-on-primary border-2 border-border shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-transform"
+          >
+            <CalendarPlus size={16} aria-hidden /> Create Event
+          </Link>
+          <Link
+            href="/admin/events/ai-new"
+            className="flex items-center justify-center gap-1.5 h-10 px-4 text-sm font-bold rounded bg-bg-card text-text border-2 border-border shadow-brutal-sm hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-transform"
+          >
+            <Sparkles size={16} aria-hidden /> AI Draft Event
+          </Link>
+        </div>
+
         <div className="flex gap-2">
           <div className="flex-1">
             <Input
